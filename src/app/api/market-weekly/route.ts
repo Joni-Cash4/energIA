@@ -62,6 +62,7 @@ export async function GET() {
       headers: {
         Authorization: `Token token="${token}"`,
         Accept: 'application/json; application/vnd.esios-api-v2+json',
+        'User-Agent': 'IAenergia/1.0 (+https://iaenergia.es)',
       },
       next: { revalidate: 3600 },
     })

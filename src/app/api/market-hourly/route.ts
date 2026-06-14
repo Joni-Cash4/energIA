@@ -19,7 +19,7 @@ export async function GET() {
   const token = process.env.ESIOS_TOKEN
 
   if (!token) {
-    return NextResponse.json(buildMockResponse())
+    return NextResponse.json({ ...buildMockResponse(), _source: 'mock_no_token' })
   }
 
   try {
@@ -35,14 +35,16 @@ export async function GET() {
         headers: {
           Authorization: `Token token="${token}"`,
           Accept: 'application/json; application/vnd.esios-api-v2+json',
+          'User-Agent': 'IAenergia/1.0 (+https://iaenergia.es)',
+          'x-api-key': token,
         },
         next: { revalidate: 3600 },
       }
     )
 
     if (!res.ok) {
-      console.warn('[market-hourly] ESIOS status', res.status)
-      return NextResponse.json(buildMockResponse())
+      console.error('[market-hourly] ESIOS error', res.status, await res.text().catch(() => ''))
+      return NextResponse.json({ ...buildMockResponse(), _source: 'mock_esios_error' })
     }
 
     const json = await res.json()
@@ -53,7 +55,8 @@ export async function GET() {
       )
 
     if (values.length === 0) {
-      return NextResponse.json(buildMockResponse())
+      console.warn('[market-hourly] No values returned')
+      return NextResponse.json({ ...buildMockResponse(), _source: 'mock_no_values' })
     }
 
     // Indicator 600 returns €/kWh — multiply by 1000 to get €/MWh
@@ -92,10 +95,13 @@ export async function GET() {
       media: Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10,
       hora_min,
       hora_max,
+      _source: 'esios',
+      _date: dateStr,
+      _values_count: values.length,
     } satisfies MarketHourlyResponse)
   } catch (err) {
     console.error('[market-hourly]', err)
-    return NextResponse.json(buildMockResponse())
+    return NextResponse.json({ ...buildMockResponse(), _source: 'mock_exception', _error: String(err) })
   }
 }
 
