@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import Anthropic from '@anthropic-ai/sdk'
 
 const PROMPT = `Eres un experto en facturas eléctricas españolas. Analiza esta factura y extrae los datos en JSON con exactamente esta estructura:
 
@@ -56,9 +56,9 @@ function buildSavingsEstimate(data: {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY
+  const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 })
+    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 })
   }
 
   const form = await req.formData()
@@ -70,16 +70,27 @@ export async function POST(req: NextRequest) {
   const buffer = await file.arrayBuffer()
   const base64 = Buffer.from(buffer).toString('base64')
 
-  const genAI = new GoogleGenerativeAI(apiKey)
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+  const client = new Anthropic({ apiKey })
 
   try {
-    const result = await model.generateContent([
-      { inlineData: { mimeType: 'application/pdf', data: base64 } },
-      PROMPT,
-    ])
+    const message = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+            },
+            { type: 'text', text: PROMPT },
+          ],
+        },
+      ],
+    })
 
-    const raw = result.response.text().trim()
+    const raw = (message.content[0] as { type: string; text: string }).text.trim()
     const json = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
     const parsed = JSON.parse(json)
 
