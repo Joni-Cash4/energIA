@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 const PROMPT = `Eres un experto en facturas eléctricas españolas. Analiza esta factura y extrae los datos en JSON con exactamente esta estructura:
 
@@ -27,25 +27,15 @@ Si un campo no aparece en la factura, usa null.`
 
 function buildSavingsEstimate(data: {
   kwh_total: number
-  potencia_contratada: number
   total_factura: number
   periodos: { periodo: string; kwh: number; precio_kwh: number; importe: number }[]
 }) {
-  // Estimate savings switching to indexed tariff (approx 15-25% on energy)
   const savingsPct = 0.18
-  const coste_actual_energia = data.periodos?.reduce((s: number, p: { importe: number }) => s + (p.importe ?? 0), 0) ?? data.total_factura * 0.65
+  const coste_actual_energia = data.periodos?.reduce((s, p) => s + (p.importe ?? 0), 0) ?? data.total_factura * 0.65
   const coste_actual_potencia = data.total_factura - coste_actual_energia
   const coste_nuevo_energia = Math.round(coste_actual_energia * (1 - savingsPct) * 100) / 100
   const coste_nuevo_potencia = Math.round(coste_actual_potencia * 0.95 * 100) / 100
   const ahorro_mensual = Math.round((coste_actual_energia - coste_nuevo_energia) * 100) / 100
-  const ahorro_anual = Math.round(ahorro_mensual * 12 * 100) / 100
-
-  const periodsWithNew = (data.periodos ?? []).map((p: { periodo: string; kwh: number; precio_kwh: number; importe: number }) => ({
-    ...p,
-    kwh_nuevo: p.kwh,
-    precio_kwh_nuevo: Math.round(p.precio_kwh * (1 - savingsPct) * 10000) / 10000,
-    importe_nuevo: Math.round(p.importe * (1 - savingsPct) * 100) / 100,
-  }))
 
   return {
     coste_actual_energia: Math.round(coste_actual_energia * 100) / 100,
@@ -53,17 +43,22 @@ function buildSavingsEstimate(data: {
     coste_actual_potencia: Math.round(coste_actual_potencia * 100) / 100,
     coste_nuevo_potencia,
     ahorro_estimado_mensual: ahorro_mensual,
-    ahorro_estimado_anual: ahorro_anual,
+    ahorro_estimado_anual: Math.round(ahorro_mensual * 12 * 100) / 100,
     porcentaje_ahorro: Math.round(savingsPct * 100),
     kwh_anuales_sips: Math.round((data.kwh_total ?? 0) * 12),
-    periodos: periodsWithNew,
+    periodos: (data.periodos ?? []).map((p) => ({
+      ...p,
+      kwh_nuevo: p.kwh,
+      precio_kwh_nuevo: Math.round(p.precio_kwh * (1 - savingsPct) * 10000) / 10000,
+      importe_nuevo: Math.round(p.importe * (1 - savingsPct) * 100) / 100,
+    })),
   }
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
-    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 })
+    return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 })
   }
 
   const form = await req.formData()
@@ -72,32 +67,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Se requiere un archivo PDF' }, { status: 400 })
   }
 
-  // Convert PDF to base64
   const buffer = await file.arrayBuffer()
   const base64 = Buffer.from(buffer).toString('base64')
 
-  const client = new Anthropic({ apiKey })
+  const genAI = new GoogleGenerativeAI(apiKey)
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
 
   try {
-    const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-            },
-            { type: 'text', text: PROMPT },
-          ],
-        },
-      ],
-    })
+    const result = await model.generateContent([
+      { inlineData: { mimeType: 'application/pdf', data: base64 } },
+      PROMPT,
+    ])
 
-    const raw = (message.content[0] as { type: string; text: string }).text.trim()
-    // Strip markdown code fences if present
+    const raw = result.response.text().trim()
     const json = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
     const parsed = JSON.parse(json)
 
