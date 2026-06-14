@@ -176,7 +176,7 @@ export default function MercadoPage() {
                 <p className="text-[#6B7280] text-sm mt-1">Actualizado: {lastUpdate.toLocaleTimeString('es-ES')}</p>
               )}
             </div>
-            <Button variant="secondary" size="sm" onClick={() => { loadHourly(); loadPeriods() }} className="gap-2">
+            <Button variant="secondary" size="sm" onClick={() => { loadHourly() }} className="gap-2">
               <RefreshCw className={`w-4 h-4 ${loadingHourly ? 'animate-spin' : ''}`} />
               Actualizar
             </Button>
