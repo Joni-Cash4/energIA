@@ -125,6 +125,171 @@ function DynamicTip({ hourly }: { hourly: MarketHourlyResponse }) {
   )
 }
 
+// ── Regulated costs (peajes + cargos, CNMC 2025, €/MWh) ─────────────────────
+const REG_20TD = { P1: 59.0, P2: 16.7, P3: 2.2 }
+const REG_30TD = { P1: 34.0, P2: 20.5, P3: 13.0, P4: 8.0, P5: 3.0, P6: 1.0 }
+const IEE = 0.0511268
+const IVA = 0.21
+
+function periodo20TD(hour: number, dow: number): 'P1' | 'P2' | 'P3' {
+  if (dow === 0 || dow === 6) return 'P3'
+  if (hour < 8) return 'P3'
+  if ((hour >= 10 && hour < 14) || (hour >= 18 && hour < 22)) return 'P1'
+  return 'P2'
+}
+
+function periodo30TD(hour: number, dow: number): 'P1' | 'P2' | 'P3' | 'P4' | 'P5' | 'P6' {
+  if (dow === 0) return 'P6'
+  if (dow === 6) return 'P5'
+  if (hour >= 9 && hour < 14) return 'P1'
+  if ((hour >= 8 && hour < 9) || (hour >= 14 && hour < 19)) return 'P2'
+  if (hour >= 19 && hour < 23) return 'P3'
+  if (hour === 7 || hour === 23) return 'P4'
+  return 'P6'
+}
+
+function precioFinal(spotMwh: number, regulated: number): number {
+  const base = spotMwh + regulated
+  return Math.round(base * (1 + IEE) * (1 + IVA) * 10) / 10
+}
+
+const PERIOD_COLORS: Record<string, string> = {
+  P1: '#FF5252', P2: '#FFB74D', P3: '#42A5F5', P4: '#AB47BC', P5: '#26C6DA', P6: '#66BB6A',
+}
+
+function TarifaTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null
+  const d = payload[0]?.payload
+  return (
+    <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl px-4 py-3 shadow-xl text-sm">
+      <p className="text-[#9CA3AF] text-xs mb-1">{`${d.hora}:00 — ${d.hora + 1}:00`}</p>
+      <p className="text-white font-bold text-base">{formatNumber(d.total, 1)} €/MWh</p>
+      <p className="text-[#9CA3AF] text-xs mt-1">
+        <span style={{ color: PERIOD_COLORS[d.periodo] }}>{d.periodo}</span>
+        {' · '}spot {formatNumber(d.spot, 1)} + reg. {formatNumber(d.reg, 1)}
+      </p>
+    </div>
+  )
+}
+
+type SubTarifa = '2.0TD' | '3.0TD'
+
+function TarifaFinalChart({ precios, ahora }: { precios: HourlyPrice[]; ahora: number }) {
+  const [tarifa, setTarifa] = useState<SubTarifa>('2.0TD')
+
+  const now = new Date()
+  const dow = now.getDay()
+
+  const data = precios.map((p) => {
+    const periodo = tarifa === '2.0TD' ? periodo20TD(p.hora, dow) : periodo30TD(p.hora, dow)
+    const reg = tarifa === '2.0TD' ? REG_20TD[periodo as keyof typeof REG_20TD] : REG_30TD[periodo as keyof typeof REG_30TD]
+    return {
+      hora: p.hora,
+      spot: p.precio_mwh,
+      reg,
+      total: precioFinal(p.precio_mwh, reg),
+      periodo,
+    }
+  })
+
+  const totalAhora = data[ahora]?.total ?? 0
+  const totalMin = Math.min(...data.map((d) => d.total))
+  const totalMax = Math.max(...data.map((d) => d.total))
+  const horaMin = data.findIndex((d) => d.total === totalMin)
+  const horaMax = data.findIndex((d) => d.total === totalMax)
+
+  // Group consecutive hours by period for ReferenceArea
+  const areas: { x1: number; x2: number; periodo: string }[] = []
+  for (let i = 0; i < data.length; i++) {
+    const p = data[i].periodo
+    if (areas.length && areas[areas.length - 1].periodo === p) {
+      areas[areas.length - 1].x2 = i + 1
+    } else {
+      areas.push({ x1: i, x2: i + 1, periodo: p })
+    }
+  }
+
+  const periods = tarifa === '2.0TD'
+    ? [{ id: 'P1', label: 'Punta', color: PERIOD_COLORS.P1 }, { id: 'P2', label: 'Llano', color: PERIOD_COLORS.P2 }, { id: 'P3', label: 'Valle', color: PERIOD_COLORS.P3 }]
+    : [{ id: 'P1', label: 'P1', color: PERIOD_COLORS.P1 }, { id: 'P2', label: 'P2', color: PERIOD_COLORS.P2 }, { id: 'P3', label: 'P3', color: PERIOD_COLORS.P3 }, { id: 'P4', label: 'P4', color: PERIOD_COLORS.P4 }, { id: 'P5', label: 'P5', color: PERIOD_COLORS.P5 }, { id: 'P6', label: 'P6', color: PERIOD_COLORS.P6 }]
+
+  return (
+    <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-6 mt-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-white font-semibold">Precio final estimado al consumidor</h2>
+          <p className="text-[#6B7280] text-xs mt-0.5">Incluye energía + peajes + cargos + IEE + IVA. Sin término de potencia.</p>
+        </div>
+        <div className="flex gap-1 p-1 bg-[#0A0A0A] border border-[#1F1F1F] rounded-xl">
+          {(['2.0TD', '3.0TD'] as SubTarifa[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTarifa(t)}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tarifa === t ? 'bg-[#00E676] text-black' : 'text-[#9CA3AF] hover:text-white'}`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Mini summary */}
+      <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="bg-[#0A0A0A] rounded-xl p-3 text-center border border-[#1F1F1F]">
+          <p className="text-[#6B7280] text-xs mb-1">Ahora</p>
+          <p className="text-white font-bold">{formatNumber(totalAhora, 1)} €/MWh</p>
+          <p className="text-[#9CA3AF] text-xs">{formatNumber(totalAhora / 1000, 4)} €/kWh</p>
+        </div>
+        <div className="bg-[#0A0A0A] rounded-xl p-3 text-center border border-[#00E676]/20">
+          <p className="text-[#6B7280] text-xs mb-1">Mínimo — {horaMin}:00</p>
+          <p className="text-[#00E676] font-bold">{formatNumber(totalMin, 1)} €/MWh</p>
+          <p className="text-[#9CA3AF] text-xs">{formatNumber(totalMin / 1000, 4)} €/kWh</p>
+        </div>
+        <div className="bg-[#0A0A0A] rounded-xl p-3 text-center border border-red-500/20">
+          <p className="text-[#6B7280] text-xs mb-1">Máximo — {horaMax}:00</p>
+          <p className="text-red-400 font-bold">{formatNumber(totalMax, 1)} €/MWh</p>
+          <p className="text-[#9CA3AF] text-xs">{formatNumber(totalMax / 1000, 4)} €/kWh</p>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 mb-4">
+        {periods.map((p) => (
+          <span key={p.id} className="flex items-center gap-1.5 text-xs text-[#9CA3AF]">
+            <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: p.color, opacity: 0.7 }} />
+            {p.id} {p.label}
+          </span>
+        ))}
+      </div>
+
+      <ResponsiveContainer width="100%" height={280}>
+        <LineChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1F1F1F" />
+          <XAxis dataKey="hora" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(h) => `${h}h`} />
+          <YAxis
+            tick={{ fill: '#9CA3AF', fontSize: 11 }}
+            axisLine={false}
+            tickLine={false}
+            width={55}
+            tickFormatter={(v) => `${v}€`}
+            domain={[(min: number) => Math.max(0, Math.floor(min / 10) * 10), (max: number) => Math.ceil(max / 10) * 10]}
+          />
+          <Tooltip content={<TarifaTooltip />} />
+          {areas.map((a, i) => (
+            <ReferenceArea key={i} x1={a.x1} x2={a.x2} fill={PERIOD_COLORS[a.periodo]} fillOpacity={0.08} />
+          ))}
+          <Line type="monotone" dataKey="total" stroke="#00E676" strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: '#00E676' }} />
+          <ReferenceDot x={ahora} y={totalAhora} r={7} fill="#00E676" stroke="#0A0A0A" strokeWidth={2} />
+        </LineChart>
+      </ResponsiveContainer>
+
+      <p className="text-[#4B5563] text-xs mt-4">
+        * Estimación orientativa para tarifa {tarifa} residencial/empresarial. Peajes y cargos según CNMC 2025. No incluye término de potencia ni bono social.
+      </p>
+    </div>
+  )
+}
+
 type Tab = 'hoy' | 'semana'
 
 export default function MercadoPage() {
@@ -245,6 +410,7 @@ export default function MercadoPage() {
                   <div className="w-8 h-8 rounded-full border-2 border-[#00E676]/30 border-t-[#00E676] animate-spin" />
                 </div>
               ) : hourly ? (
+                <>
                 <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-6">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-white font-semibold">Precio €/MWh — 24 horas</h2>
@@ -316,6 +482,10 @@ export default function MercadoPage() {
                   {/* Consejo dinámico */}
                   <DynamicTip hourly={{ ...hourly, ahora, precio_ahora: precioAhora }} />
                 </div>
+
+                {/* Precio final al consumidor */}
+                <TarifaFinalChart precios={hourly.precios} ahora={ahora} />
+              </>
               ) : (
                 <div className="text-center py-20 text-[#6B7280]">
                   No se pudieron cargar los precios horarios. Inténtalo de nuevo.
