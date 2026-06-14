@@ -46,13 +46,17 @@ export interface HourlyPrice {
 
 export interface MarketHourlyResponse {
   precios: HourlyPrice[]
-  ahora: number          // hora actual
+  ahora: number
   precio_ahora: number
   minimo: number
   maximo: number
   media: number
   hora_min: number
   hora_max: number
+  _source?: string
+  _date?: string
+  _values_count?: number
+  _error?: string
 }
 
 export interface NewsItem {
