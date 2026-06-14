@@ -155,6 +155,14 @@ export default function MercadoPage() {
 
   useEffect(() => { loadHourly(); loadWeekly() }, [])
 
+  // Compute current Spain hour client-side (browser knows local time)
+  const spainHour = (() => {
+    const now = new Date()
+    return parseInt(now.toLocaleString('es-ES', { timeZone: 'Europe/Madrid', hour: 'numeric', hour12: false }), 10)
+  })()
+  const ahora = hourly ? spainHour : 0
+  const precioAhora = hourly?.precios[ahora]?.precio_mwh ?? hourly?.precio_ahora ?? 0
+
   const cheapHours = hourly?.precios.filter((p) => p.es_barata).map((p) => p.hora) ?? []
   const expHours   = hourly?.precios.filter((p) => p.es_cara).map((p) => p.hora) ?? []
 
@@ -185,7 +193,7 @@ export default function MercadoPage() {
           {/* Semáforo del momento */}
           {hourly && !loadingHourly && (
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-              <PriceStatus precio={hourly.precio_ahora} media={hourly.media} />
+              <PriceStatus precio={precioAhora} media={hourly.media} />
             </motion.div>
           )}
 
@@ -198,7 +206,7 @@ export default function MercadoPage() {
               className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
             >
               {[
-                { label: 'Precio ahora', value: `${formatNumber(hourly.precio_ahora, 1)} €/MWh`, icon: Clock, accent: true },
+                { label: 'Precio ahora', value: `${formatNumber(precioAhora, 1)} €/MWh`, icon: Clock, accent: true },
                 { label: 'Mejor hora hoy', value: `${hourly.hora_min}:00 · ${formatNumber(hourly.minimo, 1)} €`, icon: Star, color: 'text-[#00E676]' },
                 { label: 'Hora más cara', value: `${hourly.hora_max}:00 · ${formatNumber(hourly.maximo, 1)} €`, icon: AlertTriangle, color: 'text-red-400' },
                 { label: 'Media hoy', value: `${formatNumber(hourly.media, 1)} €/MWh`, icon: BarChart2, color: 'text-[#42A5F5]' },
@@ -268,6 +276,10 @@ export default function MercadoPage() {
                         tickLine={false}
                         width={50}
                         tickFormatter={(v) => `${v}€`}
+                        domain={[
+                          (min: number) => Math.min(0, Math.floor(min / 10) * 10),
+                          (max: number) => Math.ceil(max / 10) * 10,
+                        ]}
                       />
                       <Tooltip content={<HourTooltip />} />
                       {cheapHours.map((h) => (
@@ -285,8 +297,8 @@ export default function MercadoPage() {
                         activeDot={{ r: 4, fill: '#00E676' }}
                       />
                       <ReferenceDot
-                        x={hourly.ahora}
-                        y={hourly.precio_ahora}
+                        x={ahora}
+                        y={precioAhora}
                         r={7}
                         fill="#00E676"
                         stroke="#0A0A0A"
@@ -298,11 +310,11 @@ export default function MercadoPage() {
                   {/* Próximas horas */}
                   <div className="mt-6 border-t border-[#1F1F1F] pt-5">
                     <p className="text-[#6B7280] text-xs uppercase tracking-wide mb-3">Próximas horas</p>
-                    <NextHours precios={hourly.precios} ahora={hourly.ahora} />
+                    <NextHours precios={hourly.precios} ahora={ahora} />
                   </div>
 
                   {/* Consejo dinámico */}
-                  <DynamicTip hourly={hourly} />
+                  <DynamicTip hourly={{ ...hourly, ahora, precio_ahora: precioAhora }} />
                 </div>
               ) : (
                 <div className="text-center py-20 text-[#6B7280]">
