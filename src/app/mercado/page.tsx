@@ -4,19 +4,23 @@ import { motion } from 'framer-motion'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceDot, ReferenceArea,
-  BarChart, Bar, Cell,
+  BarChart, Bar, Legend,
 } from 'recharts'
 import { TrendingUp, TrendingDown, Minus, RefreshCw, Clock, Star, AlertTriangle, BarChart2, Zap } from 'lucide-react'
 import { Navbar } from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
 import { Toaster } from '@/components/ui/toaster'
 import { Button } from '@/components/ui/button'
-import { getMarketPrices } from '@/lib/api'
 import { formatNumber } from '@/lib/utils'
-import type { MarketPrice, MarketHourlyResponse, HourlyPrice } from '@/types'
+import type { MarketHourlyResponse, HourlyPrice } from '@/types'
 
-const PERIODO_LABELS: Record<string, string> = {
-  P1: 'Punta (P1)', P2: 'Llano (P2)', P3: 'Valle (P3)',
+interface WeeklyDay { fecha: string; label: string; media: number }
+interface WeeklyData {
+  thisWeek: WeeklyDay[]
+  lastWeek: WeeklyDay[]
+  mediaEsta: number
+  mediaAnterior: number
+  variacion: number
 }
 
 function HourTooltip({ active, payload }: any) {
@@ -32,12 +36,17 @@ function HourTooltip({ active, payload }: any) {
   )
 }
 
-function PeriodTooltip({ active, payload, label }: any) {
+function WeekTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl px-4 py-3 shadow-xl">
-      <p className="text-[#9CA3AF] text-xs mb-1">{PERIODO_LABELS[label] ?? label}</p>
-      <p className="text-white font-bold">{formatNumber(payload[0].value, 2)} €/MWh</p>
+    <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl px-4 py-3 shadow-xl text-sm">
+      <p className="text-[#9CA3AF] text-xs mb-2">{label}</p>
+      {payload.map((p: any) => (
+        <p key={p.name} style={{ color: p.fill }} className="flex justify-between gap-4">
+          <span>{p.name}</span>
+          <span className="font-bold">{p.value ? `${formatNumber(p.value, 1)} €/MWh` : '—'}</span>
+        </p>
+      ))}
     </div>
   )
 }
@@ -116,14 +125,14 @@ function DynamicTip({ hourly }: { hourly: MarketHourlyResponse }) {
   )
 }
 
-type Tab = 'hoy' | 'periodos'
+type Tab = 'hoy' | 'semana'
 
 export default function MercadoPage() {
   const [tab, setTab] = useState<Tab>('hoy')
   const [hourly, setHourly] = useState<MarketHourlyResponse | null>(null)
-  const [prices, setPrices] = useState<MarketPrice[]>([])
+  const [weekly, setWeekly] = useState<WeeklyData | null>(null)
   const [loadingHourly, setLoadingHourly] = useState(true)
-  const [loadingPeriods, setLoadingPeriods] = useState(true)
+  const [loadingWeekly, setLoadingWeekly] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
 
   const loadHourly = async () => {
@@ -135,15 +144,17 @@ export default function MercadoPage() {
     setLoadingHourly(false)
   }
 
-  const loadPeriods = async () => {
-    setLoadingPeriods(true)
-    try { setPrices(await getMarketPrices()) } catch { /* silent */ }
-    setLoadingPeriods(false)
+  const loadWeekly = async () => {
+    setLoadingWeekly(true)
+    try {
+      const res = await fetch('/api/market-weekly')
+      if (res.ok) setWeekly(await res.json())
+    } catch { /* silent */ }
+    setLoadingWeekly(false)
   }
 
-  useEffect(() => { loadHourly(); loadPeriods() }, [])
+  useEffect(() => { loadHourly(); loadWeekly() }, [])
 
-  const maxPrice = prices.length ? Math.max(...prices.map((p) => p.precio_mwh)) : 0
   const cheapHours = hourly?.precios.filter((p) => p.es_barata).map((p) => p.hora) ?? []
   const expHours   = hourly?.precios.filter((p) => p.es_cara).map((p) => p.hora) ?? []
 
@@ -205,7 +216,7 @@ export default function MercadoPage() {
 
           {/* Tabs */}
           <div className="flex gap-1 p-1 bg-[#141414] border border-[#1F1F1F] rounded-xl mb-6 w-fit">
-            {([['hoy', 'Precio horario hoy'], ['periodos', 'Periodos tarifarios']] as [Tab, string][]).map(([t, label]) => (
+            {([['hoy', 'Precio horario hoy'], ['semana', 'Comparativa semanal']] as [Tab, string][]).map(([t, label]) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -301,97 +312,114 @@ export default function MercadoPage() {
             </motion.div>
           )}
 
-          {/* TAB: Periodos */}
-          {tab === 'periodos' && (
-            <motion.div key="periodos" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              {loadingPeriods ? (
+          {/* TAB: Semana */}
+          {tab === 'semana' && (
+            <motion.div key="semana" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              {loadingWeekly ? (
                 <div className="flex justify-center py-20">
                   <div className="w-8 h-8 rounded-full border-2 border-[#00E676]/30 border-t-[#00E676] animate-spin" />
                 </div>
-              ) : (
+              ) : weekly ? (
                 <>
-                  <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-5 mb-6">
-                    <h2 className="text-white font-semibold mb-2">¿Qué son los periodos tarifarios?</h2>
-                    <p className="text-[#9CA3AF] text-sm leading-relaxed">
-                      En la tarifa 3.0TD, el precio varía según la franja horaria y el día de la semana.
-                      <span className="text-red-400"> P1 (punta)</span>: 10-14h y 18-22h en laborables —
-                      <span className="text-yellow-400"> P2 (llano)</span>: resto de horas laborables —
-                      <span className="text-[#00E676]"> P3 (valle)</span>: noches y fines de semana.
-                    </p>
+                  {/* Summary cards */}
+                  <div className="grid grid-cols-3 gap-4 mb-6">
+                    <div className="bg-[#141414] border border-[#1F1F1F] rounded-xl p-4 text-center">
+                      <p className="text-[#6B7280] text-xs uppercase tracking-wide mb-1">Media esta semana</p>
+                      <p className="text-white font-bold text-xl">{formatNumber(weekly.mediaEsta, 1)} €/MWh</p>
+                    </div>
+                    <div className="bg-[#141414] border border-[#1F1F1F] rounded-xl p-4 text-center">
+                      <p className="text-[#6B7280] text-xs uppercase tracking-wide mb-1">Media semana anterior</p>
+                      <p className="text-white font-bold text-xl">{formatNumber(weekly.mediaAnterior, 1)} €/MWh</p>
+                    </div>
+                    <div className={`bg-[#141414] border rounded-xl p-4 text-center ${
+                      weekly.variacion < 0 ? 'border-[#00E676]/30' : weekly.variacion > 0 ? 'border-red-500/30' : 'border-[#1F1F1F]'
+                    }`}>
+                      <p className="text-[#6B7280] text-xs uppercase tracking-wide mb-1">Variación</p>
+                      <div className="flex items-center justify-center gap-1.5">
+                        {weekly.variacion > 0
+                          ? <TrendingUp className="w-5 h-5 text-red-400" />
+                          : weekly.variacion < 0
+                            ? <TrendingDown className="w-5 h-5 text-[#00E676]" />
+                            : <Minus className="w-5 h-5 text-[#6B7280]" />
+                        }
+                        <p className={`font-bold text-xl ${
+                          weekly.variacion < 0 ? 'text-[#00E676]' : weekly.variacion > 0 ? 'text-red-400' : 'text-[#6B7280]'
+                        }`}>
+                          {weekly.variacion > 0 ? '+' : ''}{formatNumber(weekly.variacion, 1)}%
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-6 mb-6">
-                    <h2 className="text-white font-semibold mb-6">Precio por periodo (€/MWh)</h2>
-                    <ResponsiveContainer width="100%" height={260}>
-                      <BarChart data={prices} barCategoryGap="30%">
+                  {/* Chart */}
+                  <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-6">
+                    <h2 className="text-white font-semibold mb-6">Precio medio diario €/MWh — últimas 2 semanas</h2>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart
+                        data={weekly.thisWeek.map((d, i) => ({
+                          label: d.label,
+                          'Esta semana': d.media || null,
+                          'Semana anterior': weekly.lastWeek[i]?.media || null,
+                        }))}
+                        barCategoryGap="20%"
+                        barGap={4}
+                      >
                         <CartesianGrid strokeDasharray="3 3" stroke="#1F1F1F" vertical={false} />
-                        <XAxis dataKey="periodo" tick={{ fill: '#9CA3AF', fontSize: 12 }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={false} tickLine={false} width={55} tickFormatter={(v) => `${v} €`} />
-                        <Tooltip content={<PeriodTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                        <Bar dataKey="precio_mwh" radius={[6, 6, 0, 0]}>
-                          {prices.map((p) => (
-                            <Cell
-                              key={p.periodo}
-                              fill={
-                                p.precio_mwh === maxPrice ? '#EF4444' :
-                                p.precio_mwh === Math.min(...prices.map(x => x.precio_mwh)) ? '#00E676' :
-                                '#1565C0'
-                              }
-                              opacity={0.9}
-                            />
-                          ))}
-                        </Bar>
+                        <XAxis dataKey="label" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={false} tickLine={false} width={55} tickFormatter={(v) => `${v}€`} />
+                        <Tooltip content={<WeekTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                        <Legend formatter={(v) => <span className="text-xs text-[#9CA3AF]">{v}</span>} wrapperStyle={{ paddingTop: 16 }} />
+                        <Bar dataKey="Semana anterior" fill="#1565C0" radius={[4, 4, 0, 0]} opacity={0.6} />
+                        <Bar dataKey="Esta semana" fill="#00E676" radius={[4, 4, 0, 0]} opacity={0.9} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
 
-                  <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl overflow-hidden">
-                    <table className="w-full">
+                  {/* Table */}
+                  <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl overflow-hidden mt-6">
+                    <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-[#1F1F1F]">
-                          {['Periodo', 'Descripción', '€/MWh', '€/kWh', 'Variación vs ayer'].map((h) => (
+                          {['Día', 'Esta semana', 'Semana anterior', 'Diferencia'].map((h) => (
                             <th key={h} className="px-6 py-3.5 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {prices.map((p, i) => (
-                          <motion.tr
-                            key={p.periodo}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.05 * i }}
-                            className="border-b border-[#1F1F1F] last:border-0 hover:bg-[#1A1A1A] transition-colors"
-                          >
-                            <td className="px-6 py-4">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                                p.periodo === 'P1' ? 'bg-red-500/15 text-red-400' :
-                                p.periodo === 'P2' ? 'bg-orange-500/15 text-orange-400' :
-                                'bg-[#00E676]/15 text-[#00E676]'
-                              }`}>{p.periodo}</span>
-                            </td>
-                            <td className="px-6 py-4 text-[#9CA3AF] text-sm">{PERIODO_LABELS[p.periodo] ?? p.periodo}</td>
-                            <td className="px-6 py-4 text-white font-semibold">{formatNumber(p.precio_mwh, 2)}</td>
-                            <td className="px-6 py-4 text-[#9CA3AF] text-sm">{formatNumber(p.precio_kwh, 4)}</td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-1.5">
-                                {p.variacion > 0
-                                  ? <TrendingUp className="w-4 h-4 text-red-400" />
-                                  : p.variacion < 0
-                                    ? <TrendingDown className="w-4 h-4 text-[#00E676]" />
-                                    : <Minus className="w-4 h-4 text-[#6B7280]" />
-                                }
-                                <span className={`text-sm font-medium ${p.variacion > 0 ? 'text-red-400' : p.variacion < 0 ? 'text-[#00E676]' : 'text-[#6B7280]'}`}>
-                                  {p.variacion > 0 ? '+' : ''}{formatNumber(p.variacion, 1)}%
-                                </span>
-                              </div>
-                            </td>
-                          </motion.tr>
-                        ))}
+                        {weekly.thisWeek.map((d, i) => {
+                          const prev = weekly.lastWeek[i]?.media ?? 0
+                          const diff = d.media && prev ? d.media - prev : null
+                          return (
+                            <tr key={d.fecha} className="border-b border-[#1F1F1F] last:border-0 hover:bg-[#1A1A1A] transition-colors">
+                              <td className="px-6 py-3.5 text-white font-medium capitalize">{d.label}</td>
+                              <td className="px-6 py-3.5 text-[#00E676] font-semibold">
+                                {d.media ? `${formatNumber(d.media, 1)} €/MWh` : '—'}
+                              </td>
+                              <td className="px-6 py-3.5 text-[#9CA3AF]">
+                                {prev ? `${formatNumber(prev, 1)} €/MWh` : '—'}
+                              </td>
+                              <td className="px-6 py-3.5">
+                                {diff !== null ? (
+                                  <div className="flex items-center gap-1">
+                                    {diff > 0
+                                      ? <TrendingUp className="w-3.5 h-3.5 text-red-400" />
+                                      : <TrendingDown className="w-3.5 h-3.5 text-[#00E676]" />
+                                    }
+                                    <span className={diff > 0 ? 'text-red-400' : 'text-[#00E676]'}>
+                                      {diff > 0 ? '+' : ''}{formatNumber(diff, 1)}
+                                    </span>
+                                  </div>
+                                ) : '—'}
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
                 </>
+              ) : (
+                <div className="text-center py-20 text-[#6B7280]">No se pudieron cargar los datos semanales.</div>
               )}
             </motion.div>
           )}
