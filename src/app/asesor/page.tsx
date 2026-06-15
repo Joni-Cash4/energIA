@@ -148,7 +148,7 @@ export default function AsesorPage() {
                 <ArrowRight className="w-5 h-5" />
               </Button>
             </Link>
-            <a href="https://wa.me/34600000000" target="_blank" rel="noopener noreferrer" className="flex-1">
+            <a href="https://wa.me/34689880596" target="_blank" rel="noopener noreferrer" className="flex-1">
               <Button variant="secondary" size="xl" className="w-full gap-2">
                 <Phone className="w-5 h-5" />
                 WhatsApp directo

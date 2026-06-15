@@ -138,14 +138,33 @@ function periodo20TD(hour: number, dow: number): 'P1' | 'P2' | 'P3' {
   return 'P2'
 }
 
-function periodo30TD(hour: number, dow: number): 'P1' | 'P2' | 'P3' | 'P4' | 'P5' | 'P6' {
-  if (dow === 0) return 'P6'
-  if (dow === 6) return 'P5'
-  if (hour >= 9 && hour < 14) return 'P1'
-  if ((hour >= 8 && hour < 9) || (hour >= 14 && hour < 19)) return 'P2'
-  if (hour >= 19 && hour < 23) return 'P3'
-  if (hour === 7 || hour === 23) return 'P4'
-  return 'P6'
+// 3.0TD season calendar by zone (month 1-12)
+const TEMPORADA_30TD: Record<string, string[]> = {
+  peninsula: ['alta','alta','media-alta','baja','baja','media','alta','media','media','baja','media-alta','alta'],
+  baleares:  ['media','media','baja','baja','media-alta','alta','alta','alta','alta','media-alta','baja','media'],
+  canarias:  ['media','media','media','baja','baja','baja','alta','alta','alta','alta','media-alta','media-alta'],
+}
+
+// Within each season, map hour+dow to the active period set
+// Season → [punta, llano, valle] = which P-number each role gets
+const SEASON_PERIODS: Record<string, ['P1'|'P2'|'P3'|'P4'|'P5'|'P6','P1'|'P2'|'P3'|'P4'|'P5'|'P6','P1'|'P2'|'P3'|'P4'|'P5'|'P6']> = {
+  'alta':       ['P1', 'P2', 'P6'],
+  'media-alta': ['P2', 'P3', 'P6'],
+  'media':      ['P3', 'P4', 'P6'],
+  'baja':       ['P4', 'P5', 'P6'],
+}
+
+function periodo30TD(hour: number, dow: number, month: number, zona: string): 'P1'|'P2'|'P3'|'P4'|'P5'|'P6' {
+  const temporada = (TEMPORADA_30TD[zona] ?? TEMPORADA_30TD.peninsula)[month - 1]
+  const [punta, llano, valle] = SEASON_PERIODS[temporada]
+  // Weekend / holiday → valle
+  if (dow === 0 || dow === 6) return valle
+  // Nighttime 0-8h → valle
+  if (hour < 8) return valle
+  // Punta: 10-14h and 18-22h
+  if ((hour >= 10 && hour < 14) || (hour >= 18 && hour < 22)) return punta
+  // Llano: rest of weekday daytime
+  return llano
 }
 
 function precioFinal(spotMwh: number, regulated: number): number {
@@ -174,14 +193,15 @@ function TarifaTooltip({ active, payload }: any) {
 
 type SubTarifa = '2.0TD' | '3.0TD'
 
-function TarifaFinalChart({ precios, ahora }: { precios: HourlyPrice[]; ahora: number }) {
+function TarifaFinalChart({ precios, ahora, zona }: { precios: HourlyPrice[]; ahora: number; zona: string }) {
   const [tarifa, setTarifa] = useState<SubTarifa>('2.0TD')
 
   const now = new Date()
   const dow = now.getDay()
+  const month = now.getMonth() + 1
 
   const data = precios.map((p) => {
-    const periodo = tarifa === '2.0TD' ? periodo20TD(p.hora, dow) : periodo30TD(p.hora, dow)
+    const periodo = tarifa === '2.0TD' ? periodo20TD(p.hora, dow) : periodo30TD(p.hora, dow, month, zona)
     const reg = tarifa === '2.0TD' ? REG_20TD[periodo as keyof typeof REG_20TD] : REG_30TD[periodo as keyof typeof REG_30TD]
     return {
       hora: p.hora,
@@ -511,7 +531,7 @@ export default function MercadoPage() {
                 </div>
 
                 {/* Precio final al consumidor */}
-                <TarifaFinalChart precios={hourly.precios} ahora={ahora} />
+                <TarifaFinalChart precios={hourly.precios} ahora={ahora} zona={zona} />
               </>
               ) : (
                 <div className="text-center py-20 text-[#6B7280]">
