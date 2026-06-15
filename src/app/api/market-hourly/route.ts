@@ -54,8 +54,14 @@ export async function GET(req: NextRequest) {
     )
 
     if (!res.ok) {
-      console.error('[market-hourly] ESIOS error', res.status, zona)
-      return NextResponse.json({ ...buildMockResponse(), _source: 'mock_esios_error' })
+      const body = await res.text().catch(() => '')
+      console.error('[market-hourly] ESIOS error', res.status, zona, body.slice(0, 200))
+      return NextResponse.json({
+        ...buildMockResponse(),
+        _source: 'mock_esios_error',
+        _error: `HTTP ${res.status}: ${body.slice(0, 300)}`,
+        _zona: zona,
+      })
     }
 
     const json = await res.json()
