@@ -5,6 +5,7 @@ export interface PeriodData {
   kwh: number
   precio_kwh: number
   importe: number
+  mercado_kwh?: number
   kwh_nuevo?: number
   precio_kwh_nuevo?: number
   importe_nuevo?: number
@@ -28,6 +29,7 @@ export interface InvoiceAnalysis {
   coste_nuevo_energia: number
   coste_actual_potencia: number
   coste_nuevo_potencia: number
+  mercado_actual_mwh?: number
 }
 
 export interface MarketPrice {

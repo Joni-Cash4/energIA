@@ -12,32 +12,32 @@ import { useToast } from '@/lib/use-toast'
 import type { InvoiceAnalysis } from '@/types'
 
 // Recalculate savings dynamically based on current fee inputs
+// ahorroBruto = real market comparison (from server). Fee is Jonathan's income charged on top.
+// Higher fee → higher Jonathan income → higher client cost → lower client net saving.
 function calcSavings(data: InvoiceAnalysis, feeEnergia: number, feePotencia: number) {
-  // Fee charged to client reduces net savings
   const feeEnergiaKwh = feeEnergia / 1000 // €/MWh → €/kWh
   const feeMensualEnergia = (data.kwh_total ?? 0) * feeEnergiaKwh
   const feeMensualPotencia = (data.potencia_contratada ?? 0) * (feePotencia / 12)
-  const feeMensual = feeMensualEnergia + feeMensualPotencia
-  const feeAnual = feeMensual * 12
+  const feeMensual = Math.round((feeMensualEnergia + feeMensualPotencia) * 100) / 100
+  const feeAnual = Math.round(feeMensual * 12 * 100) / 100
 
-  // Gross savings from switching tariff (fixed % from API)
+  // Gross savings = invoice price vs indexed market (from server, real market data)
   const ahorroBrutoMensual = data.ahorro_estimado_mensual ?? 0
-  const ahorroBrutoAnual = data.ahorro_estimado_anual ?? 0
 
-  // Net savings for client after fee
-  const ahorroNetoMensual = Math.max(0, ahorroBrutoMensual - feeMensual)
-  const ahorroNetoAnual = Math.max(0, ahorroBrutoAnual - feeAnual)
-  const porcentaje = data.total_factura > 0
-    ? Math.round((ahorroNetoMensual / data.total_factura) * 100)
+  // Client net saving = gross saving minus what they pay Jonathan
+  const ahorroNetoMensual = Math.round((ahorroBrutoMensual - feeMensual) * 100) / 100
+  const ahorroNetoAnual = Math.round(ahorroNetoMensual * 12 * 100) / 100
+  const porcentaje = data.coste_actual_energia > 0
+    ? Math.round((ahorroNetoMensual / data.coste_actual_energia) * 100)
     : 0
 
-  // Updated periodos with new prices including fee
+  // Add fee to new price per period (fee is on top of indexed market price)
   const periodos = (data.periodos ?? []).map((p) => ({
     ...p,
-    precio_kwh_nuevo: p.precio_kwh_nuevo !== null && p.precio_kwh_nuevo !== undefined
+    precio_kwh_nuevo: p.precio_kwh_nuevo != null
       ? Math.round((p.precio_kwh_nuevo + feeEnergiaKwh) * 10000) / 10000
       : null,
-    importe_nuevo: p.importe_nuevo !== null && p.importe_nuevo !== undefined
+    importe_nuevo: p.importe_nuevo != null
       ? Math.round((p.importe_nuevo + (p.kwh ?? 0) * feeEnergiaKwh) * 100) / 100
       : null,
   }))
@@ -373,19 +373,42 @@ export default function NuevaFacturaPage() {
             </div>
 
             {/* Summary cards — live with fees */}
-            <div className="grid sm:grid-cols-3 gap-4 mb-8">
-              {[
-                { label: 'Factura actual', value: formatCurrency(data.total_factura), sub: `${formatNumber(data.kwh_total)} kWh · ${data.potencia_contratada} kW` },
-                { label: 'Ahorro mensual neto', value: formatCurrency(savings.ahorroNetoMensual), accent: true, sub: `Incluye fee asesor` },
-                { label: 'Ahorro anual neto', value: formatCurrency(savings.ahorroNetoAnual), accent: true, sub: `${savings.porcentaje}% menos en energía` },
-              ].map((c) => (
-                <div key={c.label} className={cn('bg-[#141414] border rounded-xl p-5', c.accent ? 'border-[#00E676]/30' : 'border-[#1F1F1F]')}>
-                  <p className="text-[#6B7280] text-xs uppercase tracking-wide mb-2">{c.label}</p>
-                  <p className={cn('text-2xl font-bold', c.accent ? 'text-[#00E676]' : 'text-white')}>{c.value}</p>
-                  {c.sub && <p className="text-[#6B7280] text-xs mt-1">{c.sub}</p>}
-                </div>
-              ))}
+            <div className="grid sm:grid-cols-3 gap-4 mb-6">
+              <div className="bg-[#141414] border border-[#1F1F1F] rounded-xl p-5">
+                <p className="text-[#6B7280] text-xs uppercase tracking-wide mb-2">Factura actual</p>
+                <p className="text-2xl font-bold text-white">{formatCurrency(data.total_factura)}</p>
+                <p className="text-[#6B7280] text-xs mt-1">{formatNumber(data.kwh_total)} kWh · {data.potencia_contratada} kW</p>
+              </div>
+              <div className={cn('border rounded-xl p-5', savings.ahorroNetoMensual >= 0 ? 'bg-[#141414] border-[#00E676]/30' : 'bg-[#141414] border-red-500/30')}>
+                <p className="text-[#6B7280] text-xs uppercase tracking-wide mb-2">Ahorro mensual neto</p>
+                <p className={cn('text-2xl font-bold', savings.ahorroNetoMensual >= 0 ? 'text-[#00E676]' : 'text-red-400')}>
+                  {savings.ahorroNetoMensual >= 0 ? '' : '−'}{formatCurrency(Math.abs(savings.ahorroNetoMensual))}
+                </p>
+                <p className="text-[#6B7280] text-xs mt-1">
+                  {savings.ahorroNetoMensual >= 0 ? 'vs mercado actual · incluye fee' : 'Mercado actual más caro que su tarifa'}
+                </p>
+              </div>
+              <div className={cn('border rounded-xl p-5', savings.ahorroNetoAnual >= 0 ? 'bg-[#141414] border-[#00E676]/30' : 'bg-[#141414] border-red-500/30')}>
+                <p className="text-[#6B7280] text-xs uppercase tracking-wide mb-2">Ahorro anual neto</p>
+                <p className={cn('text-2xl font-bold', savings.ahorroNetoAnual >= 0 ? 'text-[#00E676]' : 'text-red-400')}>
+                  {savings.ahorroNetoAnual >= 0 ? '' : '−'}{formatCurrency(Math.abs(savings.ahorroNetoAnual))}
+                </p>
+                <p className="text-[#6B7280] text-xs mt-1">
+                  {Math.abs(savings.porcentaje)}% {savings.porcentaje >= 0 ? 'menos' : 'más'} en energía
+                  {data.mercado_actual_mwh ? ` · Mercado hoy: ${data.mercado_actual_mwh} €/MWh` : ''}
+                </p>
+              </div>
             </div>
+
+            {/* Market context note */}
+            {data.mercado_actual_mwh && (
+              <div className="text-xs text-[#6B7280] mb-6 bg-[#141414] border border-[#1F1F1F] rounded-xl px-4 py-3">
+                Comparativa vs <span className="text-white">tarifa indexada al mercado hoy ({data.mercado_actual_mwh} €/MWh PVPC)</span> + mismos peajes y cargos de su factura.
+                {savings.ahorroNetoMensual < 0
+                  ? ' El mercado está más caro que lo que pagó este cliente — su tarifa fija le conviene ahora mismo.'
+                  : ' Cambiando a tarifa indexada ahorraría esta cantidad a precios de hoy.'}
+              </div>
+            )}
 
             {/* Periodos table — live */}
             <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl overflow-hidden mb-8">
