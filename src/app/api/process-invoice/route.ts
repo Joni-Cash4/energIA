@@ -1,29 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 
-const PROMPT = `Eres un experto en facturas eléctricas españolas. Analiza esta factura y extrae los datos en JSON con exactamente esta estructura:
+const PROMPT = `Eres un experto en facturas eléctricas españolas. Analiza esta factura (puede ser una foto o PDF escaneado) y extrae los datos con máxima precisión.
 
+INSTRUCCIONES IMPORTANTES:
+- El CUPS empieza siempre por "ES" y tiene 20-22 caracteres. Búscalo en "Código unificado de punto de suministro" o "CUPS".
+- La tarifa puede ser 2.0TD, 3.0TD, 6.1TD, etc. Búscala en "Peaje de acceso" o "Tarifa".
+- Para facturas 3.0TD: solo tienen consumo en los periodos activos de esa temporada. Los periodos con 0 kWh NO los incluyas en el array de periodos.
+- El precio €/kWh de cada periodo es la SUMA de: peaje de acceso + cargos del sistema + coste de energía. Súmalos si aparecen desglosados.
+- El importe de cada periodo es la suma total de ese periodo (peaje + cargos + energía).
+- kwh_total es la suma de kWh de todos los periodos.
+- potencia_contratada: usa el valor de P1 en kW.
+- total_factura: el importe final total incluyendo IVA.
+
+Devuelve este JSON exacto:
 {
-  "cups": "string — código CUPS (ES...)",
-  "comercializadora": "string — nombre de la comercializadora",
-  "tarifa": "string — 2.0TD, 3.0TD, etc.",
+  "cups": "string",
+  "comercializadora": "string",
+  "tarifa": "string",
   "fecha_inicio": "YYYY-MM-DD",
   "fecha_fin": "YYYY-MM-DD",
-  "total_factura": number — importe total en euros,
-  "kwh_total": number — kWh consumidos en el periodo,
-  "potencia_contratada": number — kW,
+  "total_factura": number,
+  "kwh_total": number,
+  "potencia_contratada": number,
   "periodos": [
     {
       "periodo": "P1" | "P2" | "P3" | "P4" | "P5" | "P6",
       "kwh": number,
-      "precio_kwh": number — precio en €/kWh,
-      "importe": number — importe en euros
+      "precio_kwh": number,
+      "importe": number
     }
   ]
 }
 
 Responde ÚNICAMENTE con el JSON, sin texto adicional ni bloques de código markdown.
-Si un campo no aparece en la factura, usa null.`
+Si un campo no aparece claramente en la factura, usa null.`
 
 function buildSavingsEstimate(data: {
   kwh_total: number
@@ -74,7 +85,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1024,
       messages: [
         {
