@@ -47,153 +47,245 @@ function calcSavings(data: InvoiceAnalysis, feeEnergia: number, feePotencia: num
 
 async function generatePdfClient(
   data: InvoiceAnalysis,
-  feeEnergia: number,
-  feePotencia: number,
+  _feeEnergia: number,
+  _feePotencia: number,
   savings: ReturnType<typeof calcSavings>
 ): Promise<Blob> {
   const { jsPDF } = await import('jspdf')
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const W = 210
-  const margin = 15
-  let y = 20
+  const M = 14
+  let y = 0
 
-  const green = [0, 230, 118] as [number, number, number]
-  const dark = [10, 10, 10] as [number, number, number]
-  const gray = [107, 114, 128] as [number, number, number]
+  const C = {
+    dark:  [10, 10, 10]   as [number,number,number],
+    green: [0, 200, 100]  as [number,number,number],
+    gray:  [110, 110, 110] as [number,number,number],
+    light: [245, 245, 245] as [number,number,number],
+    white: [255, 255, 255] as [number,number,number],
+    text:  [30, 30, 30]   as [number,number,number],
+  }
 
-  // Header bar
-  doc.setFillColor(...dark)
-  doc.rect(0, 0, W, 30, 'F')
-  doc.setTextColor(...green)
-  doc.setFontSize(18)
+  const fc = (n: number) => formatCurrency(n)
+  const R = (n: number, d = 2) => formatNumber(n, d)
+
+  // ── Header ──
+  doc.setFillColor(...C.dark)
+  doc.rect(0, 0, W, 28, 'F')
+  doc.setTextColor(...C.green)
+  doc.setFontSize(16)
   doc.setFont('helvetica', 'bold')
-  doc.text('IAenergía', margin, 12)
-  doc.setFontSize(9)
+  doc.text('IAenergia', M, 11)
+  doc.setFontSize(8)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(200, 200, 200)
-  doc.text('Informe de análisis de factura eléctrica', margin, 20)
-  doc.text(`Generado el ${new Date().toLocaleDateString('es-ES')}`, W - margin, 20, { align: 'right' })
+  doc.text('Informe de analisis de factura electrica', M, 19)
+  doc.text(`Generado el ${new Date().toLocaleDateString('es-ES')}`, W - M, 19, { align: 'right' })
+  y = 36
 
-  y = 40
-  // Client info
-  doc.setTextColor(30, 30, 30)
-  doc.setFontSize(10)
+  // ── Datos del suministro ──
+  doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
-  doc.text('DATOS DEL SUMINISTRO', margin, y)
-  y += 6
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.setTextColor(...gray)
-  const info = [
+  doc.setTextColor(...C.gray)
+  doc.text('DATOS DEL SUMINISTRO', M, y)
+  y += 5
+  const info: [string, string][] = [
     ['CUPS', data.cups ?? '—'],
     ['Comercializadora', data.comercializadora ?? '—'],
-    ['Tarifa', data.tarifa ?? '—'],
-    ['Potencia contratada', `${data.potencia_contratada ?? '—'} kW`],
-    ['Periodo', `${data.fecha_inicio ?? '—'} — ${data.fecha_fin ?? '—'}`],
+    ['Tarifa de acceso', data.tarifa ?? '—'],
+    ['Periodo de consumo', `${data.fecha_inicio ?? '—'}  a  ${data.fecha_fin ?? '—'}`],
+    ['Consumo total', `${formatNumber(data.kwh_total)} kWh`],
   ]
-  info.forEach(([label, value]) => {
-    doc.setTextColor(...gray)
-    doc.text(label, margin, y)
-    doc.setTextColor(30, 30, 30)
-    doc.text(value, 70, y)
+  info.forEach(([lbl, val]) => {
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...C.gray)
+    doc.text(lbl, M, y)
+    doc.setTextColor(...C.text)
+    doc.text(val, 65, y)
     y += 5
-  })
-
-  y += 6
-  // Savings summary boxes
-  doc.setFillColor(240, 255, 248)
-  doc.roundedRect(margin, y, (W - margin * 2 - 5) / 2, 22, 3, 3, 'F')
-  doc.setFillColor(245, 245, 245)
-  doc.roundedRect(margin + (W - margin * 2 - 5) / 2 + 5, y, (W - margin * 2 - 5) / 2, 22, 3, 3, 'F')
-
-  doc.setFontSize(8)
-  doc.setTextColor(...gray)
-  doc.text('AHORRO MENSUAL ESTIMADO', margin + 4, y + 6)
-  doc.setFontSize(16)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(0, 180, 90)
-  doc.text(formatCurrency(savings.ahorroNetoMensual), margin + 4, y + 16)
-
-  const x2 = margin + (W - margin * 2 - 5) / 2 + 9
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...gray)
-  doc.text('AHORRO ANUAL ESTIMADO', x2, y + 6)
-  doc.setFontSize(16)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(0, 180, 90)
-  doc.text(formatCurrency(savings.ahorroNetoAnual), x2, y + 16)
-
-  y += 30
-
-  // Periodos table
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
-  doc.setTextColor(30, 30, 30)
-  doc.text('COMPARATIVA POR PERIODOS', margin, y)
-  y += 6
-
-  const cols = ['Periodo', 'kWh', 'Precio actual', 'Importe actual', 'Precio nuevo + fee', 'Importe nuevo', 'Ahorro']
-  const colW = [18, 18, 28, 28, 35, 28, 20]
-  let cx = margin
-
-  doc.setFillColor(30, 30, 30)
-  doc.rect(margin, y - 4, W - margin * 2, 7, 'F')
-  doc.setFontSize(7)
-  doc.setTextColor(200, 200, 200)
-  cols.forEach((c, i) => {
-    doc.text(c, cx + 1, y)
-    cx += colW[i]
   })
   y += 4
 
-  savings.periodos.forEach((p, idx) => {
-    if (idx % 2 === 0) {
-      doc.setFillColor(250, 250, 250)
-      doc.rect(margin, y - 3, W - margin * 2, 7, 'F')
-    }
-    cx = margin
-    doc.setTextColor(30, 30, 30)
+  // ── Resumen ahorro ──
+  const ahorroM = data.ahorro_estimado_mensual ?? 0
+  const ahorroA = data.ahorro_estimado_anual ?? 0
+  const isPos = ahorroM >= 0
+  const boxW = (W - M * 2 - 4) / 2
+  doc.setFillColor(...(isPos ? [235, 255, 245] : [255, 235, 235]) as [number,number,number])
+  doc.roundedRect(M, y, boxW, 20, 2, 2, 'F')
+  doc.setFillColor(...C.light)
+  doc.roundedRect(M + boxW + 4, y, boxW, 20, 2, 2, 'F')
+
+  doc.setFontSize(7)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...C.gray)
+  doc.text('AHORRO MENSUAL ESTIMADO', M + 3, y + 6)
+  doc.setFontSize(14)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...(isPos ? [0, 160, 80] : [200, 50, 50]) as [number,number,number])
+  doc.text((isPos ? '' : '-') + fc(Math.abs(ahorroM)), M + 3, y + 15)
+
+  doc.setFontSize(7)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...C.gray)
+  doc.text('AHORRO ANUAL ESTIMADO', M + boxW + 7, y + 6)
+  doc.setFontSize(14)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...C.text)
+  doc.text((isPos ? '' : '-') + fc(Math.abs(ahorroA)), M + boxW + 7, y + 15)
+  y += 28
+
+  // ── Simulacion de factura ──
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...C.gray)
+  doc.text('SIMULACION DE FACTURA — COMPARATIVA', M, y)
+
+  if (data.mercado_actual_mwh) {
     doc.setFont('helvetica', 'normal')
-    const ahorro = (p.importe ?? 0) - (p.importe_nuevo ?? 0)
-    const row = [
-      p.periodo,
-      formatNumber(p.kwh ?? 0),
-      `${formatNumber(p.precio_kwh, 4)} €/kWh`,
-      formatCurrency(p.importe ?? 0),
-      `${formatNumber(p.precio_kwh_nuevo ?? 0, 4)} €/kWh`,
-      formatCurrency(p.importe_nuevo ?? 0),
-      ahorro > 0 ? formatCurrency(ahorro) : '—',
-    ]
-    row.forEach((val, i) => {
-      if (i === 6 && ahorro > 0) doc.setTextColor(0, 160, 80)
-      else doc.setTextColor(30, 30, 30)
-      doc.text(val, cx + 1, y)
-      cx += colW[i]
-    })
+    doc.setFontSize(7)
+    doc.text(`Mercado PVPC hoy: ${data.mercado_actual_mwh} EUR/MWh  |  Mismos peajes y cargos de su factura actual`, M, y + 5)
+    y += 9
+  } else {
+    y += 5
+  }
+
+  // Table header
+  const cW = [72, 35, 35, 28] // Concepto | Actual | Indexada | Dif
+  const cX = [M, M+72, M+72+35, M+72+35+35]
+  doc.setFillColor(...C.dark)
+  doc.rect(M, y, W - M*2, 7, 'F')
+  doc.setFontSize(7)
+  doc.setTextColor(...C.white)
+  doc.setFont('helvetica', 'bold')
+  ;['Concepto', 'Tarifa actual', 'Tarifa indexada', 'Diferencia'].forEach((h, i) => {
+    doc.text(h, cX[i] + 2, y + 5)
+  })
+  y += 7
+
+  const row = (label: string, actual: number | null, nuevo: number | null, bold = false, highlight = false) => {
+    const dif = actual != null && nuevo != null ? nuevo - actual : null
+    if (highlight) {
+      doc.setFillColor(...(isPos ? [235, 255, 245] : [255, 235, 235]) as [number,number,number])
+      doc.rect(M, y, W - M*2, 7, 'F')
+    }
+    doc.setFont('helvetica', bold ? 'bold' : 'normal')
+    doc.setFontSize(7.5)
+    doc.setTextColor(...C.text)
+    doc.text(label, cX[0] + 2, y + 5)
+    if (actual != null) { doc.setTextColor(...C.text); doc.text(fc(actual), cX[1] + cW[1] - 2, y + 5, { align: 'right' }) }
+    if (nuevo != null)  { doc.setTextColor(...C.text); doc.text(fc(nuevo),  cX[2] + cW[2] - 2, y + 5, { align: 'right' }) }
+    if (dif != null) {
+      doc.setTextColor(...(dif < 0 ? [0,160,80] : dif > 0 ? [200,50,50] : C.gray) as [number,number,number])
+      doc.text((dif < 0 ? '-' : dif > 0 ? '+' : '') + fc(Math.abs(dif)), cX[3] + cW[3] - 2, y + 5, { align: 'right' })
+    }
     y += 7
+  }
+
+  const divider = (label: string) => {
+    doc.setFillColor(230, 230, 230)
+    doc.rect(M, y, W - M*2, 0.3, 'F')
+    y += 1
+  }
+
+  // Energy rows per period
+  const periodos = data.periodos ?? []
+  periodos.forEach((p) => {
+    row(
+      `Energia ${p.periodo} (${formatNumber(p.kwh ?? 0)} kWh)`,
+      p.importe ?? null,
+      p.importe_nuevo ?? null
+    )
   })
 
-  y += 8
-  // Fee section
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
-  doc.setTextColor(30, 30, 30)
-  doc.text('HONORARIOS DEL ASESOR', margin, y)
-  y += 6
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.setTextColor(...gray)
-  doc.text(`Fee energía: ${feeEnergia} €/MWh · Fee potencia: ${feePotencia} €/kW/año`, margin, y)
-  y += 5
-  doc.text(`Honorario mensual estimado: ${formatCurrency(savings.feeMensual)} · Anual: ${formatCurrency(savings.feeAnual)}`, margin, y)
+  divider('')
+  const potencia = data.potencia_total ?? 0
+  const reactiva = data.reactiva_total ?? 0
+  const alquiler = data.alquiler_equipos ?? 0
+  const energiaActual = periodos.reduce((s, p) => s + (p.importe ?? 0), 0)
+  const energiaNueva  = periodos.reduce((s, p) => s + (p.importe_nuevo ?? 0), 0)
 
-  // Footer
-  doc.setFillColor(...dark)
-  doc.rect(0, 287 - 12, W, 12, 'F')
-  doc.setFontSize(7)
+  row('Subtotal energia', energiaActual, energiaNueva, true)
+
+  if (potencia > 0) row('Potencia contratada', potencia, potencia)
+  if (reactiva > 0) row('Energia reactiva', reactiva, reactiva)
+
+  divider('')
+  const subActual = energiaActual + potencia + reactiva
+  const subNuevo  = energiaNueva  + potencia + reactiva
+  row('Subtotal', subActual, subNuevo, true)
+
+  const ieeA = Math.round(subActual * 0.0511268 * 100) / 100
+  const ieeN = Math.round(subNuevo  * 0.0511268 * 100) / 100
+  row('Impuesto electricidad (5,11%)', ieeA, ieeN)
+  if (alquiler > 0) row('Alquiler equipos de medida', alquiler, alquiler)
+
+  divider('')
+  const baseA = subActual + ieeA + alquiler
+  const baseN = subNuevo  + ieeN + alquiler
+  row('Base imponible', baseA, baseN, true)
+
+  const ivaA = Math.round(baseA * 0.21 * 100) / 100
+  const ivaN = Math.round(baseN * 0.21 * 100) / 100
+  row('IVA (21%)', ivaA, ivaN)
+
+  y += 1
+  doc.setFillColor(...C.dark)
+  doc.rect(M, y, W - M*2, 8, 'F')
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(8)
+  doc.setTextColor(...C.white)
+  doc.text('TOTAL FACTURA', cX[0] + 2, y + 5.5)
+  doc.text(fc(data.total_factura), cX[1] + cW[1] - 2, y + 5.5, { align: 'right' })
+  const totalN = baseN + ivaN
+  doc.text(fc(totalN), cX[2] + cW[2] - 2, y + 5.5, { align: 'right' })
+  const ahorroPdf = data.total_factura - totalN
+  doc.setTextColor(...(ahorroPdf >= 0 ? C.green : [255,100,100]) as [number,number,number])
+  doc.text((ahorroPdf < 0 ? '+' : '-') + fc(Math.abs(ahorroPdf)), cX[3] + cW[3] - 2, y + 5.5, { align: 'right' })
+  y += 12
+
+  // ── Detalle precio por periodo ──
+  if (y < 240) {
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...C.gray)
+    doc.text('PRECIO POR PERIODO (EUR/kWh)', M, y)
+    y += 5
+    doc.setFillColor(...C.dark)
+    doc.rect(M, y, W - M*2, 6, 'F')
+    doc.setFontSize(7)
+    doc.setTextColor(...C.white)
+    ;['Periodo', 'kWh', 'Precio actual', 'del cual mercado', 'Precio indexado hoy'].forEach((h, i) => {
+      doc.text(h, M + 2 + i * 37, y + 4)
+    })
+    y += 6
+    periodos.forEach((p, idx) => {
+      if (idx % 2 === 0) { doc.setFillColor(...C.light); doc.rect(M, y, W - M*2, 6, 'F') }
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7.5)
+      doc.setTextColor(...C.text)
+      const vals = [
+        p.periodo,
+        formatNumber(p.kwh ?? 0),
+        R(p.precio_kwh, 4) + ' EUR/kWh',
+        R(p.mercado_kwh ?? 0, 4) + ' EUR/kWh',
+        R(p.precio_kwh_nuevo ?? 0, 4) + ' EUR/kWh',
+      ]
+      vals.forEach((v, i) => doc.text(v, M + 2 + i * 37, y + 4))
+      y += 6
+    })
+  }
+
+  // ── Footer ──
+  doc.setFillColor(...C.dark)
+  doc.rect(0, 285, W, 12, 'F')
+  doc.setFontSize(6.5)
+  doc.setFont('helvetica', 'normal')
   doc.setTextColor(150, 150, 150)
-  doc.text('IAenergía — iaenergia.es · Este informe es orientativo y no constituye oferta vinculante.', W / 2, 287 - 5, { align: 'center' })
+  doc.text(
+    'IAenergia — iaenergia.es  |  Informe orientativo. Precios indexados basados en mercado PVPC del dia de emision. No constituye oferta vinculante.',
+    W / 2, 292, { align: 'center' }
+  )
 
   return doc.output('blob')
 }

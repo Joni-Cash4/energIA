@@ -14,6 +14,9 @@ INSTRUCCIONES IMPORTANTES:
 - importe de cada periodo = suma de (peaje + cargos + energía) × kWh de ese periodo (solo energía, sin potencia ni impuestos).
 - kwh_total = suma de kWh de todos los periodos con consumo.
 - potencia_contratada = valor en kW de P1.
+- potencia_total = importe total facturado por potencia contratada (todos los periodos sumados, antes de IEE e IVA). Busca "Por potencia contratada" en el resumen de factura.
+- reactiva_total = importe total de energía reactiva (si existe, sino 0).
+- alquiler_equipos = importe del alquiler de equipos de medida y control (antes de IVA).
 - total_factura = importe final total incluyendo IVA.
 
 Devuelve este JSON exacto:
@@ -26,6 +29,9 @@ Devuelve este JSON exacto:
   "total_factura": number,
   "kwh_total": number,
   "potencia_contratada": number,
+  "potencia_total": number,
+  "reactiva_total": number,
+  "alquiler_equipos": number,
   "periodos": [
     {
       "periodo": "P1" | "P2" | "P3" | "P4" | "P5" | "P6",
@@ -74,11 +80,17 @@ async function fetchMarketAvgMwh(): Promise<number> {
   }
 }
 
+const IEE = 0.0511268
+const IVA = 0.21
+
 function buildSavingsEstimate(
   data: {
     kwh_total: number
     total_factura: number
     potencia_contratada: number
+    potencia_total?: number
+    reactiva_total?: number
+    alquiler_equipos?: number
     periodos: { periodo: string; kwh: number; precio_kwh: number; mercado_kwh?: number; importe: number }[]
   },
   marketAvgMwh: number
@@ -86,44 +98,51 @@ function buildSavingsEstimate(
   const marketAvgKwh = marketAvgMwh / 1000
 
   const periodos = (data.periodos ?? []).map((p) => {
-    // Regulated component = precio_kwh - mercado_kwh (peajes + cargos from invoice)
     const mercadoKwh = p.mercado_kwh ?? p.precio_kwh * 0.6
     const reguladoKwh = p.precio_kwh - mercadoKwh
-
-    // New price = same regulated + today's market
     const newPrecioKwh = Math.round((reguladoKwh + marketAvgKwh) * 10000) / 10000
     const newImporte = Math.round(newPrecioKwh * (p.kwh ?? 0) * 100) / 100
-
-    return {
-      ...p,
-      kwh_nuevo: p.kwh,
-      precio_kwh_nuevo: newPrecioKwh,
-      importe_nuevo: newImporte,
-    }
+    return { ...p, kwh_nuevo: p.kwh, precio_kwh_nuevo: newPrecioKwh, importe_nuevo: newImporte }
   })
 
   const coste_actual_energia = periodos.reduce((s, p) => s + (p.importe ?? 0), 0)
   const coste_nuevo_energia = periodos.reduce((s, p) => s + p.importe_nuevo, 0)
-  const ahorro_mensual = Math.round((coste_actual_energia - coste_nuevo_energia) * 100) / 100
 
-  // Potencia cost = total - energia (approximation, includes taxes/meter)
-  const coste_actual_potencia = Math.max(0, (data.total_factura ?? 0) - coste_actual_energia)
-  const coste_nuevo_potencia = Math.round(coste_actual_potencia * 100) / 100
+  const potencia_total = data.potencia_total ?? 0
+  const reactiva_total = data.reactiva_total ?? 0
+  const alquiler_equipos = data.alquiler_equipos ?? 0
 
-  const porcentaje = coste_actual_energia > 0
-    ? Math.round((ahorro_mensual / coste_actual_energia) * 100)
+  // Full invoice simulation (same structure as Plenitude invoice)
+  const subtotal_actual = coste_actual_energia + potencia_total + reactiva_total
+  const subtotal_nuevo  = coste_nuevo_energia  + potencia_total + reactiva_total
+  const iee_actual = Math.round(subtotal_actual * IEE * 100) / 100
+  const iee_nuevo  = Math.round(subtotal_nuevo  * IEE * 100) / 100
+  const base_actual = subtotal_actual + iee_actual + alquiler_equipos
+  const base_nuevo  = subtotal_nuevo  + iee_nuevo  + alquiler_equipos
+  const iva_actual = Math.round(base_actual * IVA * 100) / 100
+  const iva_nuevo  = Math.round(base_nuevo  * IVA * 100) / 100
+  const total_nuevo = Math.round((base_nuevo + iva_nuevo) * 100) / 100
+
+  const ahorro_mensual = Math.round(((data.total_factura ?? 0) - total_nuevo) * 100) / 100
+  const porcentaje = (data.total_factura ?? 0) > 0
+    ? Math.round((ahorro_mensual / (data.total_factura ?? 1)) * 100)
     : 0
 
   return {
     coste_actual_energia: Math.round(coste_actual_energia * 100) / 100,
     coste_nuevo_energia: Math.round(coste_nuevo_energia * 100) / 100,
-    coste_actual_potencia,
-    coste_nuevo_potencia,
+    coste_actual_potencia: Math.round((potencia_total + reactiva_total) * 100) / 100,
+    coste_nuevo_potencia: Math.round((potencia_total + reactiva_total) * 100) / 100,
     ahorro_estimado_mensual: ahorro_mensual,
     ahorro_estimado_anual: Math.round(ahorro_mensual * 12 * 100) / 100,
     porcentaje_ahorro: porcentaje,
     kwh_anuales_sips: Math.round((data.kwh_total ?? 0) * 12),
     mercado_actual_mwh: Math.round(marketAvgMwh * 10) / 10,
+    potencia_total: Math.round(potencia_total * 100) / 100,
+    reactiva_total: Math.round(reactiva_total * 100) / 100,
+    alquiler_equipos: Math.round(alquiler_equipos * 100) / 100,
+    total_nuevo_estimado: total_nuevo,
+    _sim: { subtotal_actual, subtotal_nuevo, iee_actual, iee_nuevo, base_actual, base_nuevo, iva_actual, iva_nuevo },
     periodos,
   }
 }

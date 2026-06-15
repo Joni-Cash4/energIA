@@ -30,6 +30,10 @@ export interface InvoiceAnalysis {
   coste_actual_potencia: number
   coste_nuevo_potencia: number
   mercado_actual_mwh?: number
+  potencia_total?: number
+  reactiva_total?: number
+  alquiler_equipos?: number
+  total_nuevo_estimado?: number
 }
 
 export interface MarketPrice {
