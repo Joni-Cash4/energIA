@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 }
 
 const reseñas = [
-  { nombre: 'Carlos M.', lugar: 'Bilbao', texto: 'Cambié de Endesa a tarifa indexada y ahorro 47€/mes. Jonatan me lo explicó todo sin prisa.', estrellas: 5 },
+  { nombre: 'Carlos M.', lugar: 'Bilbao', texto: 'Cambié de Endesa a tarifa indexada y ahorro 47€/mes. Jonathan me lo explicó todo sin prisa.', estrellas: 5 },
   { nombre: 'Ana P.', lugar: 'Getxo', texto: 'Lo que más me gustó es que no intentó venderme nada. Analizó mi factura y me dijo exactamente qué hacer.', estrellas: 5 },
   { nombre: 'Roberto F.', lugar: 'Vitoria', texto: 'Videollamada muy clara. En 20 minutos entendí mi factura por primera vez en años.', estrellas: 5 },
 ]
@@ -33,7 +33,7 @@ export default function AsesorPage() {
             </div>
             <div>
               <p className="text-[#00E676] text-sm uppercase tracking-widest mb-2">Tu asesor energético</p>
-              <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3">Jonatan</h1>
+              <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3">Jonathan</h1>
               <p className="text-[#9CA3AF] text-lg mb-4 leading-relaxed">
                 Asesor energético independiente. No trabajo para ninguna comercializadora — trabajo para ti.
                 Mi objetivo es que pagues solo lo que debes pagar.
