@@ -3,15 +3,10 @@ import type { InvoiceAnalysis, MarketPrice, NewsItem } from '@/types'
 
 // ─── Invoice ─────────────────────────────────────────────────────────────────
 
-export async function processInvoice(file: File): Promise<InvoiceAnalysis> {
+export async function processInvoice(files: File[]): Promise<InvoiceAnalysis> {
   const form = new FormData()
-  form.append('file', file)
-  // Calls /api/process-invoice (Next.js route) which proxies to the Python backend
-  // and falls back to demo data when the backend is unavailable.
-  const res = await fetch('/api/process-invoice', {
-    method: 'POST',
-    body: form,
-  })
+  files.forEach((f) => form.append('files', f))
+  const res = await fetch('/api/process-invoice', { method: 'POST', body: form })
   if (!res.ok) throw new Error(`Error al procesar la factura: ${res.statusText}`)
   return res.json()
 }

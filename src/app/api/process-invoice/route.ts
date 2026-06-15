@@ -66,6 +66,14 @@ function buildSavingsEstimate(data: {
   }
 }
 
+const ALLOWED_MIME: Record<string, string> = {
+  'application/pdf': 'application/pdf',
+  'image/jpeg': 'image/jpeg',
+  'image/jpg': 'image/jpeg',
+  'image/png': 'image/png',
+  'image/webp': 'image/webp',
+}
+
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
@@ -73,13 +81,37 @@ export async function POST(req: NextRequest) {
   }
 
   const form = await req.formData()
-  const file = form.get('file') as File | null
-  if (!file || file.type !== 'application/pdf') {
-    return NextResponse.json({ error: 'Se requiere un archivo PDF' }, { status: 400 })
+  const allEntries = form.getAll('files')
+  const files = allEntries.filter((f): f is File => f instanceof File && !!ALLOWED_MIME[f.type])
+
+  if (files.length === 0) {
+    return NextResponse.json(
+      { error: 'Sube al menos un archivo PDF o imagen (JPG, PNG, WEBP)' },
+      { status: 400 }
+    )
   }
 
-  const buffer = await file.arrayBuffer()
-  const base64 = Buffer.from(buffer).toString('base64')
+  // Build one content block per file
+  const fileBlocks = await Promise.all(
+    files.map(async (file) => {
+      const base64 = Buffer.from(await file.arrayBuffer()).toString('base64')
+      const mime = ALLOWED_MIME[file.type]
+      if (mime === 'application/pdf') {
+        return {
+          type: 'document' as const,
+          source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: base64 },
+        }
+      }
+      return {
+        type: 'image' as const,
+        source: {
+          type: 'base64' as const,
+          media_type: mime as 'image/jpeg' | 'image/png' | 'image/webp',
+          data: base64,
+        },
+      }
+    })
+  )
 
   const client = new Anthropic({ apiKey })
 
@@ -91,10 +123,7 @@ export async function POST(req: NextRequest) {
         {
           role: 'user',
           content: [
-            {
-              type: 'document',
-              source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-            },
+            ...fileBlocks,
             { type: 'text', text: PROMPT },
           ],
         },

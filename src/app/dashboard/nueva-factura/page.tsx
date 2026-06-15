@@ -2,7 +2,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Upload, FileText, Download, Save, Loader2, AlertCircle } from 'lucide-react'
+import { Upload, FileText, Download, Save, Loader2, AlertCircle, X, Image } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { processInvoice } from '@/lib/api'
@@ -202,27 +202,46 @@ export default function NuevaFacturaPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<InvoiceAnalysis | null>(null)
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [feeEnergia, setFeeEnergia] = useState(5)
   const [feePotencia, setFeePotencia] = useState(1)
   const [savingPdf, setSavingPdf] = useState(false)
   const [savingCliente, setSavingCliente] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const onDrop = useCallback(async (files: File[]) => {
-    if (!files[0]) return
+  const onDrop = useCallback((dropped: File[]) => {
+    setPendingFiles((prev) => {
+      const existing = new Set(prev.map((f) => f.name + f.size))
+      return [...prev, ...dropped.filter((f) => !existing.has(f.name + f.size))]
+    })
+  }, [])
+
+  const removeFile = useCallback((idx: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== idx))
+  }, [])
+
+  const handleAnalyze = useCallback(async () => {
+    if (pendingFiles.length === 0) return
     setError(null)
     setLoading(true)
     try {
-      const result = await processInvoice(files[0])
+      const result = await processInvoice(pendingFiles)
       setData(result)
     } catch {
-      setError('No se pudo procesar la factura. Verifica que el PDF sea válido.')
+      setError('No se pudo procesar la factura. Verifica que los archivos sean válidos.')
     }
     setLoading(false)
-  }, [])
+  }, [pendingFiles])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop, accept: { 'application/pdf': ['.pdf'] }, maxFiles: 1, disabled: loading || !!data,
+    onDrop,
+    accept: {
+      'application/pdf': ['.pdf'],
+      'image/jpeg': ['.jpg', '.jpeg'],
+      'image/png': ['.png'],
+      'image/webp': ['.webp'],
+    },
+    disabled: loading || !!data,
   })
 
   // Recalculate live whenever fees change
@@ -271,26 +290,58 @@ export default function NuevaFacturaPage() {
       <h1 className="text-2xl font-bold text-white mb-8">Nueva factura</h1>
 
       {!data && (
-        <div
-          {...getRootProps()}
-          className={cn(
-            'border-2 border-dashed rounded-2xl p-16 text-center cursor-pointer transition-all duration-300 mb-6',
-            isDragActive ? 'border-[#00E676] bg-[#00E676]/5' : 'border-[#2A2A2A] bg-[#141414] hover:border-[#00E676]/50',
-            loading && 'opacity-60 cursor-not-allowed'
-          )}
-        >
-          <input {...getInputProps()} />
-          {loading ? (
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-12 h-12 rounded-full border-2 border-[#00E676]/30 border-t-[#00E676] animate-spin" />
-              <p className="text-[#00E676]">Analizando factura con IA...</p>
-              <p className="text-[#6B7280] text-sm">Puede tardar unos segundos</p>
-            </div>
-          ) : (
+        <div className="mb-6 space-y-4">
+          {/* Drop zone */}
+          <div
+            {...getRootProps()}
+            className={cn(
+              'border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300',
+              isDragActive ? 'border-[#00E676] bg-[#00E676]/5' : 'border-[#2A2A2A] bg-[#141414] hover:border-[#00E676]/50',
+              loading && 'opacity-60 cursor-not-allowed'
+            )}
+          >
+            <input {...getInputProps()} />
             <div className="flex flex-col items-center gap-3">
-              <Upload className="w-12 h-12 text-[#6B7280]" />
-              <p className="text-white font-medium">{isDragActive ? 'Suelta aquí' : 'Arrastra el PDF o haz clic'}</p>
-              <p className="text-[#6B7280] text-sm">Factura eléctrica en formato PDF</p>
+              <Upload className="w-10 h-10 text-[#6B7280]" />
+              <p className="text-white font-medium">{isDragActive ? 'Suelta aquí' : 'Arrastra archivos o haz clic'}</p>
+              <p className="text-[#6B7280] text-sm">PDF, JPG, PNG o WEBP · Puedes añadir varios archivos</p>
+            </div>
+          </div>
+
+          {/* File list */}
+          {pendingFiles.length > 0 && (
+            <div className="bg-[#141414] border border-[#1F1F1F] rounded-xl overflow-hidden">
+              {pendingFiles.map((f, i) => {
+                const isImg = f.type.startsWith('image/')
+                return (
+                  <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-[#1F1F1F] last:border-0">
+                    {isImg
+                      ? <Image className="w-4 h-4 text-[#6B7280] shrink-0" />
+                      : <FileText className="w-4 h-4 text-[#6B7280] shrink-0" />
+                    }
+                    <span className="text-sm text-white flex-1 truncate">{f.name}</span>
+                    <span className="text-xs text-[#6B7280] shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
+                    <button onClick={() => removeFile(i)} className="text-[#6B7280] hover:text-red-400 transition-colors ml-1">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Analyze button */}
+          {pendingFiles.length > 0 && !loading && (
+            <Button onClick={handleAnalyze} className="w-full gap-2 glow-green">
+              <FileText className="w-4 h-4" />
+              Analizar {pendingFiles.length} {pendingFiles.length === 1 ? 'archivo' : 'archivos'} con IA
+            </Button>
+          )}
+
+          {loading && (
+            <div className="flex flex-col items-center gap-3 py-6">
+              <div className="w-10 h-10 rounded-full border-2 border-[#00E676]/30 border-t-[#00E676] animate-spin" />
+              <p className="text-[#00E676] text-sm">Analizando con IA... puede tardar unos segundos</p>
             </div>
           )}
         </div>
@@ -318,7 +369,7 @@ export default function NuevaFacturaPage() {
                   <p className="text-[#6B7280] text-sm">{data.comercializadora} · {data.tarifa}</p>
                 </div>
               </div>
-              <Button variant="secondary" size="sm" onClick={() => { setData(null); setError(null) }}>Cargar otra</Button>
+              <Button variant="secondary" size="sm" onClick={() => { setData(null); setError(null); setPendingFiles([]) }}>Cargar otra</Button>
             </div>
 
             {/* Summary cards — live with fees */}
