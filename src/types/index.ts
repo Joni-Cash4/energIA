@@ -57,6 +57,7 @@ export interface MarketHourlyResponse {
   _date?: string
   _values_count?: number
   _error?: string
+  _zona?: string
 }
 
 export interface NewsItem {

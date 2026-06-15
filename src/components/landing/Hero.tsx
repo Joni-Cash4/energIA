@@ -29,7 +29,7 @@ export function Hero() {
         <motion.div custom={0} variants={fadeUp} initial="hidden" animate="show">
           <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#00E676]/30 bg-[#00E676]/5 text-[#00E676] text-sm font-medium mb-8">
             <Zap className="w-3.5 h-3.5" />
-            Análisis instantáneo con IA
+            Asesor independiente · Sin comisiones ocultas
           </span>
         </motion.div>
 
@@ -41,9 +41,10 @@ export function Hero() {
           animate="show"
           className="text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight leading-tight mb-6"
         >
-          Ahorra en tu{' '}
-          <span className="gradient-text glow-green-text">factura eléctrica</span>
-          <br />sin esfuerzo
+          La IA hace los números.{' '}
+          <br />
+          <span className="gradient-text glow-green-text">Nosotros te explicamos</span>
+          <br />qué significan.
         </motion.h1>
 
         {/* Subtitle */}
@@ -54,8 +55,8 @@ export function Hero() {
           animate="show"
           className="text-lg sm:text-xl text-[#9CA3AF] max-w-2xl mx-auto mb-10"
         >
-          Sube tu factura de luz y en segundos te decimos exactamente cuánto puedes ahorrar
-          cambiando de comercializadora. Gratis, sin compromiso.
+          Analizamos tu factura con precisión milimétrica y te llamamos nosotros para explicarte el resultado.
+          Sin letra pequeña, sin sorpresas. Gratis.
         </motion.p>
 
         {/* CTAs */}
@@ -72,9 +73,9 @@ export function Hero() {
               <ArrowRight className="w-5 h-5" />
             </Button>
           </Link>
-          <Link href="/mercado">
+          <Link href="/asesor">
             <Button variant="secondary" size="xl">
-              Ver precios de mercado
+              Conoce a tu asesor
             </Button>
           </Link>
         </motion.div>
@@ -89,8 +90,8 @@ export function Hero() {
         >
           {[
             { icon: Shield, text: 'Sin registrarte' },
-            { icon: Zap, text: 'Resultado en 10 segundos' },
-            { icon: TrendingDown, text: 'Ahorro medio 21%' },
+            { icon: Zap, text: 'Análisis en segundos' },
+            { icon: TrendingDown, text: 'Te llamamos nosotros' },
           ].map(({ icon: Icon, text }) => (
             <span key={text} className="flex items-center gap-1.5">
               <Icon className="w-4 h-4 text-[#00E676]" />

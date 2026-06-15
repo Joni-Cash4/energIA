@@ -292,21 +292,34 @@ function TarifaFinalChart({ precios, ahora }: { precios: HourlyPrice[]; ahora: n
 
 type Tab = 'hoy' | 'semana'
 
+type Zona = 'peninsula' | 'baleares' | 'canarias'
+const ZONAS: { id: Zona; label: string }[] = [
+  { id: 'peninsula', label: 'Península' },
+  { id: 'baleares', label: 'Baleares' },
+  { id: 'canarias', label: 'Canarias' },
+]
+
 export default function MercadoPage() {
   const [tab, setTab] = useState<Tab>('hoy')
+  const [zona, setZona] = useState<Zona>('peninsula')
   const [hourly, setHourly] = useState<MarketHourlyResponse | null>(null)
   const [weekly, setWeekly] = useState<WeeklyData | null>(null)
   const [loadingHourly, setLoadingHourly] = useState(true)
   const [loadingWeekly, setLoadingWeekly] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
 
-  const loadHourly = async () => {
+  const loadHourly = async (z: Zona = zona) => {
     setLoadingHourly(true)
     try {
-      const res = await fetch('/api/market-hourly')
+      const res = await fetch(`/api/market-hourly?zona=${z}`)
       if (res.ok) { setHourly(await res.json()); setLastUpdate(new Date()) }
     } catch { /* silent */ }
     setLoadingHourly(false)
+  }
+
+  const handleZonaChange = (z: Zona) => {
+    setZona(z)
+    loadHourly(z)
   }
 
   const loadWeekly = async () => {
@@ -349,10 +362,24 @@ export default function MercadoPage() {
                 <p className="text-[#6B7280] text-sm mt-1">Actualizado: {lastUpdate.toLocaleTimeString('es-ES')}</p>
               )}
             </div>
+            <div className="flex items-center gap-3">
+              {/* Zona selector */}
+              <div className="flex gap-1 p-1 bg-[#141414] border border-[#1F1F1F] rounded-xl">
+                {ZONAS.map((z) => (
+                  <button
+                    key={z.id}
+                    onClick={() => handleZonaChange(z.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${zona === z.id ? 'bg-[#00E676] text-black' : 'text-[#9CA3AF] hover:text-white'}`}
+                  >
+                    {z.label}
+                  </button>
+                ))}
+              </div>
             <Button variant="secondary" size="sm" onClick={() => { loadHourly() }} className="gap-2">
               <RefreshCw className={`w-4 h-4 ${loadingHourly ? 'animate-spin' : ''}`} />
               Actualizar
             </Button>
+            </div>
           </motion.div>
 
           {/* Semáforo del momento */}

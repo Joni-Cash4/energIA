@@ -11,8 +11,8 @@ import type { MarketHourlyResponse } from '@/types'
 const links = [
   { href: '/comparador', label: 'Comparador' },
   { href: '/mercado',    label: 'Mercado',   live: true },
+  { href: '/asesor',     label: 'Tu asesor' },
   { href: '/noticias',   label: 'Noticias' },
-  { href: '/faq',        label: 'FAQ' },
   { href: '/contacto',   label: 'Contacto' },
 ]
 

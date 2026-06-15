@@ -1,65 +1,78 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import type { HourlyPrice, MarketHourlyResponse } from '@/types'
 
 export const revalidate = 3600
+
+// ESIOS indicator IDs by zone
+// 600 = PVPC Península, 1739 = PVPC Baleares, 1740 = PVPC Canarias
+const ZONE_INDICATORS: Record<string, number> = {
+  peninsula: 600,
+  baleares: 1739,
+  canarias: 1740,
+}
 
 function percentile(sorted: number[], p: number): number {
   const idx = Math.floor(sorted.length * p)
   return sorted[Math.min(idx, sorted.length - 1)]
 }
 
-// ESIOS `datetime` is always in Spain local time: "2024-01-15T01:00:00.000+01:00"
-// Using getHours() in a UTC server would give the wrong hour.
-// Extract the hour directly from position 11-12 of the ISO string.
 function localHourFromEsios(datetime: string): number {
   return parseInt(datetime.substring(11, 13), 10)
 }
 
-export async function GET() {
-  const token = process.env.ESIOS_TOKEN
+function isDST(date: Date): boolean {
+  const jan = new Date(date.getFullYear(), 0, 1).getTimezoneOffset()
+  const jul = new Date(date.getFullYear(), 6, 1).getTimezoneOffset()
+  return date.getTimezoneOffset() < Math.max(jan, jul)
+}
 
+export async function GET(req: NextRequest) {
+  const zona = req.nextUrl.searchParams.get('zona') ?? 'peninsula'
+  const indicatorId = ZONE_INDICATORS[zona] ?? 600
+
+  const token = process.env.ESIOS_TOKEN
   if (!token) {
     return NextResponse.json({ ...buildMockResponse(), _source: 'mock_no_token' })
   }
 
   try {
-    // Use Spain local date (UTC+1 / UTC+2) for the query
     const now = new Date()
     const spainOffset = isDST(now) ? 2 : 1
     const spainTime = new Date(now.getTime() + spainOffset * 3600 * 1000)
     const dateStr = spainTime.toISOString().split('T')[0]
 
     const res = await fetch(
-      `https://api.esios.ree.es/indicators/600?locale=es&start_date=${dateStr}T00:00:00&end_date=${dateStr}T23:59:59`,
+      `https://api.esios.ree.es/indicators/${indicatorId}?locale=es&start_date=${dateStr}T00:00:00&end_date=${dateStr}T23:59:59`,
       {
         headers: {
           Authorization: `Token token="${token}"`,
           Accept: 'application/json; application/vnd.esios-api-v2+json',
           'User-Agent': 'IAenergia/1.0 (+https://iaenergia.es)',
-          'x-api-key': token,
         },
         next: { revalidate: 3600 },
       }
     )
 
     if (!res.ok) {
-      console.error('[market-hourly] ESIOS error', res.status, await res.text().catch(() => ''))
+      console.error('[market-hourly] ESIOS error', res.status, zona)
       return NextResponse.json({ ...buildMockResponse(), _source: 'mock_esios_error' })
     }
 
     const json = await res.json()
-    // Filter geo_id=3 (España) — ESIOS can include Portugal (geo_id=4)
-    const values: { value: number; datetime: string; geo_id?: number }[] =
-      (json?.indicator?.values ?? []).filter(
-        (v: { geo_id?: number }) => !v.geo_id || v.geo_id === 3
-      )
+    const allValues: { value: number; datetime: string; geo_id?: number }[] =
+      json?.indicator?.values ?? []
+
+    // Filter by geo_id if available
+    const GEO_IDS: Record<string, number | null> = { peninsula: 3, baleares: 8, canarias: 10 }
+    const targetGeo = GEO_IDS[zona]
+    const values = targetGeo
+      ? allValues.filter((v) => !v.geo_id || v.geo_id === targetGeo)
+      : allValues
 
     if (values.length === 0) {
-      console.warn('[market-hourly] No values returned')
       return NextResponse.json({ ...buildMockResponse(), _source: 'mock_no_values' })
     }
 
-    // Indicator 600 returns €/kWh — multiply by 1000 to get €/MWh
     const isKwh = values[0]?.value != null && values[0].value < 2
 
     const precios: HourlyPrice[] = Array.from({ length: 24 }, (_, h) => {
@@ -98,18 +111,12 @@ export async function GET() {
       _source: 'esios',
       _date: dateStr,
       _values_count: values.length,
+      _zona: zona,
     } satisfies MarketHourlyResponse)
   } catch (err) {
     console.error('[market-hourly]', err)
     return NextResponse.json({ ...buildMockResponse(), _source: 'mock_exception', _error: String(err) })
   }
-}
-
-// Rough DST detection for Spain (last Sun March → last Sun October)
-function isDST(date: Date): boolean {
-  const jan = new Date(date.getFullYear(), 0, 1).getTimezoneOffset()
-  const jul = new Date(date.getFullYear(), 6, 1).getTimezoneOffset()
-  return date.getTimezoneOffset() < Math.max(jan, jul)
 }
 
 function buildMockResponse(): MarketHourlyResponse {
@@ -129,22 +136,18 @@ function buildMockResponse(): MarketHourlyResponse {
     es_cara: v >= p66,
   }))
 
-  // Spain current hour (approximate)
   const now = new Date()
   const offset = isDST(now) ? 2 : 1
   const ahora = new Date(now.getTime() + offset * 3600 * 1000).getUTCHours()
-
   const hora_min = precios.reduce((mi, p, i, arr) => p.precio_mwh < arr[mi].precio_mwh ? i : mi, 0)
   const hora_max = precios.reduce((mi, p, i, arr) => p.precio_mwh > arr[mi].precio_mwh ? i : mi, 0)
 
   return {
-    precios,
-    ahora,
+    precios, ahora,
     precio_ahora: precios[ahora].precio_mwh,
     minimo: precios[hora_min].precio_mwh,
     maximo: precios[hora_max].precio_mwh,
     media: Math.round((precios.reduce((a, p) => a + p.precio_mwh, 0) / precios.length) * 10) / 10,
-    hora_min,
-    hora_max,
+    hora_min, hora_max,
   }
 }
