@@ -3,21 +3,22 @@ import type { HourlyPrice, MarketHourlyResponse } from '@/types'
 
 export const revalidate = 3600
 
-// ESIOS indicator IDs by zone
-// 600 = PVPC Península, 1739 = PVPC Baleares, 1740 = PVPC Canarias
-const ZONE_INDICATORS: Record<string, number> = {
-  peninsula: 600,
-  baleares: 1739,
-  canarias: 1740,
+// REE public API — no token required
+// https://apidatos.ree.es/es/datos/mercados/precios-mercados-tiempo-real
+const GEO_LIMITS: Record<string, string> = {
+  peninsula: 'peninsular',
+  baleares:  'balear',
+  canarias:  'canarias',
+}
+const GEO_IDS: Record<string, string> = {
+  peninsula: '8741',
+  baleares:  '8742',
+  canarias:  '8743',
 }
 
 function percentile(sorted: number[], p: number): number {
   const idx = Math.floor(sorted.length * p)
   return sorted[Math.min(idx, sorted.length - 1)]
-}
-
-function localHourFromEsios(datetime: string): number {
-  return parseInt(datetime.substring(11, 13), 10)
 }
 
 function isDST(date: Date): boolean {
@@ -28,12 +29,8 @@ function isDST(date: Date): boolean {
 
 export async function GET(req: NextRequest) {
   const zona = req.nextUrl.searchParams.get('zona') ?? 'peninsula'
-  const indicatorId = ZONE_INDICATORS[zona] ?? 600
-
-  const token = process.env.ESIOS_TOKEN
-  if (!token) {
-    return NextResponse.json({ ...buildMockResponse(), _source: 'mock_no_token' })
-  }
+  const geoLimit = GEO_LIMITS[zona] ?? 'peninsular'
+  const geoId    = GEO_IDS[zona]    ?? '8741'
 
   try {
     const now = new Date()
@@ -41,52 +38,54 @@ export async function GET(req: NextRequest) {
     const spainTime = new Date(now.getTime() + spainOffset * 3600 * 1000)
     const dateStr = spainTime.toISOString().split('T')[0]
 
-    const res = await fetch(
-      `https://api.esios.ree.es/indicators/${indicatorId}?locale=es&start_date=${dateStr}T00:00:00&end_date=${dateStr}T23:59:59`,
-      {
-        headers: {
-          Authorization: `Token token="${token}"`,
-          Accept: 'application/json; application/vnd.esios-api-v2+json',
-          'User-Agent': 'IAenergia/1.0 (+https://iaenergia.es)',
-        },
-        next: { revalidate: 3600 },
-      }
-    )
+    const url =
+      `https://apidatos.ree.es/es/datos/mercados/precios-mercados-tiempo-real` +
+      `?time_trunc=hour` +
+      `&start_date=${dateStr}T00:00` +
+      `&end_date=${dateStr}T23:59` +
+      `&geo_trunc=electric_system` +
+      `&geo_limit=${geoLimit}` +
+      `&geo_ids=${geoId}`
+
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      next: { revalidate: 3600 },
+    })
 
     if (!res.ok) {
       const body = await res.text().catch(() => '')
-      console.error('[market-hourly] ESIOS error', res.status, zona, body.slice(0, 200))
+      console.error('[market-hourly] REE error', res.status, zona, body.slice(0, 200))
       return NextResponse.json({
         ...buildMockResponse(),
-        _source: 'mock_esios_error',
+        _source: 'mock_ree_error',
         _error: `HTTP ${res.status}: ${body.slice(0, 300)}`,
         _zona: zona,
       })
     }
 
     const json = await res.json()
-    const allValues: { value: number; datetime: string; geo_id?: number }[] =
-      json?.indicator?.values ?? []
 
-    // Filter by geo_id if available
-    const GEO_IDS: Record<string, number | null> = { peninsula: 3, baleares: 8, canarias: 10 }
-    const targetGeo = GEO_IDS[zona]
-    const values = targetGeo
-      ? allValues.filter((v) => !v.geo_id || v.geo_id === targetGeo)
-      : allValues
+    // REE returns included[] array; find the PVPC or spot price widget
+    const included: { type: string; attributes: { title: string; values: { value: number; datetime: string }[] } }[] =
+      json?.included ?? []
+
+    // Prefer PVPC (id ends in "PVPC"); fallback to first price series
+    const series =
+      included.find((s) => s.attributes?.title?.toLowerCase().includes('pvpc')) ??
+      included.find((s) => (s.attributes?.values?.length ?? 0) > 0)
+
+    const values = series?.attributes?.values ?? []
 
     if (values.length === 0) {
-      return NextResponse.json({ ...buildMockResponse(), _source: 'mock_no_values' })
+      return NextResponse.json({ ...buildMockResponse(), _source: 'mock_no_values', _zona: zona })
     }
 
-    const isKwh = values[0]?.value != null && values[0].value < 2
-
+    // value is €/MWh in REE datos API
     const precios: HourlyPrice[] = Array.from({ length: 24 }, (_, h) => {
-      const match = values.find((v) => localHourFromEsios(v.datetime) === h)
-      const raw = match?.value ?? 0
+      const match = values.find((v) => parseInt(v.datetime.substring(11, 13), 10) === h)
       return {
         hora: h,
-        precio_mwh: Math.round((isKwh ? raw * 1000 : raw) * 10) / 10,
+        precio_mwh: match ? Math.round(match.value * 10) / 10 : 0,
         es_barata: false,
         es_cara: false,
       }
@@ -114,7 +113,7 @@ export async function GET(req: NextRequest) {
       media: Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10,
       hora_min,
       hora_max,
-      _source: 'esios',
+      _source: 'ree_datos',
       _date: dateStr,
       _values_count: values.length,
       _zona: zona,
