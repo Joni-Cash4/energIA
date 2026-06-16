@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 
-export const revalidate = 3600
+// Migrado de ESIOS a la API pública de REE (apidatos.ree.es) — sin token, sin
+// restricciones. Esta ruta la llama una página PÚBLICA (/mercado), así que
+// NUNCA debe depender de ESIOS (el token es de uso personal, ver condiciones).
 
-const ESIOS_BASE = 'https://api.esios.ree.es'
+export const revalidate = 3600
 
 function spainOffset(): number {
   const now = new Date()
@@ -31,8 +33,6 @@ function avg(arr: number[]): number {
 }
 
 export async function GET() {
-  const token = process.env.ESIOS_TOKEN
-
   const today = spainNow()
   const startDate = new Date(today)
   startDate.setUTCDate(startDate.getUTCDate() - 13)
@@ -40,7 +40,6 @@ export async function GET() {
   const start = dateStr(startDate)
   const end = dateStr(today)
 
-  // Build list of 14 date strings
   const allDates: string[] = []
   for (let i = 0; i < 14; i++) {
     const d = new Date(startDate)
@@ -51,37 +50,24 @@ export async function GET() {
   const lastWeekDates = allDates.slice(0, 7)
   const thisWeekDates = allDates.slice(7)
 
-  if (!token) {
-    return NextResponse.json(buildMock(thisWeekDates, lastWeekDates))
-  }
-
   try {
-    // Single request for 14 days — indicator 1 = precio spot OMIE €/MWh
-    const url = `${ESIOS_BASE}/indicators/1?locale=es&start_date=${start}T00:00:00&end_date=${end}T23:59:59`
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Token token="${token}"`,
-        Accept: 'application/json; application/vnd.esios-api-v2+json',
-        'User-Agent': 'IAenergia/1.0 (+https://iaenergia.es)',
-      },
-      next: { revalidate: 3600 },
-    })
+    // Una sola petición para los 14 días — REE pública, sin token
+    const url = `https://apidatos.ree.es/es/datos/mercados/precios-mercados-tiempo-real?time_trunc=hour&start_date=${start}T00:00&end_date=${end}T23:59&geo_trunc=electric_system&geo_limit=peninsular&geo_ids=8741`
+    const res = await fetch(url, { headers: { Accept: 'application/json' }, next: { revalidate: 3600 } })
 
     if (!res.ok) {
-      console.warn('[market-weekly] ESIOS status', res.status)
+      console.warn('[market-weekly] REE status', res.status)
       return NextResponse.json(buildMock(thisWeekDates, lastWeekDates))
     }
 
     const json = await res.json()
-    const values: { value: number; datetime: string; geo_id?: number }[] =
-      json?.indicator?.values ?? []
+    const values: { value: number; datetime: string }[] = json?.included?.[0]?.attributes?.values ?? []
 
     if (values.length === 0) {
-      console.warn('[market-weekly] No values returned from ESIOS')
+      console.warn('[market-weekly] Sin valores de REE')
       return NextResponse.json(buildMock(thisWeekDates, lastWeekDates))
     }
 
-    // Group values by Spain local date (first 10 chars of datetime string)
     const byDate: Record<string, number[]> = {}
     for (const v of values) {
       if (v.value == null || v.value <= 0) continue

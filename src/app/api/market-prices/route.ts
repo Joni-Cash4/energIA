@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 
-const ESIOS_TOKEN = process.env.ESIOS_TOKEN ?? ''
-const ESIOS_BASE = 'https://api.esios.ree.es'
+// Migrado de ESIOS a la API pública de REE (apidatos.ree.es) — sin token, sin
+// restricciones. Esta ruta la llama una página PÚBLICA (/mercado), así que
+// NUNCA debe depender de ESIOS (el token es de uso personal, ver condiciones).
 
-// Determine Spain local time offset (UTC+1 winter, UTC+2 summer)
 function spainOffset(): number {
   const now = new Date()
   const jan = new Date(now.getFullYear(), 0, 1).getTimezoneOffset()
@@ -12,18 +12,14 @@ function spainOffset(): number {
   return isDST ? 2 : 1
 }
 
-// ESIOS `datetime` is in Spain local time: "2024-01-15T01:00:00.000+01:00"
-// Extract hour and day-of-week directly from the string to avoid UTC offset errors.
 function parseLocalDateTime(datetime: string): { hour: number; dow: number } {
-  // "YYYY-MM-DDTHH:MM:SS..." — substring(0,10) = date, substring(11,13) = hour
   const datePart = datetime.substring(0, 10)
   const hour = parseInt(datetime.substring(11, 13), 10)
-  const d = new Date(datePart + 'T12:00:00Z') // noon UTC to avoid DST ambiguity
+  const d = new Date(datePart + 'T12:00:00Z')
   return { hour, dow: d.getUTCDay() }
 }
 
 // 3.0TD hour→period mapping (peninsular Spain)
-// P1 10-14 + 18-22 weekdays | P2 rest of weekday hours | P3 nights + all weekend
 function getPeriodo(hour: number, dayOfWeek: number): string {
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
   if (isWeekend) return 'P3'
@@ -32,64 +28,45 @@ function getPeriodo(hour: number, dayOfWeek: number): string {
   return 'P3'
 }
 
-interface EsiosValue {
+interface ReeValue {
   value: number
   datetime: string
-  datetime_utc: string
-  geo_id?: number
 }
 
-async function fetchEsiosIndicator(id: number, date: string): Promise<EsiosValue[]> {
-  const url = `${ESIOS_BASE}/indicators/${id}?locale=es&start_date=${date}T00:00:00&end_date=${date}T23:59:59`
-  const res = await fetch(url, {
-    headers: {
-      Accept: 'application/json; application/vnd.esios-api-v2+json',
-      Authorization: `Token token="${ESIOS_TOKEN}"`,
-    },
-    next: { revalidate: 3600 },
-  })
-  if (!res.ok) throw new Error(`ESIOS ${id}: ${res.status}`)
+async function fetchReeDay(date: string): Promise<ReeValue[]> {
+  const url = `https://apidatos.ree.es/es/datos/mercados/precios-mercados-tiempo-real?time_trunc=hour&start_date=${date}T00:00&end_date=${date}T23:59&geo_trunc=electric_system&geo_limit=peninsular&geo_ids=8741`
+  const res = await fetch(url, { headers: { Accept: 'application/json' }, next: { revalidate: 3600 } })
+  if (!res.ok) throw new Error(`REE: ${res.status}`)
   const json = await res.json()
-  // Filter geo_id=3 (España) — avoid mixing in Portugal (geo_id=4)
-  const all: EsiosValue[] = json?.indicator?.values ?? []
-  return all.filter((v) => !v.geo_id || v.geo_id === 3)
+  return json?.included?.[0]?.attributes?.values ?? []
 }
 
 export async function GET() {
   try {
-    // Use Spain local date to avoid midnight boundary issues
     const offset = spainOffset()
     const spainNow = new Date(Date.now() + offset * 3600 * 1000)
     const dateStr = spainNow.toISOString().split('T')[0]
 
-    const values = await fetchEsiosIndicator(600, dateStr)
+    const values = await fetchReeDay(dateStr) // €/MWh ya
 
-    // Indicator 600 returns €/kWh when values < 2; multiply by 1000 → €/MWh
-    const isKwh = values.length > 0 && values[0].value != null && values[0].value < 2
-    const toMwh = (v: number) => isKwh ? v * 1000 : v
-
-    // Group by 3.0TD period
     const periodos: Record<string, number[]> = { P1: [], P2: [], P3: [] }
     for (const v of values) {
       if (v.value == null) continue
       const { hour, dow } = parseLocalDateTime(v.datetime)
-      const period = getPeriodo(hour, dow)
-      periodos[period].push(toMwh(v.value))
+      periodos[getPeriodo(hour, dow)].push(v.value)
     }
 
-    // Yesterday for variation
     const yesterday = new Date(spainNow)
     yesterday.setUTCDate(yesterday.getUTCDate() - 1)
     const yDateStr = yesterday.toISOString().split('T')[0]
-    let yValues: EsiosValue[] = []
-    try { yValues = await fetchEsiosIndicator(600, yDateStr) } catch { /* ignore */ }
+    let yValues: ReeValue[] = []
+    try { yValues = await fetchReeDay(yDateStr) } catch { /* ignore */ }
 
     const yPeriodos: Record<string, number[]> = { P1: [], P2: [], P3: [] }
     for (const v of yValues) {
       if (v.value == null) continue
       const { hour, dow } = parseLocalDateTime(v.datetime)
-      const period = getPeriodo(hour, dow)
-      yPeriodos[period].push(toMwh(v.value))
+      yPeriodos[getPeriodo(hour, dow)].push(v.value)
     }
 
     const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
