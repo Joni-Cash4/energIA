@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { NOTICIAS_PROPIAS } from '@/lib/noticias-propias'
 
 interface RSSEntry {
   titulo: string
@@ -141,7 +142,7 @@ export async function GET() {
     return db - da
   })
 
-  const noticias = all.slice(0, 20).map((n, i) => ({
+  const scrapeadas = all.slice(0, 16).map((n, i) => ({
     id: String(i),
     titulo: n.titulo,
     descripcion: n.resumen,
@@ -150,6 +151,22 @@ export async function GET() {
     fuente: n.fuente,
     fecha: n.fecha,
   }))
+
+  // Piezas de redacción propia (datos públicos REE/OMIE/CNMC, sin mencionar
+  // comercializadoras) mezcladas por fecha con las scrapeadas.
+  const propias = NOTICIAS_PROPIAS.map((n) => ({
+    id: n.id,
+    titulo: n.titulo,
+    descripcion: n.descripcion,
+    url: n.url,
+    imagen: n.imagen,
+    fuente: n.fuente,
+    fecha: n.fecha,
+  }))
+
+  const noticias = [...propias, ...scrapeadas]
+    .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+    .slice(0, 20)
 
   return NextResponse.json({ noticias })
 }
