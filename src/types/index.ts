@@ -59,6 +59,7 @@ export interface InvoiceAnalysis {
   potencia_total?: number
   reactiva_total?: number
   alquiler_equipos?: number
+  productos_total?: number
   total_nuevo_estimado?: number
   importe_iee?: number
   base_imponible?: number

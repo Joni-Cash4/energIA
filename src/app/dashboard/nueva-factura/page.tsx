@@ -11,13 +11,17 @@ import { formatCurrency, formatNumber, cn } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
 import type { InvoiceAnalysis, SimTarifa } from '@/types'
 
-// Fee solo afecta a la tarifa indexada (comisión Jonathan sobre energía)
-// Atulado (fija) ya incluye su propio margen en el precio base — no se le aplica fee aquí
+// El fee de Jonathan se suma SIEMPRE encima del precio de la tarifa (indexada o fija) —
+// es su comisión, no un margen ya incluido en el precio publicado de Atulado/Próxima.
 function applyFee(sim: SimTarifa, feeKwh: number, kwhTotal: number): SimTarifa {
+  const baseIeeAntes = Math.round((sim.subtotal - sim.alquiler) * 100) / 100
+  const tipoIee       = baseIeeAntes > 0 ? sim.iee / baseIeeAntes : 0
   const cargo_gestion = Math.round(kwhTotal * feeKwh * 100) / 100
-  const subtotal      = Math.round((sim.subtotal - sim.cargo_gestion + cargo_gestion) * 100) / 100
-  const iee           = Math.round(subtotal * (sim.iee / (sim.subtotal || 1)) * 100) / 100
-  const base_iva      = Math.round((subtotal + iee + sim.alquiler) * 100) / 100
+  const delta         = cargo_gestion - sim.cargo_gestion
+  const baseIeeNueva  = Math.round((baseIeeAntes + delta) * 100) / 100
+  const iee           = Math.round(baseIeeNueva * tipoIee * 100) / 100
+  const subtotal      = Math.round((baseIeeNueva + sim.alquiler) * 100) / 100
+  const base_iva      = Math.round((subtotal + iee) * 100) / 100
   const iva           = Math.round(base_iva * sim.iva_pct * 100) / 100
   const total         = Math.round((base_iva + iva) * 100) / 100
   return { ...sim, cargo_gestion, subtotal, iee, base_iva, iva, total }
@@ -174,19 +178,21 @@ async function generatePdf(
   const potenciaActual = data.potencia_total ?? 0
   const reactivaActual = data.reactiva_total ?? 0
   const alquilerActual = data.alquiler_equipos ?? 0
+  const productosActual = data.productos_total ?? 0
 
   row('Energia (todos los periodos)', Math.round(energiaActual * 100) / 100, simIdx.energia, simFija.energia)
   row('Potencia contratada', potenciaActual || null, simIdx.potencia || null, simFija.potencia || null)
   if (reactivaActual > 0) row('Energia reactiva', reactivaActual, simIdx.reactiva, simFija.reactiva)
+  if (productosActual > 0) row('Otros conceptos (regularizaciones, etc.)', productosActual, null, null)
   if (simIdx.otros_costes > 0) row('Otros costes regulados', null, simIdx.otros_costes, null)
   divider()
   row('Subtotal antes de impuestos', null, simIdx.subtotal, simFija.subtotal, true)
   divider()
-  row(`Impuesto electricidad`, null, simIdx.iee, simFija.iee)
+  row(`Impuesto electricidad`, data.importe_iee ?? null, simIdx.iee, simFija.iee)
   if (alquilerActual > 0) row('Alquiler equipos de medida', alquilerActual, simIdx.alquiler, simFija.alquiler)
   divider()
   row('Base imponible', null, simIdx.base_iva, simFija.base_iva, true)
-  row(`IVA (${Math.round(simIdx.iva_pct * 100)}% / ${Math.round(simFija.iva_pct * 100)}%)`, null, simIdx.iva, simFija.iva)
+  row(`IVA (${Math.round(simIdx.iva_pct * 100)}% / ${Math.round(simFija.iva_pct * 100)}%)`, data.importe_iva ?? null, simIdx.iva, simFija.iva)
 
   y += 1
   doc.setFillColor(...C.dark)
@@ -320,8 +326,11 @@ export default function NuevaFacturaPage() {
 
   const simFija = useMemo(() => {
     if (!data) return null
-    return productoActivo === 'WEB' ? data.sim_fija_web ?? null : data.sim_fija_boe ?? null
-  }, [data, productoActivo])
+    const base = productoActivo === 'WEB' ? data.sim_fija_web : data.sim_fija_boe
+    if (!base) return null
+    const feeKwh = feeEnergia / 1000
+    return applyFee(base, feeKwh, data.kwh_total ?? 0)
+  }, [data, productoActivo, feeEnergia])
 
   const handleDownloadPdf = async () => {
     if (!data || !simIdx || !simFija) return
@@ -535,10 +544,11 @@ export default function NuevaFacturaPage() {
                       },
                       { label: 'Potencia', actual: data.potencia_total ?? 0, idx: simIdx.potencia, fija: simFija.potencia },
                       ...(( data.reactiva_total ?? 0) > 0 ? [{ label: 'Reactiva', actual: data.reactiva_total ?? 0, idx: simIdx.reactiva, fija: simFija.reactiva }] : []),
+                      ...((data.productos_total ?? 0) > 0 ? [{ label: 'Otros conceptos (regularizaciones, etc.)', actual: data.productos_total ?? 0, idx: null as number | null, fija: null as number | null }] : []),
                       ...(simIdx.otros_costes > 0 ? [{ label: 'Otros costes regulados', actual: null as number | null, idx: simIdx.otros_costes, fija: null as number | null }] : []),
-                      { label: `Impuesto electricidad`, actual: null as number | null, idx: simIdx.iee, fija: simFija.iee },
+                      { label: `Impuesto electricidad`, actual: data.importe_iee ?? null, idx: simIdx.iee, fija: simFija.iee },
                       ...((data.alquiler_equipos ?? 0) > 0 ? [{ label: 'Alquiler contador', actual: data.alquiler_equipos ?? 0, idx: simIdx.alquiler, fija: simFija.alquiler }] : []),
-                      { label: `IVA`, actual: null as number | null, idx: simIdx.iva, fija: simFija.iva },
+                      { label: `IVA`, actual: data.importe_iva ?? null, idx: simIdx.iva, fija: simFija.iva },
                     ].map(({ label, actual, idx, fija }) => (
                       <tr key={label} className="hover:bg-[#1A1A1A]">
                         <td className="px-4 py-3 text-[#9CA3AF]">{label}</td>
@@ -561,7 +571,7 @@ export default function NuevaFacturaPage() {
             {/* Honorarios (solo vista interna) */}
             <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-6 mb-6">
               <h2 className="text-white font-semibold mb-1">Honorarios asesor <span className="text-xs text-[#6B7280] font-normal ml-2">(no aparece en PDF del cliente)</span></h2>
-              <p className="text-[#6B7280] text-xs mb-5">Aplica sobre la tarifa indexada (cargo por gestión). La tarifa fija ya incluye margen en su precio base.</p>
+              <p className="text-[#6B7280] text-xs mb-5">Se suma como cargo por gestión sobre ambas tarifas (indexada y fija) — es tu comisión, no un margen ya incluido en el precio publicado.</p>
               <div className="flex items-end gap-6">
                 <div>
                   <label className="block text-sm text-[#9CA3AF] mb-2">Fee energía (€/MWh)</label>

@@ -30,13 +30,16 @@ INSTRUCCIONES IMPORTANTES:
 - potencia_contratada = valor en kW de P1 (solo para mostrar, no se usa para calcular).
 - potencias = un array con la potencia contratada en kW de CADA periodo tarifario (P1 a P6 para 3.0TD/6.1TD, P1 a P3 para 2.0TD), AUNQUE NO TENGAN CONSUMO DE ENERGÍA. IMPORTANTE: la potencia contratada NO siempre es igual en todos los periodos (ej: P1=30kW, P2-P5=35kW, P6=60kW es habitual en 3.0TD). Busca la tabla "Potencia contratada" o "Potencia facturada" por periodo y extrae el valor exacto de cada uno, no asumas que son iguales.
 - dias_facturados = número de días del periodo de facturación.
-- potencia_total = importe total facturado por potencia contratada (todos los periodos sumados, antes de IEE e IVA). Busca "Potencia" o "Término Potencia" en el resumen de factura (excluye excesos de potencia, ponlos en potencia_total también si existen, sumados).
+- potencia_total = importe total facturado por potencia, SUMANDO TODAS las secciones relacionadas con potencia que aparezcan en el detalle de la factura, antes de IEE e IVA. ALGUNAS FACTURAS DESGLOSAN LA POTENCIA EN VARIAS SECCIONES SEPARADAS (ej: "Término Potencia Tarifa Acceso", "Término Potencia" propio de la comercializadora, "Término Cargos Potencia Acceso") — debes sumar el importe de TODAS ellas, no solo una. Incluye también excesos de potencia si existen.
 - reactiva_total = importe total de energía reactiva + excesos de energía reactiva (si existe, sino 0).
 - alquiler_equipos = importe del alquiler de equipos de medida y control (antes de IVA).
+- productos_total = suma de cualquier concepto adicional que NO sea energía/potencia/reactiva/alquiler/impuestos — por ejemplo "Regularización Servicios de Ajuste del Sistema", penalizaciones, cargos extraordinarios, ajustes de periodos anteriores, etc. Si no hay ninguno, usa 0. Estos conceptos son específicos de la comercializadora actual y NO se trasladan a una simulación con otra tarifa.
 - importe_iee = importe en euros del Impuesto Especial sobre la Electricidad (busca "Impuesto Electricidad", "IEE" o similar).
 - base_imponible = base imponible antes de IVA (busca "Base imponible").
 - importe_iva = importe en euros del IVA aplicado.
 - total_factura = importe final total incluyendo IVA.
+
+VERIFICACIÓN OBLIGATORIA antes de responder: energia_total + potencia_total + reactiva_total + alquiler_equipos + productos_total + importe_iee + importe_iva debe ser igual (o muy cercano, margen de redondeo) a total_factura. Si no cuadra, revisa qué concepto te falta o está mal sumado antes de devolver el JSON.
 
 Devuelve este JSON exacto:
 {
@@ -53,6 +56,7 @@ Devuelve este JSON exacto:
   "potencia_total": number,
   "reactiva_total": number,
   "alquiler_equipos": number,
+  "productos_total": number,
   "importe_iee": number,
   "base_imponible": number,
   "importe_iva": number,
@@ -95,6 +99,7 @@ type InvoiceData = {
   potencia_total?: number
   reactiva_total?: number
   alquiler_equipos?: number
+  productos_total?: number
   importe_iee?: number
   base_imponible?: number
   importe_iva?: number
@@ -193,8 +198,10 @@ function simIndexada(
   }
   potencia = r2(potencia)
 
-  const subtotal = r2(energiaTotal + potencia + reactiva + alquiler + otrosCostes)
-  const iee = r2(subtotal * tipoIee)
+  // IEE no aplica sobre el alquiler de contador (es un servicio, no consumo eléctrico)
+  const baseIee = r2(energiaTotal + potencia + reactiva + otrosCostes)
+  const iee = r2(baseIee * tipoIee)
+  const subtotal = r2(baseIee + alquiler)
   const base_iva = r2(subtotal + iee)
   const iva = r2(base_iva * tipoIva)
   const total = r2(base_iva + iva)
@@ -234,8 +241,9 @@ function simFija(
   }
   potencia = r2(potencia)
 
-  const subtotal = r2(energia + potencia + reactiva + alquiler)
-  const iee = r2(subtotal * tipoIee)
+  const baseIee = r2(energia + potencia + reactiva)
+  const iee = r2(baseIee * tipoIee)
+  const subtotal = r2(baseIee + alquiler)
   const base_iva = r2(subtotal + iee)
   const iva = r2(base_iva * tipoIva)
   const total = r2(base_iva + iva)
@@ -311,10 +319,13 @@ export async function POST(req: NextRequest) {
 
     // Impuestos derivados de la PROPIA factura — no hardcodeados.
     // Esto adapta automáticamente a 2.0TD/3.0TD, IEE/IVA reducidos por RDL 17/2021, etc.
+    // Nota: el alquiler de contador NO suele entrar en la base del IEE (es un servicio,
+    // no consumo eléctrico) — se resta para no inflar el tipo efectivo derivado.
     const importeIee = parsed.importe_iee ?? 0
     const baseImponible = parsed.base_imponible ?? 0
     const importeIva = parsed.importe_iva ?? 0
-    const subtotalReal = baseImponible - importeIee
+    const alquilerParaIee = parsed.alquiler_equipos ?? 0
+    const subtotalReal = baseImponible - importeIee - alquilerParaIee
     const tipoIee = subtotalReal > 0 ? importeIee / subtotalReal : 0.0511268
     const tipoIva = baseImponible > 0 ? importeIva / baseImponible : 0.21
 
