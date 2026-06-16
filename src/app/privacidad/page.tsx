@@ -20,8 +20,10 @@ export default function PrivacidadPage() {
             <section>
               <h2 className="text-white text-xl font-semibold mb-3">1. Responsable del tratamiento</h2>
               <p>
-                <strong className="text-white">IAenergía</strong> (en adelante, "la empresa") es responsable del tratamiento
-                de los datos personales recogidos a través del sitio web <strong className="text-white">iaenergia.es</strong>.
+                <strong className="text-white">Jonathan López de Lacalle Calvo</strong>, NIF: 16086564L,
+                titular del servicio <strong className="text-white">IAenergía</strong> (en adelante, "el responsable"),
+                es responsable del tratamiento de los datos personales recogidos a través del sitio web{' '}
+                <strong className="text-white">iaenergia.es</strong>.
                 Contacto: <a href="mailto:contacto@iaenergia.es" className="text-[#00E676] hover:underline">contacto@iaenergia.es</a>
               </p>
             </section>
@@ -53,11 +55,25 @@ export default function PrivacidadPage() {
             </section>
 
             <section>
-              <h2 className="text-white text-xl font-semibold mb-3">5. Destinatarios</h2>
-              <p>
-                No cedemos datos a terceros salvo obligación legal. Utilizamos Supabase (alojado en la UE)
-                como base de datos y Vercel para el alojamiento del frontend.
+              <h2 className="text-white text-xl font-semibold mb-3">5. Destinatarios y subencargados</h2>
+              <p className="mb-3">
+                No cedemos datos a terceros salvo obligación legal. Utilizamos los siguientes subencargados de tratamiento:
               </p>
+              <ul className="list-disc pl-5 space-y-2">
+                <li>
+                  <strong className="text-white">Supabase</strong> (alojado en la UE) — base de datos y autenticación.
+                </li>
+                <li>
+                  <strong className="text-white">Vercel</strong> — alojamiento del frontend.
+                </li>
+                <li>
+                  <strong className="text-white">Anthropic (Claude API)</strong> — análisis automatizado del contenido
+                  de las facturas eléctricas subidas por el usuario. Los datos son procesados en servidores ubicados
+                  en Estados Unidos. La transferencia internacional se ampara en las Cláusulas Contractuales Tipo
+                  aprobadas por la Comisión Europea. Anthropic no utiliza los datos enviados a través de la API
+                  para entrenar sus modelos.
+                </li>
+              </ul>
             </section>
 
             <section>
