@@ -4,13 +4,22 @@ import { GeistMono } from 'geist/font/mono'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'EnergIA — Ahorra en tu factura eléctrica',
-  description: 'Analiza tu factura de luz con inteligencia artificial y descubre cuánto puedes ahorrar cambiando de comercializadora.',
-  keywords: ['energía', 'ahorro', 'factura eléctrica', 'comparador luz', 'comercializadora'],
+  metadataBase: new URL('https://www.iaenergia.es'),
+  title: {
+    default: 'IAenergía — Ahorra en tu factura eléctrica',
+    template: '%s — IAenergía',
+  },
+  description: 'Analiza tu factura de luz con inteligencia artificial y descubre cuánto puedes ahorrar cambiando de tarifa.',
+  keywords: ['energía', 'ahorro', 'factura eléctrica', 'comparador luz', 'tarifa eléctrica', 'IAenergía'],
+  alternates: { canonical: '/' },
+  robots: { index: true, follow: true },
   openGraph: {
-    title: 'EnergIA — Ahorra en tu factura eléctrica',
+    title: 'IAenergía — Ahorra en tu factura eléctrica',
     description: 'Analiza tu factura y descubre tu ahorro potencial en segundos.',
     type: 'website',
+    url: 'https://www.iaenergia.es',
+    siteName: 'IAenergía',
+    locale: 'es_ES',
   },
 }
 
