@@ -12,8 +12,9 @@ export function generateStaticParams() {
   return NOTICIAS_PROPIAS.map((n) => ({ id: n.id }))
 }
 
-export function generateMetadata({ params }: { params: { id: string } }): Metadata {
-  const noticia = getNoticiaPropia(params.id)
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params
+  const noticia = getNoticiaPropia(id)
   if (!noticia) return { title: 'Noticia no encontrada — IAenergía' }
   return {
     title: `${noticia.titulo} — IAenergía`,
@@ -21,8 +22,9 @@ export function generateMetadata({ params }: { params: { id: string } }): Metada
   }
 }
 
-export default function NoticiaPage({ params }: { params: { id: string } }) {
-  const noticia = getNoticiaPropia(params.id)
+export default async function NoticiaPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const noticia = getNoticiaPropia(id)
   if (!noticia) notFound()
 
   return (
