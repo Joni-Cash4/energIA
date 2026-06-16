@@ -22,3 +22,7 @@ build/
 npm-debug.log*
 
 .vercel
+
+# Local test logs
+server.log
+server-err.log
