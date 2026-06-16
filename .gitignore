@@ -6,8 +6,11 @@ node_modules/
 out/
 
 # Environment variables - NEVER commit these
+.env
 .env.local
 .env*.local
+.env.vercel*
+.env.*.prod
 
 # Build
 dist/

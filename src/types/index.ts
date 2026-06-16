@@ -6,9 +6,33 @@ export interface PeriodData {
   precio_kwh: number
   importe: number
   mercado_kwh?: number
+  // Simulación indexada (Próxima-style)
   kwh_nuevo?: number
   precio_kwh_nuevo?: number
   importe_nuevo?: number
+}
+
+// Potencia contratada por periodo tarifario — NO siempre es uniforme.
+// 3.0TD/6.1TD tienen 6 periodos de potencia aunque solo 1-3 tengan consumo de energía.
+export interface PotenciaPeriodo {
+  periodo: string
+  kw: number
+}
+
+export interface SimTarifa {
+  energia: number
+  potencia: number
+  reactiva: number
+  otros_costes: number
+  cargo_gestion: number
+  subtotal: number
+  iee: number
+  alquiler: number
+  base_iva: number
+  iva: number
+  iva_pct: number
+  total: number
+  nota?: string  // aviso si algún dato es aproximado
 }
 
 export interface InvoiceAnalysis {
@@ -20,11 +44,13 @@ export interface InvoiceAnalysis {
   total_factura: number
   kwh_total: number
   potencia_contratada: number
+  dias_facturados: number
   ahorro_estimado_anual: number
   ahorro_estimado_mensual: number
   porcentaje_ahorro: number
   kwh_anuales_sips: number
   periodos: PeriodData[]
+  potencias?: PotenciaPeriodo[]  // kW contratados por periodo — puede no ser uniforme
   coste_actual_energia: number
   coste_nuevo_energia: number
   coste_actual_potencia: number
@@ -34,6 +60,19 @@ export interface InvoiceAnalysis {
   reactiva_total?: number
   alquiler_equipos?: number
   total_nuevo_estimado?: number
+  importe_iee?: number
+  base_imponible?: number
+  importe_iva?: number
+  tipo_iee_detectado?: number
+  tipo_iva_detectado?: number
+  mercado_historico_ok?: boolean
+  mercado_real_fuente?: 'supabase' | 'hardcoded' | 'fallback'
+  potencias_desglosadas?: boolean
+  atulado_recomendado?: 'BOE' | 'WEB'
+  // v2.0 — simulaciones reales (PERD×(PMD+SC+CAP), BOE 2026, Atulado BOE/WEB)
+  sim_indexada?: SimTarifa
+  sim_fija_boe?: SimTarifa
+  sim_fija_web?: SimTarifa
 }
 
 export interface MarketPrice {
