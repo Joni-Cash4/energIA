@@ -210,23 +210,19 @@ async function generatePdf(
     ? Math.round((data.base_imponible - (data.importe_iee ?? 0)) * 100) / 100
     : null
 
+  // Energía total para el cliente: incluye cargo gestión + otros costes regulados
+  // (el fee del asesor y los costes pass-through no se muestran como líneas separadas)
+  const r2 = (n: number) => Math.round(n * 100) / 100
+  const idxEnergiaPdf = r2(simIdx.energia + simIdx.cargo_gestion + simIdx.otros_costes)
+  const boeEnergiaPdf = r2(simBoe.energia + simBoe.cargo_gestion + simBoe.otros_costes)
+  const webEnergiaPdf = r2(simWeb.energia + simWeb.cargo_gestion + simWeb.otros_costes)
+
   // Filas
   row('Potencia contratada (P1-P6)',
     [data.potencia_total ?? null, simIdx.potencia, simBoe.potencia, simWeb.potencia])
 
   row('Energia activa (todos los periodos)',
-    [energiaActual, simIdx.energia, simBoe.energia, simWeb.energia])
-
-  const hasCg = simIdx.cargo_gestion > 0 || simBoe.cargo_gestion > 0 || simWeb.cargo_gestion > 0
-  if (hasCg) {
-    row('Cargo gestion / Fee asesor',
-      [null, simIdx.cargo_gestion || null, simBoe.cargo_gestion || null, simWeb.cargo_gestion || null])
-  }
-
-  if (simIdx.otros_costes > 0) {
-    row('Otros costes regulados (FNEE, GO, bono, tasas)',
-      [null, simIdx.otros_costes, null, null])
-  }
+    [energiaActual, idxEnergiaPdf, boeEnergiaPdf, webEnergiaPdf])
 
   if ((data.reactiva_total ?? 0) > 0) {
     row('Energia reactiva',
@@ -274,16 +270,24 @@ async function generatePdf(
     doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...C.gray)
-    doc.text('PRECIO POR PERIODO — PROXIMA CRISTALINA (mercado exacto del periodo facturado)', M, y)
+    doc.text('DESGLOSE POR PERIODO DE CONSUMO', M, y)
     y += 4
 
-    const phW = (W - 2*M) / 5
+    // 4 columnas: Periodo | kWh | Precio actual €/kWh | Precio Proxima €/kWh
+    const phCols = [20, 30, 70, 70] // anchos relativos
+    const phTot  = phCols.reduce((a, b) => a + b, 0)
+    const phScale = (W - 2*M) / phTot
+    const phX = phCols.reduce<number[]>((acc, w, i) => {
+      acc.push(i === 0 ? M : acc[i-1] + phCols[i-1] * phScale)
+      return acc
+    }, [])
+
     doc.setFillColor(...C.dark)
     doc.rect(M, y, W - 2*M, 6, 'F')
     doc.setFontSize(6.5)
     doc.setTextColor(...C.white)
-    const ph = ['Periodo', 'kWh', 'Precio actual EUR/kWh', 'del cual mercado', 'Precio indexado']
-    ph.forEach((h, i) => doc.text(h, M + 2 + i * phW, y + 4))
+    const phHeaders = ['Periodo', 'kWh consumidos', 'Precio actual (EUR/kWh)', 'Precio Proxima Cristalina (EUR/kWh)']
+    phHeaders.forEach((h, i) => doc.text(h, phX[i] + 2, y + 4))
     y += 6
 
     ;(data.periodos ?? []).forEach((p, i) => {
@@ -291,14 +295,11 @@ async function generatePdf(
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(6.5)
       doc.setTextColor(...C.text)
-      const vals = [
-        p.periodo,
-        formatNumber(p.kwh ?? 0),
-        fn(p.precio_kwh),
-        fn(p.mercado_kwh ?? 0),
-        fn(p.precio_kwh_nuevo ?? 0),
-      ]
-      vals.forEach((v, j) => doc.text(v, M + 2 + j * phW, y + 4))
+      doc.text(p.periodo,                       phX[0] + 2, y + 4)
+      doc.text(formatNumber(p.kwh ?? 0),         phX[1] + 2, y + 4)
+      doc.text(fn(p.precio_kwh),                 phX[2] + 2, y + 4)
+      doc.setTextColor(...C.green)
+      doc.text(fn(p.precio_kwh_nuevo ?? 0),      phX[3] + 2, y + 4)
       y += 6
     })
     y += 3
