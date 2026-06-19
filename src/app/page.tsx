@@ -8,6 +8,8 @@ import { HowItWorks } from '@/components/landing/HowItWorks'
 import { Calculadora } from '@/components/landing/Calculadora'
 import { FaqAccordion } from '@/components/landing/FaqAccordion'
 import { FinalCTA } from '@/components/landing/FinalCTA'
+import { PorQueAhorrar } from '@/components/landing/PorQueAhorrar'
+import { ExitModal } from '@/components/landing/ExitModal'
 import { Toaster } from '@/components/ui/toaster'
 
 export const metadata: Metadata = {
@@ -33,12 +35,14 @@ export default function HomePage() {
         <Stats />
         <Transparencia />
         <HowItWorks />
+        <PorQueAhorrar />
         <Calculadora />
         <FaqAccordion />
         <FinalCTA />
       </main>
       <Footer />
       <Toaster />
+      <ExitModal />
     </>
   )
 }
