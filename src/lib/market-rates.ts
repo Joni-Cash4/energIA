@@ -33,13 +33,13 @@ export const CARGOS_ENERGIA_2026: Record<Tarifa, Partial<Record<Periodo, number>
 // ─── Peajes + cargos de POTENCIA (€/kW·año) — dividir /365 para €/kW·día ────
 export const PEAJES_POTENCIA_2026: Record<Tarifa, Partial<Record<Periodo, number>>> = {
   '2.0TD': { P1: 30.6726, P2: 1.9555, P3: 0.8911 },
-  '3.0TD': { P1: 14.8900, P2: 7.8700, P3: 2.5000, P4: 1.9000, P5: 0.5300, P6: 0.6200 },
+  '3.0TD': { P1: 14.8900, P2: 7.8700, P3: 2.5000, P4: 1.9000, P5: 0.5300, P6: 0.5353 }, // P6 BOE-A-2025-26348: 0.535313
   '6.1TD': { P1: 9.4313, P2: 4.8776, P3: 1.3978, P4: 0.8819, P5: 0.4759, P6: 0.4441 },
 }
 
 export const CARGOS_POTENCIA_2026: Record<Tarifa, Partial<Record<Periodo, number>>> = {
   '2.0TD': { P1: 17.3228, P2: 1.1048, P3: 0.5034 },
-  '3.0TD': { P1: 5.4300, P2: 2.7200, P3: 1.9700, P4: 1.9700, P5: 1.9700, P6: 1.0400 },
+  '3.0TD': { P1: 5.4300, P2: 2.7200, P3: 1.9700, P4: 1.9700, P5: 1.9700, P6: 0.9068 }, // P6 corregido: (0.5353+0.9068)/365=0.003951 ✓
   '6.1TD': { P1: 4.4626, P2: 2.1072, P3: 0.7155, P4: 0.4533, P5: 0.2431, P6: 0.1849 },
 }
 
