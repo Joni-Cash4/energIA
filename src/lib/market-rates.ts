@@ -69,8 +69,11 @@ export const PERD_DEFECTO: Record<Tarifa, Partial<Record<Periodo, number>>> = {
 // PERD real mensual confirmado — rellenar solo con valores que vengan directamente
 // de la salida del sistema Python (ESIOS PVPCDATA), nunca estimados a mano.
 export const PERD_REAL_MENSUAL: Record<string, Partial<Record<Tarifa, Partial<Record<Periodo, number>>>>> = {
-  // Ejemplo de formato esperado, pendiente de confirmar valores reales por periodo:
-  // '2026-03': { '3.0TD': { P1: 1.16, P2: 1.15, P6: 1.14 } },
+  // PERD real ESIOS PVPCDATA — del sistema Python local (C:\MonitorizacionEnergetica).
+  // IMPORTANTE: NO son los Ki de la factura de Acciona (esos son propios de Acciona).
+  // El PERD de ESIOS es el que usa Próxima para calcular su indexada.
+  // Actualizar mensualmente cuando Jonathan comparte informes Python o sincroniza Supabase.
+  '2026-03': { '3.0TD': { P1: 1.040, P2: 1.040, P3: 1.040, P4: 1.040, P5: 1.040, P6: 1.040 } }, // confirmado Python: comparativa MIMIPAU 20260616
 }
 
 // ─── SC — servicios de ajuste (€/kWh) — histórico mensual ────────────────────

@@ -1,7 +1,7 @@
 import { getSupabaseServerClient } from '@/lib/supabase-server'
 import {
   SC_ESTIMADO_MENSUAL, SC_FALLBACK, CAP_REAL_MENSUAL, CAP_2026,
-  PERD_DEFECTO, type Tarifa, type Periodo,
+  PERD_DEFECTO, PERD_REAL_MENSUAL, type Tarifa, type Periodo,
 } from '@/lib/market-rates'
 
 // Valores reales de mercado sincronizados mensualmente desde el sistema Python
@@ -25,6 +25,16 @@ export async function getMercadoReal(mes: string, tarifa: Tarifa): Promise<Merca
   let cap = CAP_REAL_MENSUAL[mes] ?? CAP_2026
   let perd: Partial<Record<Periodo, number>> = { ...PERD_DEFECTO[tarifa] }
   let fuente: MercadoReal['fuente'] = SC_ESTIMADO_MENSUAL[mes] ? 'hardcoded' : 'fallback'
+
+  // Tier 2: PERD real mensual hardcodeado (extraído de facturas reales o informes Python)
+  // Prioridad: PERD_DEFECTO → PERD_REAL_MENSUAL → Supabase (mayor autoridad)
+  const perdMensual = PERD_REAL_MENSUAL[mes]?.[tarifa]
+  if (perdMensual) {
+    for (const [p, v] of Object.entries(perdMensual)) {
+      perd[p as Periodo] = v as number
+    }
+    fuente = 'hardcoded'
+  }
 
   if (!supabase) return { sc, cap, perd, fuente }
 

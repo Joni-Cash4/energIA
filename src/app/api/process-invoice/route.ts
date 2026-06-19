@@ -15,6 +15,7 @@ import {
   type Tarifa,
 } from '@/lib/market-rates'
 import { getMercadoReal } from '@/lib/market-real'
+import { getZonaFromCups } from '@/lib/periodos'
 import type { SimTarifa } from '@/types'
 
 const PROMPT = `Eres un experto en facturas eléctricas españolas. Analiza esta factura (puede ser foto o PDF escaneado, en una o varias imágenes) y extrae los datos con máxima precisión.
@@ -88,6 +89,7 @@ const r4 = (n: number) => Math.round(n * 10000) / 10000
 type Periodos = Partial<Record<Periodo, number>>
 
 type InvoiceData = {
+  cups?: string | null
   tarifa: string
   fecha_inicio: string
   fecha_fin: string
@@ -125,14 +127,14 @@ function potenciaPorPeriodo(data: InvoiceData, tarifa: Tarifa): Periodos {
 
 // Histórico PMD real para el periodo exacto de la factura — NO el precio de hoy
 async function fetchHistoricalPmd(
-  start: string, end: string, tarifa: Tarifa
+  start: string, end: string, tarifa: Tarifa, zona: string
 ): Promise<{ pmd: Periodos; media: number; ok: boolean }> {
   try {
     const base = process.env.NEXT_PUBLIC_SITE_URL?.startsWith('http')
       ? process.env.NEXT_PUBLIC_SITE_URL
       : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
     const res = await fetch(
-      `${base}/api/market-historical?start=${start}&end=${end}&tarifa=${tarifa}`,
+      `${base}/api/market-historical?start=${start}&end=${end}&tarifa=${tarifa}&zona=${zona}`,
       { next: { revalidate: 3600 } }
     )
     if (!res.ok) return { pmd: {}, media: 0, ok: false }
@@ -198,10 +200,12 @@ function simIndexada(
   }
   potencia = r2(potencia)
 
-  // IEE no aplica sobre el alquiler de contador (es un servicio, no consumo eléctrico)
-  const baseIee = r2(energiaTotal + potencia + reactiva + otrosCostes)
-  const iee = r2(baseIee * tipoIee)
-  const subtotal = r2(baseIee + alquiler)
+  // IEE: tipo efectivo derivado de la factura real × base monetaria de esta simulación.
+  // Si la factura usa 1.0€/MWh (RDL 7/2026), el tipo efectivo (~0.64%) aplicado a bases
+  // similares da un resultado muy próximo. Si vuelve al 5.1127%, se aplica automáticamente.
+  const subtotalBase = r2(energiaTotal + potencia + reactiva + otrosCostes)
+  const iee = r2(subtotalBase * tipoIee)
+  const subtotal = r2(subtotalBase + alquiler)
   const base_iva = r2(subtotal + iee)
   const iva = r2(base_iva * tipoIva)
   const total = r2(base_iva + iva)
@@ -241,9 +245,10 @@ function simFija(
   }
   potencia = r2(potencia)
 
-  const baseIee = r2(energia + potencia + reactiva)
-  const iee = r2(baseIee * tipoIee)
-  const subtotal = r2(baseIee + alquiler)
+  // IEE: tipo efectivo derivado de la factura real × base de esta simulación
+  const subtotalBase = r2(energia + potencia + reactiva)
+  const iee = r2(subtotalBase * tipoIee)
+  const subtotal = r2(subtotalBase + alquiler)
   const base_iva = r2(subtotal + iee)
   const iva = r2(base_iva * tipoIva)
   const total = r2(base_iva + iva)
@@ -307,10 +312,12 @@ export async function POST(req: NextRequest) {
     const parsed: InvoiceData = JSON.parse(json)
 
     const tarifa = normalizaTarifa(parsed.tarifa)
+    // Zona detectada desde CUPS — determina temporadas y horas punta correctas
+    const zona = getZonaFromCups(parsed.cups)
 
     // Histórico PMD del periodo exacto de la factura (no precio de hoy)
     const { pmd: pmdHistorico, media: pmdMedia, ok: histOk } = await fetchHistoricalPmd(
-      parsed.fecha_inicio, parsed.fecha_fin, tarifa
+      parsed.fecha_inicio, parsed.fecha_fin, tarifa, zona
     )
     const mes = mesKey(parsed.fecha_inicio)
     // sc/cap/perd: Supabase (real, sync mensual desde sistema Python) > hardcoded > fallback
@@ -321,12 +328,14 @@ export async function POST(req: NextRequest) {
     // Esto adapta automáticamente a 2.0TD/3.0TD, IEE/IVA reducidos por RDL 17/2021, etc.
     // Nota: el alquiler de contador NO suele entrar en la base del IEE (es un servicio,
     // no consumo eléctrico) — se resta para no inflar el tipo efectivo derivado.
-    const importeIee = parsed.importe_iee ?? 0
+    const importeIee = r2(parsed.importe_iee ?? 0)
     const baseImponible = parsed.base_imponible ?? 0
     const importeIva = parsed.importe_iva ?? 0
+    // tipoIee: tipo efectivo de la factura real — auto-adaptativo a cualquier régimen regulatorio.
+    // Con RDL 7/2026 (1.0€/MWh mínimo): ~0.64%. Si vuelve al 5.1127%: ~5.1127%. Sin hardcodear.
     const alquilerParaIee = parsed.alquiler_equipos ?? 0
     const subtotalReal = baseImponible - importeIee - alquilerParaIee
-    const tipoIee = subtotalReal > 0 ? importeIee / subtotalReal : 0.0511268
+    const tipoIee = subtotalReal > 0 ? importeIee / subtotalReal : 0.005
     const tipoIva = baseImponible > 0 ? importeIva / baseImponible : 0.21
 
     const potenciaKw = potenciaPorPeriodo(parsed, tarifa)
@@ -386,6 +395,7 @@ export async function POST(req: NextRequest) {
       total_nuevo_estimado: sim_indexada.total,
       tipo_iee_detectado: r4(tipoIee),
       tipo_iva_detectado: r4(tipoIva),
+      zona_detectada: zona,
       atulado_recomendado: recomendado,
       sim_indexada,
       sim_fija_boe,

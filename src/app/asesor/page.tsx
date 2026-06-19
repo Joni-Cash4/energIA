@@ -104,7 +104,7 @@ export default function AsesorPage() {
                 </div>
                 <div>
                   <h3 className="text-white font-semibold mb-1">Presencial</h3>
-                  <p className="text-[#9CA3AF] text-sm">Bilbao y área metropolitana, resto de País Vasco bajo consulta.</p>
+                  <p className="text-[#9CA3AF] text-sm">País Vasco, alrededores bajo consulta.</p>
                 </div>
               </div>
               <div className="flex gap-4">
