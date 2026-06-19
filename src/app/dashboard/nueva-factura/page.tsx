@@ -217,22 +217,9 @@ async function generatePdf(
   const boeEnergiaPdf = r2(simBoe.energia + simBoe.cargo_gestion + simBoe.otros_costes)
   const webEnergiaPdf = r2(simWeb.energia + simWeb.cargo_gestion + simWeb.otros_costes)
 
-  // kW contratados por periodo (para etiqueta de cada fila)
-  const kwPorPeriodo: Record<string, number> = {}
-  for (const p of data.potencias ?? []) kwPorPeriodo[p.periodo] = p.kw
-
-  // Filas de potencia — una por periodo
-  const potPeriodos = Object.keys(simIdx.potencia_periodos ?? {}).sort()
-  for (const p of potPeriodos) {
-    const kw = kwPorPeriodo[p]
-    const label = kw != null ? `  ${p}  ${formatNumber(kw, 0)} kW` : `  ${p}`
-    row(label,
-      [null, simIdx.potencia_periodos![p] ?? null, simBoe.potencia_periodos![p] ?? null, simWeb.potencia_periodos![p] ?? null])
-  }
-  // Total potencia (aquí sí aparece el importe real de la factura)
-  row('Total potencia',
-    [data.potencia_total ?? null, simIdx.potencia, simBoe.potencia, simWeb.potencia],
-    true)
+  // Potencia — una sola fila en la tabla principal (el desglose va en sección separada abajo)
+  row('Potencia contratada',
+    [data.potencia_total ?? null, simIdx.potencia, simBoe.potencia, simWeb.potencia])
 
   row('Energia activa (todos los periodos)',
     [energiaActual, idxEnergiaPdf, boeEnergiaPdf, webEnergiaPdf])
@@ -316,6 +303,61 @@ async function generatePdf(
       y += 6
     })
     y += 3
+  }
+
+  // ─── Desglose de potencia por periodo ────────────────────────────────────────
+  if (y < 215 && simIdx.potencia_periodos && Object.keys(simIdx.potencia_periodos).length > 0) {
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...C.gray)
+    doc.text('DESGLOSE DE POTENCIA CONTRATADA POR PERIODO', M, y)
+    y += 4
+
+    // 6 columnas: Periodo | kW | €/kW·día | Próxima | BOE | WEB
+    const ppW = (W - 2*M) / 6
+    doc.setFillColor(...C.dark)
+    doc.rect(M, y, W - 2*M, 6, 'F')
+    doc.setFontSize(6.5)
+    doc.setTextColor(...C.white)
+    const ppH = ['Periodo', 'kW contrat.', 'EUR/kW·dia', 'Proxima Cristalina', 'Atulado BOE', 'Atulado WEB']
+    ppH.forEach((h, i) => doc.text(h, M + 2 + i * ppW, y + 4))
+    y += 6
+
+    const potPers = Object.keys(simIdx.potencia_periodos).sort()
+    const kwMap: Record<string, number> = {}
+    for (const p of data.potencias ?? []) kwMap[p.periodo] = p.kw
+
+    potPers.forEach((p, i) => {
+      if (i % 2 === 0) { doc.setFillColor(...C.light); doc.rect(M, y, W - 2*M, 6, 'F') }
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(6.5)
+      const kw = kwMap[p] ?? 0
+      const dias = data.dias_facturados ?? 31
+      const tasa = kw > 0 && dias > 0 ? (simIdx.potencia_periodos![p] ?? 0) / kw / dias : 0
+      doc.setTextColor(...C.text)
+      doc.text(p,                              M + 2 + 0 * ppW, y + 4)
+      doc.text(`${formatNumber(kw, 0)} kW`,   M + 2 + 1 * ppW, y + 4)
+      doc.text(fn(tasa),                       M + 2 + 2 * ppW, y + 4)
+      doc.setTextColor(...C.green)
+      doc.text(fc(simIdx.potencia_periodos![p] ?? 0), M + 2 + 3 * ppW, y + 4)
+      doc.setTextColor(...C.blue)
+      doc.text(fc(simBoe.potencia_periodos?.[p] ?? 0), M + 2 + 4 * ppW, y + 4)
+      doc.setTextColor(...C.violet)
+      doc.text(fc(simWeb.potencia_periodos?.[p] ?? 0), M + 2 + 5 * ppW, y + 4)
+      y += 6
+    })
+
+    // Fila total potencia
+    doc.setFillColor(...C.dark)
+    doc.rect(M, y, W - 2*M, 6.5, 'F')
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(6.5)
+    doc.setTextColor(...C.white)
+    doc.text('Total potencia', M + 2, y + 4.5)
+    doc.setTextColor(...C.green);  doc.text(fc(simIdx.potencia), M + 2 + 3 * ppW, y + 4.5)
+    doc.setTextColor(...C.blue);   doc.text(fc(simBoe.potencia), M + 2 + 4 * ppW, y + 4.5)
+    doc.setTextColor(...C.violet); doc.text(fc(simWeb.potencia), M + 2 + 5 * ppW, y + 4.5)
+    y += 10
   }
 
   if (!data.mercado_historico_ok && y < 270) {
@@ -622,27 +664,14 @@ export default function NuevaFacturaPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#1F1F1F]">
-                    {/* Potencia — una fila por periodo */}
-                    {Object.keys(simIdx.potencia_periodos ?? {}).sort().map((p) => {
-                      const kwP = (data.potencias ?? []).find(x => x.periodo === p)
-                      return (
-                        <TableRow
-                          key={`pot-${p}`}
-                          label={`Potencia ${p}${kwP ? ` (${formatNumber(kwP.kw, 0)} kW)` : ''}`}
-                          actual={null}
-                          idx={simIdx.potencia_periodos?.[p] ?? null}
-                          boe={simBoe.potencia_periodos?.[p] ?? null}
-                          web={simWeb.potencia_periodos?.[p] ?? null}
-                        />
-                      )
-                    })}
-                    <tr className="bg-[#1C1C1C]">
-                      <td className="px-4 py-2 text-white font-semibold text-xs">Total potencia</td>
-                      <td className="px-4 py-2 text-right font-semibold text-white text-sm">{data.potencia_total != null ? formatCurrency(data.potencia_total) : '—'}</td>
-                      <td className="px-4 py-2 text-right font-semibold text-[#00E676] text-sm">{formatCurrency(simIdx.potencia)}</td>
-                      <td className="px-4 py-2 text-right font-semibold text-blue-400 text-sm">{formatCurrency(simBoe.potencia)}</td>
-                      <td className="px-4 py-2 text-right font-semibold text-violet-400 text-sm">{formatCurrency(simWeb.potencia)}</td>
-                    </tr>
+                    {/* Potencia — total en tabla principal, desglose en sección separada */}
+                    <TableRow
+                      label="Potencia contratada"
+                      actual={data.potencia_total ?? null}
+                      idx={simIdx.potencia}
+                      boe={simBoe.potencia}
+                      web={simWeb.potencia}
+                    />
 
                     {/* Energía */}
                     <TableRow
@@ -773,6 +802,53 @@ export default function NuevaFacturaPage() {
                           <td className="px-4 py-3 text-right text-[#00E676] font-medium">{formatNumber(p.precio_kwh_nuevo ?? 0, 4)}</td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Desglose de potencia por periodo */}
+            {(data.potencias ?? []).length > 0 && simIdx.potencia_periodos && (
+              <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl overflow-hidden mb-6">
+                <div className="px-6 py-4 border-b border-[#1F1F1F]">
+                  <h2 className="text-white font-semibold">Desglose de potencia por periodo</h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[600px]">
+                    <thead>
+                      <tr className="border-b border-[#1F1F1F]">
+                        <th className="px-4 py-3 text-left text-xs text-[#6B7280] uppercase tracking-wide">Periodo</th>
+                        <th className="px-4 py-3 text-right text-xs text-[#6B7280] uppercase tracking-wide">kW contrat.</th>
+                        <th className="px-4 py-3 text-right text-xs text-[#6B7280] uppercase tracking-wide">Precio (€/kW·día)</th>
+                        <th className="px-4 py-3 text-right text-xs text-[#00E676] uppercase tracking-wide">Próxima</th>
+                        <th className="px-4 py-3 text-right text-xs text-blue-400 uppercase tracking-wide">Atulado BOE</th>
+                        <th className="px-4 py-3 text-right text-xs text-violet-400 uppercase tracking-wide">Atulado WEB</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#1F1F1F]">
+                      {Object.keys(simIdx.potencia_periodos).sort().map((p) => {
+                        const kwP = (data.potencias ?? []).find(x => x.periodo === p)
+                        const kw = kwP?.kw ?? 0
+                        const dias = data.dias_facturados ?? 31
+                        const tasaIdx = kw > 0 && dias > 0 ? (simIdx.potencia_periodos![p] ?? 0) / kw / dias : 0
+                        return (
+                          <tr key={p} className="hover:bg-[#1A1A1A]">
+                            <td className="px-4 py-3 text-white font-medium">{p}</td>
+                            <td className="px-4 py-3 text-right text-[#9CA3AF]">{formatNumber(kw, 0)} kW</td>
+                            <td className="px-4 py-3 text-right text-[#9CA3AF]">{formatNumber(tasaIdx, 4)}</td>
+                            <td className="px-4 py-3 text-right text-[#00E676]">{formatCurrency(simIdx.potencia_periodos![p] ?? 0)}</td>
+                            <td className="px-4 py-3 text-right text-blue-400">{formatCurrency(simBoe.potencia_periodos?.[p] ?? 0)}</td>
+                            <td className="px-4 py-3 text-right text-violet-400">{formatCurrency(simWeb.potencia_periodos?.[p] ?? 0)}</td>
+                          </tr>
+                        )
+                      })}
+                      <tr className="bg-[#0A0A0A]">
+                        <td colSpan={3} className="px-4 py-3 text-white font-bold uppercase text-xs tracking-wide">Total potencia</td>
+                        <td className="px-4 py-3 text-right font-bold text-[#00E676]">{formatCurrency(simIdx.potencia)}</td>
+                        <td className="px-4 py-3 text-right font-bold text-blue-400">{formatCurrency(simBoe.potencia)}</td>
+                        <td className="px-4 py-3 text-right font-bold text-violet-400">{formatCurrency(simWeb.potencia)}</td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
