@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
+import { WhatsAppButton } from '@/components/landing/WhatsAppButton'
+import { CookieBanner } from '@/components/landing/CookieBanner'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -28,6 +30,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es" className="dark">
       <body className={`${GeistSans.variable} ${GeistMono.variable} antialiased bg-[#0A0A0A] text-white`}>
         {children}
+        <WhatsAppButton />
+        <CookieBanner />
       </body>
     </html>
   )
