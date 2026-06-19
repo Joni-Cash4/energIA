@@ -22,6 +22,7 @@ export interface PotenciaPeriodo {
 export interface SimTarifa {
   energia: number
   potencia: number
+  potencia_periodos?: Partial<Record<string, number>>  // €/periodo — para desglose P1-P6
   reactiva: number
   otros_costes: number
   cargo_gestion: number

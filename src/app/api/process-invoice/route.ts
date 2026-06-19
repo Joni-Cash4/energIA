@@ -191,14 +191,14 @@ function simIndexada(
 
   // Potencia: solo peajes+cargos BOE, sin margen propio (igual que factura real Próxima)
   // Usa el kW REAL de cada periodo — no siempre es uniforme (ej. P1=30kW, P6=60kW)
-  let potencia = 0
+  const potencia_periodos_idx: Partial<Record<string, number>> = {}
   for (const p of periodos) {
     const kw = potenciaKw[p] ?? 0
     const pj = PEAJES_POTENCIA_2026[tarifa][p] ?? 0
     const cg = CARGOS_POTENCIA_2026[tarifa][p] ?? 0
-    potencia += kw * dias * (pj + cg) / 365
+    potencia_periodos_idx[p] = r2(kw * dias * (pj + cg) / 365)
   }
-  potencia = r2(potencia)
+  const potencia = r2(Object.values(potencia_periodos_idx).reduce<number>((s, v) => s + (v ?? 0), 0))
 
   // IEE: tipo efectivo derivado de la factura real × base monetaria de esta simulación.
   // Si la factura usa 1.0€/MWh (RDL 7/2026), el tipo efectivo (~0.64%) aplicado a bases
@@ -211,7 +211,8 @@ function simIndexada(
   const total = r2(base_iva + iva)
 
   return {
-    energia: energiaTotal, potencia, reactiva, otros_costes: otrosCostes,
+    energia: energiaTotal, potencia, potencia_periodos: potencia_periodos_idx,
+    reactiva, otros_costes: otrosCostes,
     cargo_gestion: cargoGestion, subtotal, iee, alquiler, base_iva, iva,
     iva_pct: tipoIva, total,
   }
@@ -238,12 +239,12 @@ function simFija(
   }
   energia = r2(energia)
 
-  let potencia = 0
+  const potencia_periodos_fija: Partial<Record<string, number>> = {}
   for (const p of PERIODOS_TARIFA[tarifa]) {
     const kw = potenciaKw[p] ?? 0
-    potencia += kw * dias * (preciosPotencia[p] ?? 0)
+    potencia_periodos_fija[p] = r2(kw * dias * (preciosPotencia[p] ?? 0))
   }
-  potencia = r2(potencia)
+  const potencia = r2(Object.values(potencia_periodos_fija).reduce<number>((s, v) => s + (v ?? 0), 0))
 
   // IEE: tipo efectivo derivado de la factura real × base de esta simulación
   const subtotalBase = r2(energia + potencia + reactiva)
@@ -254,7 +255,8 @@ function simFija(
   const total = r2(base_iva + iva)
 
   return {
-    energia, potencia, reactiva, otros_costes: 0, cargo_gestion: 0,
+    energia, potencia, potencia_periodos: potencia_periodos_fija,
+    reactiva, otros_costes: 0, cargo_gestion: 0,
     subtotal, iee, alquiler, base_iva, iva, iva_pct: tipoIva, total,
     nota: producto.nombre,
   }

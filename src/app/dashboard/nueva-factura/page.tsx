@@ -217,9 +217,22 @@ async function generatePdf(
   const boeEnergiaPdf = r2(simBoe.energia + simBoe.cargo_gestion + simBoe.otros_costes)
   const webEnergiaPdf = r2(simWeb.energia + simWeb.cargo_gestion + simWeb.otros_costes)
 
-  // Filas
-  row('Potencia contratada (P1-P6)',
-    [data.potencia_total ?? null, simIdx.potencia, simBoe.potencia, simWeb.potencia])
+  // kW contratados por periodo (para etiqueta de cada fila)
+  const kwPorPeriodo: Record<string, number> = {}
+  for (const p of data.potencias ?? []) kwPorPeriodo[p.periodo] = p.kw
+
+  // Filas de potencia — una por periodo
+  const potPeriodos = Object.keys(simIdx.potencia_periodos ?? {}).sort()
+  for (const p of potPeriodos) {
+    const kw = kwPorPeriodo[p]
+    const label = kw != null ? `  ${p}  ${formatNumber(kw, 0)} kW` : `  ${p}`
+    row(label,
+      [null, simIdx.potencia_periodos![p] ?? null, simBoe.potencia_periodos![p] ?? null, simWeb.potencia_periodos![p] ?? null])
+  }
+  // Total potencia (aquí sí aparece el importe real de la factura)
+  row('Total potencia',
+    [data.potencia_total ?? null, simIdx.potencia, simBoe.potencia, simWeb.potencia],
+    true)
 
   row('Energia activa (todos los periodos)',
     [energiaActual, idxEnergiaPdf, boeEnergiaPdf, webEnergiaPdf])
@@ -609,14 +622,27 @@ export default function NuevaFacturaPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#1F1F1F]">
-                    {/* Potencia */}
-                    <TableRow
-                      label="Potencia contratada (P1–P6)"
-                      actual={data.potencia_total ?? null}
-                      idx={simIdx.potencia}
-                      boe={simBoe.potencia}
-                      web={simWeb.potencia}
-                    />
+                    {/* Potencia — una fila por periodo */}
+                    {Object.keys(simIdx.potencia_periodos ?? {}).sort().map((p) => {
+                      const kwP = (data.potencias ?? []).find(x => x.periodo === p)
+                      return (
+                        <TableRow
+                          key={`pot-${p}`}
+                          label={`Potencia ${p}${kwP ? ` (${formatNumber(kwP.kw, 0)} kW)` : ''}`}
+                          actual={null}
+                          idx={simIdx.potencia_periodos?.[p] ?? null}
+                          boe={simBoe.potencia_periodos?.[p] ?? null}
+                          web={simWeb.potencia_periodos?.[p] ?? null}
+                        />
+                      )
+                    })}
+                    <tr className="bg-[#1C1C1C]">
+                      <td className="px-4 py-2 text-white font-semibold text-xs">Total potencia</td>
+                      <td className="px-4 py-2 text-right font-semibold text-white text-sm">{data.potencia_total != null ? formatCurrency(data.potencia_total) : '—'}</td>
+                      <td className="px-4 py-2 text-right font-semibold text-[#00E676] text-sm">{formatCurrency(simIdx.potencia)}</td>
+                      <td className="px-4 py-2 text-right font-semibold text-blue-400 text-sm">{formatCurrency(simBoe.potencia)}</td>
+                      <td className="px-4 py-2 text-right font-semibold text-violet-400 text-sm">{formatCurrency(simWeb.potencia)}</td>
+                    </tr>
 
                     {/* Energía */}
                     <TableRow
