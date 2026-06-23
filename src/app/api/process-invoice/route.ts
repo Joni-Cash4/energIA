@@ -18,7 +18,15 @@ import { getMercadoReal } from '@/lib/market-real'
 import { getZonaFromCups } from '@/lib/periodos'
 import type { SimTarifa } from '@/types'
 
-const PROMPT = `Eres un experto en facturas eléctricas españolas. Analiza esta factura (puede ser foto o PDF escaneado, en una o varias imágenes) y extrae los datos con máxima precisión.
+const PROMPT = `Eres un experto en facturas eléctricas españolas. Analiza esta factura (puede ser foto o PDF escaneado, en una o varias imágenes).
+
+PASO 1 — TIPO DE FACTURA:
+Si el documento NO es una factura de ELECTRICIDAD (puede ser gas natural, agua, internet, teléfono u otro suministro), devuelve ÚNICAMENTE este JSON y nada más:
+{"error": "no_electrica", "tipo": "gas" | "agua" | "internet" | "otro"}
+
+Solo si es una factura eléctrica, continúa con el PASO 2.
+
+PASO 2 — EXTRACCIÓN DE DATOS. Extrae los datos con máxima precisión.
 
 INSTRUCCIONES IMPORTANTES:
 - El CUPS empieza siempre por "ES" y tiene 20-22 caracteres.
@@ -311,7 +319,20 @@ export async function POST(req: NextRequest) {
 
     const raw = (message.content[0] as { type: string; text: string }).text.trim()
     const json = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
-    const parsed: InvoiceData = JSON.parse(json)
+    const parsed = JSON.parse(json) as InvoiceData & { error?: string; tipo?: string }
+
+    if (parsed.error === 'no_electrica') {
+      const tipo = parsed.tipo ?? 'otro'
+      const msg =
+        tipo === 'gas'
+          ? 'Esto es una factura de gas natural. Necesitamos tu factura de electricidad para hacer la comparativa.'
+          : tipo === 'agua'
+            ? 'Esto es una factura de agua. Necesitamos tu factura de electricidad.'
+            : tipo === 'internet'
+              ? 'Esto es una factura de internet/teléfono. Necesitamos tu factura de electricidad.'
+              : 'Este documento no parece ser una factura eléctrica. Sube una foto o PDF de tu factura de la luz.'
+      return NextResponse.json({ error: msg, tipo }, { status: 422 })
+    }
 
     const tarifa = normalizaTarifa(parsed.tarifa)
     // Zona detectada desde CUPS — determina temporadas y horas punta correctas

@@ -46,9 +46,9 @@ export function Step1Upload({ onComplete }: Props) {
       const data = await processInvoice(pendingFiles)
       clearInterval(interval)
       onComplete(data)
-    } catch {
+    } catch (err) {
       clearInterval(interval)
-      setError('No se pudo procesar la factura. Asegúrate de subir fotos o PDFs de una factura eléctrica.')
+      setError(err instanceof Error ? err.message : 'No se pudo procesar la factura. Asegúrate de subir fotos o PDFs de una factura eléctrica.')
       setLoading(false)
     }
   }, [pendingFiles, onComplete])

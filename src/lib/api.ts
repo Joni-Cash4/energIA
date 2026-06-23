@@ -7,7 +7,10 @@ export async function processInvoice(files: File[]): Promise<InvoiceAnalysis> {
   const form = new FormData()
   files.forEach((f) => form.append('files', f))
   const res = await fetch('/api/process-invoice', { method: 'POST', body: form })
-  if (!res.ok) throw new Error(`Error al procesar la factura: ${res.statusText}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string }
+    throw new Error(body.error ?? 'No se pudo procesar la factura. Asegúrate de subir fotos o PDFs de una factura eléctrica.')
+  }
   return res.json()
 }
 
