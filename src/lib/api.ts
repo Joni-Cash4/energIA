@@ -28,7 +28,7 @@ export async function sendReport(params: {
   empresa?: string
   invoice_data: InvoiceAnalysis
 }): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`${API_URL}/api/send-report`, {
+  const res = await fetch(`/api/send-report`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
