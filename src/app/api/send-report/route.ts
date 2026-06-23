@@ -12,13 +12,9 @@ function eur(n?: number) {
 }
 
 function buildClientEmail(nombre: string, data: InvoiceAnalysis): string {
-  const mejorTotal = Math.min(
-    data.sim_indexada?.total ?? Infinity,
-    data.sim_fija_boe?.total ?? Infinity,
-    data.sim_fija_web?.total ?? Infinity,
-  )
-  const ahorroMensual = data.total_factura - (mejorTotal === Infinity ? data.total_factura : mejorTotal)
-  const ahorroAnual = data.ahorro_estimado_anual ?? ahorroMensual * 12
+  // sim_indexada.total es la base de ahorro_estimado_anual — usar el mismo para consistencia
+  const mejorTotal = data.sim_indexada?.total ?? null
+  const ahorroAnual = data.ahorro_estimado_anual ?? 0
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -59,7 +55,7 @@ function buildClientEmail(nombre: string, data: InvoiceAnalysis): string {
                 <td width="4%"></td>
                 <td width="48%" style="background:#0d2620;border:1px solid #22D3A0;border-radius:10px;padding:20px;text-align:center;">
                   <p style="color:#22D3A0;font-size:12px;margin:0 0 6px;text-transform:uppercase;letter-spacing:.05em;">Mejor opción</p>
-                  <p style="color:#22D3A0;font-size:26px;font-weight:700;margin:0;">${eur(mejorTotal === Infinity ? undefined : mejorTotal)}</p>
+                  <p style="color:#22D3A0;font-size:26px;font-weight:700;margin:0;">${eur(mejorTotal ?? undefined)}</p>
                   <p style="color:#6B7280;font-size:11px;margin:4px 0 0;">mismo periodo</p>
                 </td>
               </tr>
@@ -115,19 +111,37 @@ function buildClientEmail(nombre: string, data: InvoiceAnalysis): string {
 </html>`
 }
 
+function row(label: string, value: string, highlight = false) {
+  const color = highlight ? '#22a87a' : '#111'
+  const weight = highlight ? '700' : '600'
+  return `<tr><td style="padding:6px 0;border-bottom:1px solid #f0f0f0;">
+    <span style="color:#6B7280;font-size:13px;">${label}</span>
+    <span style="float:right;color:${color};font-size:13px;font-weight:${weight};">${value}</span>
+  </td></tr>`
+}
+
 function buildAlertEmail(
   nombre: string, email: string, telefono: string | undefined,
   empresa: string | undefined, data: InvoiceAnalysis
 ): string {
-  const mejorTotal = Math.min(
-    data.sim_indexada?.total ?? Infinity,
-    data.sim_fija_boe?.total ?? Infinity,
-    data.sim_fija_web?.total ?? Infinity,
-  )
   const ahorroAnual = data.ahorro_estimado_anual ?? 0
   const waLink = telefono
     ? `https://wa.me/34${telefono.replace(/\D/g, '')}?text=Hola%20${encodeURIComponent(nombre)}%2C%20soy%20Jonathan%20de%20IAenerg%C3%ADa`
     : null
+
+  const si = data.sim_indexada
+  const sb = data.sim_fija_boe
+  const sw = data.sim_fija_web
+  const rec = data.atulado_recomendado
+
+  // Potencias extraídas
+  const potencias = data.potencias ?? []
+  const potStr = potencias.length > 0
+    ? potencias.map(p => `${p.periodo}:${p.kw}kW`).join(' | ')
+    : `${data.potencia_contratada ?? '—'} kW (uniforme)`
+
+  const tipoIee = data.tipo_iee_detectado
+  const tipoIva = data.tipo_iva_detectado
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -148,51 +162,82 @@ function buildAlertEmail(
         <tr>
           <td style="padding:28px 32px;">
             <h2 style="color:#111;font-size:20px;margin:0 0 4px;">${nombre}</h2>
-            ${empresa ? `<p style="color:#6B7280;font-size:13px;margin:0 0 20px;">${empresa}</p>` : '<div style="margin-bottom:20px;"></div>'}
+            ${empresa ? `<p style="color:#6B7280;font-size:13px;margin:0 0 16px;">${empresa}</p>` : '<div style="margin-bottom:16px;"></div>'}
 
             <!-- Contacto -->
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-              <tr>
-                <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;">
-                  <span style="color:#6B7280;font-size:13px;">Email</span>
-                  <span style="float:right;color:#111;font-size:13px;font-weight:600;">${email}</span>
-                </td>
-              </tr>
-              ${telefono ? `<tr>
-                <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;">
-                  <span style="color:#6B7280;font-size:13px;">Teléfono</span>
-                  <span style="float:right;color:#111;font-size:13px;font-weight:600;">${telefono}</span>
-                </td>
-              </tr>` : ''}
+              ${row('Email', email)}
+              ${telefono ? row('Teléfono', telefono) : ''}
             </table>
 
-            <!-- Análisis -->
-            <p style="color:#6B7280;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin:0 0 12px;">Datos del análisis</p>
+            <!-- Factura extraída -->
+            <p style="color:#6B7280;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin:0 0 8px;">Datos extraídos de la factura</p>
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-              <tr><td style="padding:6px 0;border-bottom:1px solid #f0f0f0;">
-                <span style="color:#6B7280;font-size:13px;">Tarifa</span>
-                <span style="float:right;color:#111;font-size:13px;font-weight:600;">${data.tarifa}</span>
-              </td></tr>
-              <tr><td style="padding:6px 0;border-bottom:1px solid #f0f0f0;">
-                <span style="color:#6B7280;font-size:13px;">Factura actual</span>
-                <span style="float:right;color:#111;font-size:13px;font-weight:600;">${eur(data.total_factura)}</span>
-              </td></tr>
-              <tr><td style="padding:6px 0;border-bottom:1px solid #f0f0f0;">
-                <span style="color:#6B7280;font-size:13px;">Mejor opción</span>
-                <span style="float:right;color:#22a87a;font-size:13px;font-weight:600;">${eur(mejorTotal === Infinity ? undefined : mejorTotal)}</span>
-              </td></tr>
-              <tr><td style="padding:6px 0;border-bottom:1px solid #f0f0f0;">
-                <span style="color:#6B7280;font-size:13px;">Ahorro anual estimado</span>
-                <span style="float:right;color:#22a87a;font-size:14px;font-weight:700;">${eur(ahorroAnual)}</span>
-              </td></tr>
-              <tr><td style="padding:6px 0;border-bottom:1px solid #f0f0f0;">
-                <span style="color:#6B7280;font-size:13px;">Consumo anual</span>
-                <span style="float:right;color:#111;font-size:13px;font-weight:600;">${data.kwh_anuales_sips?.toLocaleString('es-ES') ?? '—'} kWh</span>
-              </td></tr>
-              ${data.cups ? `<tr><td style="padding:6px 0;">
-                <span style="color:#6B7280;font-size:13px;">CUPS</span>
-                <span style="float:right;color:#6B7280;font-size:12px;font-family:monospace;">${data.cups}</span>
-              </td></tr>` : ''}
+              ${row('Tarifa', data.tarifa ?? '—')}
+              ${row('Factura actual', eur(data.total_factura))}
+              ${row('Días facturados', `${data.dias_facturados ?? '—'} días`)}
+              ${row('kWh total periodo', `${data.kwh_total?.toLocaleString('es-ES') ?? '—'} kWh`)}
+              ${row('Consumo anual (×12)', `${data.kwh_anuales_sips?.toLocaleString('es-ES') ?? '—'} kWh`)}
+              ${row('Potencias por periodo', potStr)}
+              ${tipoIee != null ? row('IEE detectado', `${(tipoIee * 100).toFixed(4)}%`) : ''}
+              ${tipoIva != null ? row('IVA detectado', `${(tipoIva * 100).toFixed(2)}%`) : ''}
+              ${data.cups ? row('CUPS', `<span style="font-family:monospace;font-size:12px;">${data.cups}</span>`) : ''}
+            </table>
+
+            <!-- Comparativa simulaciones -->
+            <p style="color:#6B7280;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin:0 0 8px;">Comparativa simulada</p>
+            <table width="100%" cellpadding="8" cellspacing="0" style="margin-bottom:24px;border:1px solid #e5e7eb;border-radius:8px;border-collapse:collapse;">
+              <thead>
+                <tr style="background:#f9fafb;">
+                  <th style="padding:8px 12px;text-align:left;font-size:12px;color:#6B7280;font-weight:600;border-bottom:1px solid #e5e7eb;"></th>
+                  <th style="padding:8px 12px;text-align:right;font-size:12px;color:#6B7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Indexada</th>
+                  <th style="padding:8px 12px;text-align:right;font-size:12px;color:#6B7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Fija BOE${rec === 'BOE' ? ' ★' : ''}</th>
+                  <th style="padding:8px 12px;text-align:right;font-size:12px;color:#6B7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Fija WEB${rec === 'WEB' ? ' ★' : ''}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="padding:7px 12px;font-size:13px;color:#6B7280;border-bottom:1px solid #f0f0f0;">Energía</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">${eur(si?.energia)}</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">${eur(sb?.energia)}</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">${eur(sw?.energia)}</td>
+                </tr>
+                <tr>
+                  <td style="padding:7px 12px;font-size:13px;color:#6B7280;border-bottom:1px solid #f0f0f0;">Potencia</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">${eur(si?.potencia)}</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">${eur(sb?.potencia)}</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">${eur(sw?.potencia)}</td>
+                </tr>
+                ${si?.otros_costes ? `<tr>
+                  <td style="padding:7px 12px;font-size:13px;color:#6B7280;border-bottom:1px solid #f0f0f0;">Otros costes</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">${eur(si.otros_costes)}</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">—</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">—</td>
+                </tr>` : ''}
+                <tr>
+                  <td style="padding:7px 12px;font-size:13px;color:#6B7280;border-bottom:1px solid #f0f0f0;">IEE</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">${eur(si?.iee)}</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">${eur(sb?.iee)}</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">${eur(sw?.iee)}</td>
+                </tr>
+                <tr>
+                  <td style="padding:7px 12px;font-size:13px;color:#6B7280;border-bottom:1px solid #f0f0f0;">IVA</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">${eur(si?.iva)}</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">${eur(sb?.iva)}</td>
+                  <td style="padding:7px 12px;font-size:13px;color:#111;text-align:right;border-bottom:1px solid #f0f0f0;">${eur(sw?.iva)}</td>
+                </tr>
+                <tr style="background:#f0faf5;">
+                  <td style="padding:8px 12px;font-size:13px;font-weight:700;color:#111;">TOTAL</td>
+                  <td style="padding:8px 12px;font-size:14px;font-weight:700;color:#22a87a;text-align:right;">${eur(si?.total)}</td>
+                  <td style="padding:8px 12px;font-size:14px;font-weight:700;color:#22a87a;text-align:right;">${eur(sb?.total)}</td>
+                  <td style="padding:8px 12px;font-size:14px;font-weight:700;color:#22a87a;text-align:right;">${eur(sw?.total)}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- Ahorro -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+              ${row('Ahorro anual estimado (indexada)', eur(ahorroAnual), true)}
             </table>
 
             ${waLink ? `
