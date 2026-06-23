@@ -12,7 +12,6 @@ function eur(n?: number) {
 }
 
 function buildClientEmail(nombre: string, data: InvoiceAnalysis): string {
-  // sim_indexada.total es la base de ahorro_estimado_anual — usar el mismo para consistencia
   const mejorTotal = data.sim_indexada?.total ?? null
   const ahorroAnual = data.ahorro_estimado_anual ?? 0
 
@@ -24,7 +23,6 @@ function buildClientEmail(nombre: string, data: InvoiceAnalysis): string {
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="background:#0B0F0E;border-radius:12px;overflow:hidden;max-width:600px;width:100%;">
 
-        <!-- Header -->
         <tr>
           <td style="padding:32px 40px 24px;border-bottom:1px solid #1a2420;">
             <p style="margin:0;font-size:22px;font-weight:700;color:#F3F5F3;letter-spacing:-0.01em;">
@@ -33,7 +31,6 @@ function buildClientEmail(nombre: string, data: InvoiceAnalysis): string {
           </td>
         </tr>
 
-        <!-- Body -->
         <tr>
           <td style="padding:32px 40px;">
             <p style="color:#9CA3AF;font-size:14px;margin:0 0 8px;">Hola, <strong style="color:#F3F5F3;">${nombre}</strong></p>
@@ -44,7 +41,6 @@ function buildClientEmail(nombre: string, data: InvoiceAnalysis): string {
               Hemos analizado tu factura y esto es lo que hemos encontrado:
             </p>
 
-            <!-- Numbers -->
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
               <tr>
                 <td width="48%" style="background:#141414;border:1px solid #1F1F1F;border-radius:10px;padding:20px;text-align:center;">
@@ -74,7 +70,6 @@ function buildClientEmail(nombre: string, data: InvoiceAnalysis): string {
               <strong style="color:#F3F5F3;">hablamos sin compromiso.</strong>
             </p>
 
-            <!-- CTA -->
             <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
               <tr>
                 <td style="background:#22D3A0;border-radius:8px;padding:14px 28px;">
@@ -94,7 +89,6 @@ function buildClientEmail(nombre: string, data: InvoiceAnalysis): string {
           </td>
         </tr>
 
-        <!-- Footer -->
         <tr>
           <td style="padding:20px 40px;border-top:1px solid #1a2420;">
             <p style="color:#4B5563;font-size:12px;margin:0;">
