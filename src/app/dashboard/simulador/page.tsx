@@ -96,8 +96,8 @@ export default function SimuladorPage() {
           <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-6">
             <h2 className="text-white font-semibold mb-6">Fee a cobrar</h2>
             <div className="space-y-6">
-              <Slider label="Fee energía" value={feeE} min={2} max={15} step={0.5} unit="€/MWh" onChange={setFeeE} />
-              <Slider label="Fee potencia" value={feeP} min={0.5} max={5} step={0.1} unit="€/kW·año" onChange={setFeeP} />
+              <Slider label="Fee energía" value={feeE} min={0} max={30} step={0.5} unit="€/MWh" onChange={setFeeE} />
+              <Slider label="Fee potencia" value={feeP} min={0} max={5} step={0.1} unit="€/kW·año" onChange={setFeeP} />
             </div>
           </div>
         </div>
