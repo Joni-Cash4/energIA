@@ -157,9 +157,16 @@ export interface Cliente {
   tarifa?: string
   email?: string
   telefono?: string
+  movil?: string
   empresa?: string
+  nif?: string
+  direccion?: string
+  cp?: string
+  poblacion?: string
+  provincia?: string
   estado: ClienteEstado
   notas?: string
+  revision_pendiente?: boolean
   // cartera fields
   fee_energia?: number
   fee_potencia?: number

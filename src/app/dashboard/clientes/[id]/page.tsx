@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck } from 'lucide-react'
+import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck, Clock, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -38,6 +38,7 @@ export default function ClienteDetailPage() {
   const [contratos, setContratos] = useState<Contrato[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [dismissing, setDismissing] = useState(false)
 
   // Editable fields
   const [estado,               setEstado]               = useState<ClienteEstado>('prospecto')
@@ -72,6 +73,15 @@ export default function ClienteDetailPage() {
     })
   }, [id, router])
 
+  const handleDismissRevision = async () => {
+    setDismissing(true)
+    const supabase = getSupabaseClient()
+    const { error } = await supabase.from('clientes').update({ revision_pendiente: false }).eq('id', id)
+    if (error) toast({ title: 'Error', variant: 'destructive' })
+    else { setCliente((p) => p ? { ...p, revision_pendiente: false } : p); toast({ title: 'Marcado como atendido' }) }
+    setDismissing(false)
+  }
+
   const handleSave = async () => {
     setSaving(true)
     const supabase = getSupabaseClient()
@@ -103,6 +113,28 @@ export default function ClienteDetailPage() {
       <Link href="/dashboard/clientes" className="inline-flex items-center gap-2 text-[#6B7280] hover:text-white transition-colors text-sm mb-6">
         <ArrowLeft className="w-4 h-4" />Volver a clientes
       </Link>
+
+      {cliente.revision_pendiente && (
+        <div className="mb-6 flex items-center justify-between gap-4 p-4 rounded-xl bg-amber-400/5 border border-amber-400/20">
+          <div className="flex items-center gap-3 text-amber-300 text-sm">
+            <Clock className="w-4 h-4 shrink-0" />
+            <div>
+              <p className="font-medium">Pendiente de revisión</p>
+              <p className="text-amber-300/60 text-xs mt-0.5">Este cliente no tiene contrato registrado o lleva más de 1 año sin renovar. Registra su contrato y márcalo como atendido.</p>
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="gap-1.5 shrink-0 border-amber-400/30 text-amber-300 hover:bg-amber-400/10"
+            onClick={handleDismissRevision}
+            disabled={dismissing}
+          >
+            {dismissing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+            Marcar atendido
+          </Button>
+        </div>
+      )}
 
       <div className="flex flex-col xl:flex-row gap-6">
         {/* Left */}
