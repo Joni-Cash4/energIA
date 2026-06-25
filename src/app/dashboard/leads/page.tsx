@@ -37,6 +37,7 @@ export default function LeadsPage() {
   const handleConvert = async (lead: Lead) => {
     setConverting(lead.id)
     const supabase = getSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
     const { error } = await supabase.from('clientes').insert({
       nombre: lead.nombre,
       email: lead.email,
@@ -46,6 +47,7 @@ export default function LeadsPage() {
       comercializadora: lead.comercializadora,
       tarifa: lead.tarifa,
       estado: 'prospecto',
+      user_id: user?.id,
     })
     if (!error) {
       await supabase.from('leads').update({ estado: 'convertido' }).eq('id', lead.id)

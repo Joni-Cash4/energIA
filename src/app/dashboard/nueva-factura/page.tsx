@@ -472,12 +472,14 @@ export default function NuevaFacturaPage() {
     if (!data) return
     setSavingCliente(true)
     const supabase = getSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
     const { error: err } = await supabase.from('clientes').insert({
       nombre: data.cups ?? 'Cliente nuevo',
       cups: data.cups,
       comercializadora: data.comercializadora,
       tarifa: data.tarifa,
       estado: 'prospecto',
+      user_id: user?.id,
     })
     if (err) toast({ title: 'Error al guardar cliente', variant: 'destructive' })
     else toast({ title: 'Cliente guardado correctamente' })
