@@ -69,3 +69,7 @@ create policy "acciones_owner" on acciones
 create index if not exists acciones_user_idx    on acciones (user_id);
 create index if not exists acciones_fecha_idx   on acciones (fecha);
 create index if not exists acciones_cliente_idx on acciones (cliente_id);
+
+-- ── 4. Permisos al rol authenticated ─────────────────────────────────────────
+grant select, insert, update, delete on contratos to authenticated;
+grant select, insert, update, delete on acciones  to authenticated;

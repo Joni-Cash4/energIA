@@ -119,7 +119,7 @@ export default function ContratosPage() {
       : await supabase.from('contratos').insert(payload)
 
     if (error) {
-      toast({ title: `Error: ${error.message}`, variant: 'destructive' })
+      toast({ title: 'Error al guardar el contrato', variant: 'destructive' })
     } else {
       toast({ title: editId ? 'Contrato actualizado' : 'Contrato creado' })
       setShowForm(false); setEditId(null); setForm({ ...EMPTY })
