@@ -293,7 +293,7 @@ export default function ContratosPage() {
               <div className="p-6 space-y-4">
                 <div>
                   <label className="block text-xs text-[#9CA3AF] mb-1.5">Cliente</label>
-                  <Select value={form.cliente_id} onValueChange={v => setForm(p => ({ ...p, cliente_id: v }))}>
+                  <Select value={form.cliente_id || undefined} onValueChange={v => setForm(p => ({ ...p, cliente_id: v }))}>
                     <SelectTrigger><SelectValue placeholder="Seleccionar cliente..." /></SelectTrigger>
                     <SelectContent>
                       {clientes.map(c => (
