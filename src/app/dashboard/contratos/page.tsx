@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, CheckCircle2, Loader2, X, Save, FileCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -36,7 +35,6 @@ const EMPTY: {
 
 export default function ContratosPage() {
   const { toast } = useToast()
-  const searchParams = useSearchParams()
   const [contratos, setContratos] = useState<Contrato[]>([])
   const [clientes, setClientes] = useState<Pick<Cliente, 'id' | 'nombre' | 'empresa'>[]>([])
   const [loading, setLoading] = useState(true)
@@ -64,13 +62,13 @@ export default function ContratosPage() {
 
   // Abrir formulario con cliente pre-seleccionado si viene de ?cliente_id=xxx
   useEffect(() => {
-    const clienteId = searchParams.get('cliente_id')
+    const clienteId = new URLSearchParams(window.location.search).get('cliente_id')
     if (clienteId) {
       setForm({ ...EMPTY, cliente_id: clienteId })
       setEditId(null)
       setShowForm(true)
     }
-  }, [searchParams])
+  }, [])
 
   const proximos = contratos.filter(c =>
     c.fecha_vencimiento &&
