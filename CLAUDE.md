@@ -80,11 +80,29 @@ GET https://apidatos.ree.es/es/datos/mercados/precios-mercados-tiempo-real
 Devuelve `included[0].attributes.values[]` con `{value: number (€/MWh), datetime: string}`.
 Confirmado funcionando desde Vercel.
 
+## Periodos tarifarios 3.0TD Península (src/lib/periodos.ts)
+Fuente: BOE-A-2001-20850 / CNMC Circular 3/2020. Única fuente de verdad — usar `getPeriodo()`.
+- **Valle 00-08h** → P6 siempre (cualquier día/temporada)
+- **Sáb/Dom/Festivo** → P6 todo el día
+- **Laborable 08-24h**: punta (09-14h, 18-22h) / llano (08-09h, 14-18h, 22-24h):
+  - Alta (ene,feb,jul,dic): punta=P1, llano=P2
+  - Media-Alta (mar,nov):   punta=P2, llano=P3
+  - Media (jun,ago,sep):    punta=P3, llano=P4
+  - Baja (abr,may,oct):     punta=P4, llano=P5
+
 ## Lógica de simulación v3.0 (src/lib/market-rates.ts)
 Motor portado 1:1 desde el sistema Python probado en producción
 (`C:\MonitorizacionEnergetica\sistema\core\motor_calculo.py` + `fuentes_mercado.py` +
 `modules\tarifas_atulado.py`). Tablas BOE 2026 completas para 2.0TD/3.0TD/6.1TD:
 peajes/cargos energía y potencia, CAP, PERD por defecto, Atulado BOE+WEB.
+
+## Peajes de potencia 3.0TD — fuente y valores verificados
+Fuente: **BOE-A-2025-26348** (Resolución CNMC dic. 2025, vigente 1 ene 2026).
+Verificado contra Excel simulador de tarifas de Jonathan — todos los periodos coinciden al céntimo.
+- Peaje = transporte + distribución (CNMC). Cargo = MITECO (parcialmente suspendido en 2026, ~60.8% del teórico).
+- **P5 y P6 tienen el MISMO peaje** (0.5353 €/kW·año). El error histórico era P6=0.62 (incorrecto).
+- Combinado (peaje+cargo)/365 por periodo: P1=0.055827, P2=0.029089, P3=0.012278, P4=0.010647, P5=0.006887, P6=0.003951 €/kW·día.
+- Para MIMIPAU (30/35/35/35/35/60 kW, 31 días): total potencia Próxima = **123.18€** exacto.
 
 - **Fórmula mercado Próxima Cristalina**: `PERD × (PMD_histórico + SC + CAP)`
   - PMD: precio OMIE real del **periodo exacto de la factura** (no el de hoy) vía
@@ -110,6 +128,23 @@ peajes/cargos energía y potencia, CAP, PERD por defecto, Atulado BOE+WEB.
 5. `simFija()` ×2 (BOE y WEB): tarifas fijas Atulado + mismos impuestos derivados
 6. Fee Jonathan se aplica en cliente (dashboard) sobre sim_indexada — NO va al PDF del cliente
 
+## IEE — auto-adaptativo a cualquier régimen regulatorio
+- Se deriva el **tipo efectivo** de la factura real: `tipoIee = importe_iee / (base_imponible - iee - alquiler)`.
+- Ese mismo tipo se aplica sobre la base monetaria de cada simulación → replica la mecánica de la factura.
+- RDL 7/2026 (1.0€/MWh mínimo): tipoIee ≈ 0.64% → error ~2€ en sims (aceptable).
+- Si vuelve al 5.1127%: tipoIee ≈ 5.1127% → se aplica correctamente sin tocar código.
+- `applyFee` también recalcula IEE con el nuevo tipo sobre la base ampliada por el fee.
+- **No hardcodear** ningún tipo de IEE ni asumir si es €/MWh o % — siempre derivar de la factura.
+
+## PERD real mensual — ESIOS PVPCDATA (NO el Ki de la factura del cliente)
+- El **Ki** que aparece en facturas de comercializadoras (ej. Acciona Ki=1.23) es propio de esa
+  comercializadora y NO es el PERD que usa Próxima para calcular su indexada.
+- El PERD correcto para simular Próxima es el que da **ESIOS PVPCDATA** (COF2TD).
+- Se obtiene ejecutando el sistema Python local — Vercel nunca llama a ESIOS.
+- Valores en `PERD_REAL_MENSUAL` en market-rates.ts, leídos por `getMercadoReal` como tier 2.
+- **2026-03 (3.0TD)**: 1.040 para todos los periodos — confirmado Python comparativa MIMIPAU 20260616.
+- Actualizar mensualmente vía Supabase (`mercado_perd`) o hardcodeado aquí como fallback.
+
 ## Bugs corregidos (no reintroducir)
 - Step2Results.tsx: cuando `ahorro_estimado_anual` es negativo (indexada más cara que la
   tarifa actual), NO mostrar el CountUp roto — usar el bloque alternativo "tarifa actual
@@ -118,10 +153,14 @@ peajes/cargos energía y potencia, CAP, PERD por defecto, Atulado BOE+WEB.
   siempre usar `/api/market-historical` con las fechas exactas de la factura.
 
 ## PDF generado (jsPDF, client-side)
-- 3 columnas: Factura actual | Tarifa Indexada | Tarifa Fija (IVA 10%)
-- Incluye desglose: energía, potencia, reactiva, IEE, alquiler, IVA, TOTAL
-- Tabla periodos con precio actual vs precio indexado hoy
-- NO incluye honorarios del asesor ni nombres de empresas
+- **4 columnas**: Factura actual | Próxima Cristalina | Atulado BOE | Atulado WEB
+- Desglose completo: potencia, energía activa, cargo gestión (fee), otros costes regulados
+  (FNEE/GO/bono/tasas — solo indexada), reactiva, alquiler, subtotal sin impuestos,
+  IEE (tipo efectivo real), base IVA, IVA, TOTAL
+- Marca ★ en la opción fija recomendada (BOE o WEB según ratio kWh/kW)
+- Tabla por periodo con precio actual vs precio indexado (al final)
+- Footer incluye fuente de PERD (ESIOS real / confirmado / estimación)
+- NO incluye honorarios del asesor ni nombres de empresas en el PDF cliente
 
 ## Convenciones
 - Componentes en PascalCase, hooks `use-` en kebab-case.
