@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Download, Save, Loader2, Plus } from 'lucide-react'
+import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -11,7 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import type { Cliente, Factura, ClienteEstado } from '@/types'
+import type { Cliente, Factura, Contrato, ClienteEstado } from '@/types'
+
+function diasRestantes(fecha: string) {
+  return Math.ceil((new Date(fecha).getTime() - Date.now()) / 86400000)
+}
 
 const ESTADOS: { value: ClienteEstado; label: string }[] = [
   { value: 'prospecto', label: 'Prospecto' },
@@ -31,6 +35,7 @@ export default function ClienteDetailPage() {
   const { toast } = useToast()
   const [cliente, setCliente] = useState<Cliente | null>(null)
   const [facturas, setFacturas] = useState<Factura[]>([])
+  const [contratos, setContratos] = useState<Contrato[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -49,7 +54,8 @@ export default function ClienteDetailPage() {
     Promise.all([
       supabase.from('clientes').select('*').eq('id', id).single(),
       supabase.from('facturas').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
-    ]).then(([{ data: c }, { data: f }]) => {
+      supabase.from('contratos').select('*').eq('cliente_id', id).order('fecha_vencimiento', { ascending: true }),
+    ]).then(([{ data: c }, { data: f }, { data: ct }]) => {
       if (!c) { router.replace('/dashboard/clientes'); return }
       setCliente(c)
       setEstado(c.estado)
@@ -61,6 +67,7 @@ export default function ClienteDetailPage() {
       setProximoContacto(c.proximo_contacto ?? '')
       setFechaInicioContrato(c.fecha_inicio_contrato ?? '')
       setFacturas(f ?? [])
+      setContratos((ct ?? []) as Contrato[])
       setLoading(false)
     })
   }, [id, router])
@@ -124,6 +131,64 @@ export default function ClienteDetailPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Contratos */}
+          <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#1F1F1F] flex items-center justify-between">
+              <h2 className="text-white font-semibold">Contratos</h2>
+              <Link href={`/dashboard/contratos?cliente_id=${id}`}>
+                <Button variant="secondary" size="sm" className="gap-1.5">
+                  <Plus className="w-3.5 h-3.5" />Añadir
+                </Button>
+              </Link>
+            </div>
+            {contratos.length === 0 ? (
+              <div className="py-10 text-center text-[#6B7280] text-sm">No hay contratos registrados.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[#1F1F1F]">
+                      {['Vencimiento', 'Comercializadora', 'Producto', 'Días', 'Renovación'].map(h => (
+                        <th key={h} className="px-5 py-3 text-left text-xs text-[#6B7280] uppercase tracking-wide font-medium">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contratos.map((ct) => {
+                      const dias = ct.fecha_vencimiento ? diasRestantes(ct.fecha_vencimiento) : null
+                      return (
+                        <tr key={ct.id} className="border-b border-[#1F1F1F] last:border-0 hover:bg-[#1A1A1A]">
+                          <td className="px-5 py-3 text-[#9CA3AF] text-xs">
+                            {ct.fecha_vencimiento ? formatDate(ct.fecha_vencimiento) : '—'}
+                          </td>
+                          <td className="px-5 py-3 text-[#9CA3AF]">{ct.comercializadora ?? '—'}</td>
+                          <td className="px-5 py-3 text-[#9CA3AF]">{ct.producto ?? '—'}</td>
+                          <td className="px-5 py-3">
+                            {dias !== null ? (
+                              <span className={`text-xs font-semibold ${
+                                ct.renovacion_verificada ? 'text-[#6B7280]' :
+                                dias <= 7  ? 'text-red-400' :
+                                dias <= 30 ? 'text-yellow-400' : 'text-[#00E676]'
+                              }`}>
+                                {ct.renovacion_verificada ? 'Verificado' : `${dias}d`}
+                              </span>
+                            ) : '—'}
+                          </td>
+                          <td className="px-5 py-3">
+                            <div className={`flex items-center gap-1.5 text-xs ${ct.renovacion_verificada ? 'text-[#00E676]' : 'text-[#6B7280]'}`}>
+                              <FileCheck className="w-3.5 h-3.5" />
+                              {ct.renovacion_verificada ? 'Verificado' : 'Pendiente'}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Facturas */}

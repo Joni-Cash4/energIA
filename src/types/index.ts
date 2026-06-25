@@ -186,6 +186,44 @@ export interface Factura {
   created_at: string
 }
 
+export type ContratoEstado  = 'activo' | 'baja' | 'pendiente'
+export type AccionTipo      = 'llamada' | 'email' | 'reunion' | 'visita' | 'otro'
+export type AccionResultado = 'pendiente' | 'completado' | 'fracaso' | 'no_contesta'
+
+export interface Contrato {
+  id: string
+  user_id: string
+  cliente_id?: string
+  cups?: string
+  comercializadora?: string
+  tarifa?: string
+  producto?: string
+  fecha_firma?: string
+  fecha_alta?: string
+  fecha_vencimiento?: string
+  duracion_meses?: number
+  estado: ContratoEstado
+  renovacion_verificada: boolean
+  a_cobrar?: number
+  notas?: string
+  created_at: string
+  updated_at: string
+  cliente?: Pick<Cliente, 'id' | 'nombre' | 'empresa'>
+}
+
+export interface Accion {
+  id: string
+  user_id: string
+  cliente_id?: string
+  fecha: string
+  hora?: string
+  tipo: AccionTipo
+  resultado: AccionResultado
+  notas?: string
+  created_at: string
+  cliente?: Pick<Cliente, 'id' | 'nombre' | 'empresa'>
+}
+
 // ─── UI Helpers ───────────────────────────────────────────────────────────────
 
 export type ComparadorStep = 1 | 2 | 3
