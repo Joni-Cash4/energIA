@@ -51,7 +51,7 @@ export default function ContratosPage() {
     const supabase = getSupabaseClient()
     const [{ data: c }, { data: cl }] = await Promise.all([
       supabase.from('contratos')
-        .select('*, cliente:clientes(id,nombre,empresa)')
+        .select('*')
         .order('fecha_vencimiento', { ascending: true, nullsFirst: false }),
       supabase.from('clientes').select('id,nombre,empresa').order('nombre'),
     ])
@@ -225,7 +225,8 @@ export default function ContratosPage() {
                 <tbody>
                   {filtered.map((c, i) => {
                     const dias = c.fecha_vencimiento ? diasRestantes(c.fecha_vencimiento) : null
-                    const nombre = (c.cliente as Contrato['cliente'])?.nombre ?? c.cups ?? '—'
+                    const clienteInfo = clientes.find(cl => cl.id === c.cliente_id)
+                    const nombre = clienteInfo?.nombre ?? c.cups ?? '—'
                     return (
                       <motion.tr key={c.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
                         className="border-b border-[#1F1F1F] last:border-0 hover:bg-[#1A1A1A] transition-colors cursor-pointer"
