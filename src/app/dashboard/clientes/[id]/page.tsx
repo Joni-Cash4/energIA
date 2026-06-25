@@ -17,6 +17,12 @@ function diasRestantes(fecha: string) {
   return Math.ceil((new Date(fecha).getTime() - Date.now()) / 86400000)
 }
 
+function mesesRestantes(fecha: string) {
+  const d = new Date(fecha)
+  const now = new Date()
+  return (d.getFullYear() - now.getFullYear()) * 12 + (d.getMonth() - now.getMonth())
+}
+
 const ESTADOS: { value: ClienteEstado; label: string }[] = [
   { value: 'prospecto', label: 'Prospecto' },
   { value: 'reunion',   label: 'Reunión' },
@@ -40,7 +46,21 @@ export default function ClienteDetailPage() {
   const [saving, setSaving] = useState(false)
   const [dismissing, setDismissing] = useState(false)
 
-  // Editable fields
+  // Contact fields
+  const [nombre,    setNombre]    = useState('')
+  const [empresa,   setEmpresa]   = useState('')
+  const [nif,       setNif]       = useState('')
+  const [email,     setEmail]     = useState('')
+  const [telefono,  setTelefono]  = useState('')
+  const [movil,     setMovil]     = useState('')
+  const [cups,      setCups]      = useState('')
+  const [comercializadora, setComercializadora] = useState('')
+  const [direccion, setDireccion] = useState('')
+  const [cp,        setCp]        = useState('')
+  const [poblacion, setPoblacion] = useState('')
+  const [provincia, setProvincia] = useState('')
+
+  // Management fields
   const [estado,               setEstado]               = useState<ClienteEstado>('prospecto')
   const [notas,                setNotas]                = useState('')
   const [feeEnergia,           setFeeEnergia]           = useState('')
@@ -59,6 +79,18 @@ export default function ClienteDetailPage() {
     ]).then(([{ data: c }, { data: f }, { data: ct }]) => {
       if (!c) { router.replace('/dashboard/clientes'); return }
       setCliente(c)
+      setNombre(c.nombre ?? '')
+      setEmpresa(c.empresa ?? '')
+      setNif(c.nif ?? '')
+      setEmail(c.email ?? '')
+      setTelefono(c.telefono ?? '')
+      setMovil(c.movil ?? '')
+      setCups(c.cups ?? '')
+      setComercializadora(c.comercializadora ?? '')
+      setDireccion(c.direccion ?? '')
+      setCp(c.cp ?? '')
+      setPoblacion(c.poblacion ?? '')
+      setProvincia(c.provincia ?? '')
       setEstado(c.estado)
       setNotas(c.notas ?? '')
       setFeeEnergia(String(c.fee_energia ?? ''))
@@ -86,6 +118,18 @@ export default function ClienteDetailPage() {
     setSaving(true)
     const supabase = getSupabaseClient()
     const { error } = await supabase.from('clientes').update({
+      nombre,
+      empresa:               empresa || null,
+      nif:                   nif || null,
+      email:                 email || null,
+      telefono:              telefono || null,
+      movil:                 movil || null,
+      cups:                  cups || null,
+      comercializadora:      comercializadora || null,
+      direccion:             direccion || null,
+      cp:                    cp || null,
+      poblacion:             poblacion || null,
+      provincia:             provincia || null,
       estado,
       notas,
       fee_energia:           feeEnergia ? Number(feeEnergia) : null,
@@ -97,7 +141,10 @@ export default function ClienteDetailPage() {
     }).eq('id', id)
 
     if (error) toast({ title: 'Error al guardar', variant: 'destructive' })
-    else { toast({ title: 'Cambios guardados' }); setCliente((p) => p ? { ...p, estado, notas } : p) }
+    else {
+      toast({ title: 'Cambios guardados' })
+      setCliente((p) => p ? { ...p, nombre, empresa: empresa || undefined, estado, notas, email: email || undefined, telefono: telefono || undefined } : p)
+    }
     setSaving(false)
   }
 
@@ -107,6 +154,14 @@ export default function ClienteDetailPage() {
     </div>
   )
   if (!cliente) return null
+
+  // Próximo vencimiento de contrato activo
+  const contratoActivo = contratos
+    .filter(ct => ct.estado === 'activo' && ct.fecha_vencimiento)
+    .sort((a, b) => new Date(a.fecha_vencimiento!).getTime() - new Date(b.fecha_vencimiento!).getTime())
+    .at(0)
+
+  const mesesVenc = contratoActivo?.fecha_vencimiento ? mesesRestantes(contratoActivo.fecha_vencimiento) : null
 
   return (
     <div>
@@ -120,7 +175,7 @@ export default function ClienteDetailPage() {
             <Clock className="w-4 h-4 shrink-0" />
             <div>
               <p className="font-medium">Pendiente de revisión</p>
-              <p className="text-amber-300/60 text-xs mt-0.5">Este cliente no tiene contrato registrado o lleva más de 1 año sin renovar. Registra su contrato y márcalo como atendido.</p>
+              <p className="text-amber-300/60 text-xs mt-0.5">Sin contrato registrado o con contrato vencido hace más de 1 año. Registra el contrato actual y marca como atendido.</p>
             </div>
           </div>
           <Button
@@ -146,15 +201,30 @@ export default function ClienteDetailPage() {
                 <h1 className="text-2xl font-bold text-white">{cliente.nombre}</h1>
                 {cliente.empresa && <p className="text-[#9CA3AF] mt-1">{cliente.empresa}</p>}
               </div>
-              <Badge variant={ESTADO_VARIANT[cliente.estado]}>{ESTADOS.find(e => e.value === cliente.estado)?.label}</Badge>
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                <Badge variant={ESTADO_VARIANT[cliente.estado]}>{ESTADOS.find(e => e.value === cliente.estado)?.label}</Badge>
+                {mesesVenc !== null && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                    mesesVenc <= 1 ? 'text-red-400 border-red-400/30 bg-red-400/5' :
+                    mesesVenc <= 3 ? 'text-yellow-400 border-yellow-400/30 bg-yellow-400/5' :
+                    'text-[#00E676] border-[#00E676]/30 bg-[#00E676]/5'
+                  }`}>
+                    Renueva en {mesesVenc <= 0 ? 'menos de 1 mes' : `${mesesVenc} ${mesesVenc === 1 ? 'mes' : 'meses'}`}
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="grid sm:grid-cols-2 gap-4 text-sm">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-sm">
               {[
+                { label: 'NIF / DNI',        value: cliente.nif },
                 { label: 'Email',            value: cliente.email },
                 { label: 'Teléfono',         value: cliente.telefono },
+                { label: 'Móvil',            value: cliente.movil },
                 { label: 'CUPS',             value: cliente.cups, mono: true },
                 { label: 'Comercializadora', value: cliente.comercializadora },
-                { label: 'Tarifa',           value: cliente.tarifa },
+                { label: 'Dirección',        value: cliente.direccion },
+                { label: 'CP / Localidad',   value: [cliente.cp, cliente.poblacion].filter(Boolean).join(' ') },
+                { label: 'Provincia',        value: cliente.provincia },
                 { label: 'Alta',             value: formatDate(cliente.created_at) },
               ].filter(({ value }) => value).map(({ label, value, mono }) => (
                 <div key={label}>
@@ -182,32 +252,42 @@ export default function ClienteDetailPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#1F1F1F]">
-                      {['Vencimiento', 'Comercializadora', 'Producto', 'Días', 'Renovación'].map(h => (
-                        <th key={h} className="px-5 py-3 text-left text-xs text-[#6B7280] uppercase tracking-wide font-medium">{h}</th>
+                      {['Alta', 'Vencimiento', 'Duración', 'Renueva en', 'Comercializadora', 'Producto', 'Renovación'].map(h => (
+                        <th key={h} className="px-5 py-3 text-left text-xs text-[#6B7280] uppercase tracking-wide font-medium whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {contratos.map((ct) => {
                       const dias = ct.fecha_vencimiento ? diasRestantes(ct.fecha_vencimiento) : null
+                      const meses = ct.fecha_vencimiento ? mesesRestantes(ct.fecha_vencimiento) : null
                       return (
                         <tr key={ct.id} className="border-b border-[#1F1F1F] last:border-0 hover:bg-[#1A1A1A]">
-                          <td className="px-5 py-3 text-[#9CA3AF] text-xs">
+                          <td className="px-5 py-3 text-[#9CA3AF] text-xs whitespace-nowrap">
+                            {ct.fecha_alta ? formatDate(ct.fecha_alta) : '—'}
+                          </td>
+                          <td className="px-5 py-3 text-[#9CA3AF] text-xs whitespace-nowrap">
                             {ct.fecha_vencimiento ? formatDate(ct.fecha_vencimiento) : '—'}
                           </td>
-                          <td className="px-5 py-3 text-[#9CA3AF]">{ct.comercializadora ?? '—'}</td>
-                          <td className="px-5 py-3 text-[#9CA3AF]">{ct.producto ?? '—'}</td>
+                          <td className="px-5 py-3 text-[#9CA3AF] text-xs">
+                            {ct.duracion_meses ? `${ct.duracion_meses} meses` : '—'}
+                          </td>
                           <td className="px-5 py-3">
-                            {dias !== null ? (
+                            {dias !== null && meses !== null ? (
                               <span className={`text-xs font-semibold ${
                                 ct.renovacion_verificada ? 'text-[#6B7280]' :
-                                dias <= 7  ? 'text-red-400' :
+                                dias < 0  ? 'text-red-400' :
                                 dias <= 30 ? 'text-yellow-400' : 'text-[#00E676]'
                               }`}>
-                                {ct.renovacion_verificada ? 'Verificado' : `${dias}d`}
+                                {ct.renovacion_verificada ? 'Verificado' :
+                                 dias < 0 ? `Vencido hace ${Math.abs(dias)}d` :
+                                 meses <= 0 ? `${dias}d` :
+                                 `${meses} ${meses === 1 ? 'mes' : 'meses'}`}
                               </span>
                             ) : '—'}
                           </td>
+                          <td className="px-5 py-3 text-[#9CA3AF]">{ct.comercializadora ?? '—'}</td>
+                          <td className="px-5 py-3 text-[#9CA3AF]">{ct.producto ?? '—'}</td>
                           <td className="px-5 py-3">
                             <div className={`flex items-center gap-1.5 text-xs ${ct.renovacion_verificada ? 'text-[#00E676]' : 'text-[#6B7280]'}`}>
                               <FileCheck className="w-3.5 h-3.5" />
@@ -273,7 +353,68 @@ export default function ClienteDetailPage() {
 
         {/* Right panel */}
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="w-full xl:w-80 space-y-5">
-          {/* Estado y notas */}
+
+          {/* Datos personales */}
+          <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-5">
+            <h2 className="text-white font-semibold mb-4">Datos personales</h2>
+            <div className="space-y-3">
+              {([
+                { label: 'Nombre completo',       value: nombre,   set: setNombre,   type: 'text' },
+                { label: 'Empresa / razón social', value: empresa, set: setEmpresa,  type: 'text' },
+                { label: 'NIF / DNI / CIF',        value: nif,     set: setNif,      type: 'text' },
+                { label: 'Email',                  value: email,   set: setEmail,    type: 'email' },
+                { label: 'Teléfono fijo',          value: telefono, set: setTelefono, type: 'tel' },
+                { label: 'Móvil',                  value: movil,   set: setMovil,    type: 'tel' },
+              ] as const).map(({ label, value, set, type }) => (
+                <div key={label}>
+                  <label className="block text-xs text-[#9CA3AF] mb-1">{label}</label>
+                  <Input type={type} value={value} onChange={(e) => (set as (v: string) => void)(e.target.value)} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Dirección */}
+          <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-5">
+            <h2 className="text-white font-semibold mb-4">Dirección</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-[#9CA3AF] mb-1">Dirección</label>
+                <Input value={direccion} placeholder="Calle Mayor 1, 2º B" onChange={(e) => setDireccion(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-[#9CA3AF] mb-1">CP</label>
+                  <Input value={cp} placeholder="48950" onChange={(e) => setCp(e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-xs text-[#9CA3AF] mb-1">Localidad</label>
+                  <Input value={poblacion} placeholder="Bilbao" onChange={(e) => setPoblacion(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-[#9CA3AF] mb-1">Provincia</label>
+                <Input value={provincia} placeholder="Vizcaya" onChange={(e) => setProvincia(e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          {/* Suministro */}
+          <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-5">
+            <h2 className="text-white font-semibold mb-4">Suministro</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-[#9CA3AF] mb-1">CUPS</label>
+                <Input value={cups} placeholder="ES0021..." onChange={(e) => setCups(e.target.value)} className="font-mono text-xs" />
+              </div>
+              <div>
+                <label className="block text-xs text-[#9CA3AF] mb-1">Comercializadora actual</label>
+                <Input value={comercializadora} onChange={(e) => setComercializadora(e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          {/* Gestión */}
           <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-5">
             <h2 className="text-white font-semibold mb-4">Gestión</h2>
             <div className="space-y-4">
@@ -295,7 +436,7 @@ export default function ClienteDetailPage() {
                 <textarea
                   value={notas}
                   onChange={(e) => setNotas(e.target.value)}
-                  rows={4}
+                  rows={3}
                   className="w-full rounded-lg border border-[#2A2A2A] bg-[#0F0F0F] px-3 py-2 text-sm text-white placeholder:text-[#6B7280] focus:outline-none focus:ring-2 focus:ring-[#00E676] resize-none"
                   placeholder="Notas internas..."
                 />
@@ -303,22 +444,25 @@ export default function ClienteDetailPage() {
             </div>
           </div>
 
-          {/* Cartera / fee fields */}
+          {/* Cartera / fee */}
           <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-5">
             <h2 className="text-white font-semibold mb-4">Datos de cartera</h2>
             <div className="space-y-3">
-              {[
-                { label: 'Fee energía (€/MWh)',     value: feeEnergia,          set: setFeeEnergia,          type: 'number', step: '0.5' },
-                { label: 'Fee potencia (€/kW·año)', value: feePotencia,         set: setFeePotencia,         type: 'number', step: '0.1' },
-                { label: 'kWh anuales',             value: kwhAnuales,          set: setKwhAnuales,          type: 'number', step: '1000' },
-                { label: 'kW contratados',          value: kwContratados,       set: setKwContratados,       type: 'number', step: '0.5' },
-                { label: 'Inicio contrato',         value: fechaInicioContrato, set: setFechaInicioContrato, type: 'date' },
-              ].map(({ label, value, set, type, step }) => (
+              {([
+                { label: 'Fee energía (€/MWh)',     value: feeEnergia,          set: setFeeEnergia,          step: '0.5' },
+                { label: 'Fee potencia (€/kW·año)', value: feePotencia,         set: setFeePotencia,         step: '0.1' },
+                { label: 'kWh anuales',             value: kwhAnuales,          set: setKwhAnuales,          step: '1000' },
+                { label: 'kW contratados',          value: kwContratados,       set: setKwContratados,       step: '0.5' },
+              ] as const).map(({ label, value, set, step }) => (
                 <div key={label}>
                   <label className="block text-xs text-[#9CA3AF] mb-1">{label}</label>
-                  <Input type={type} step={step} value={value} onChange={(e) => set(e.target.value)} />
+                  <Input type="number" step={step} value={value} onChange={(e) => (set as (v: string) => void)(e.target.value)} />
                 </div>
               ))}
+              <div>
+                <label className="block text-xs text-[#9CA3AF] mb-1">Inicio contrato</label>
+                <Input type="date" value={fechaInicioContrato} onChange={(e) => setFechaInicioContrato(e.target.value)} />
+              </div>
             </div>
           </div>
 

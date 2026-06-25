@@ -23,6 +23,16 @@ function DiaBadge({ dias, verificado }: { dias: number; verificado: boolean }) {
   return <Badge variant="default">{dias}d</Badge>
 }
 
+function addMonths(dateStr: string, months: number): string {
+  const d = new Date(dateStr)
+  d.setMonth(d.getMonth() + months)
+  // Ajustar si el día se desbordó (ej: 31 ene + 1 mes → 3 mar)
+  const expected = new Date(dateStr)
+  expected.setMonth(expected.getMonth() + months, 1)
+  if (d.getMonth() !== expected.getMonth()) d.setDate(0)
+  return d.toISOString().split('T')[0]
+}
+
 const EMPTY: {
   cliente_id: string; cups: string; comercializadora: string; tarifa: string
   producto: string; fecha_firma: string; fecha_alta: string; fecha_vencimiento: string
@@ -119,6 +129,14 @@ export default function ContratosPage() {
     if (error) {
       toast({ title: 'Error al guardar el contrato', variant: 'destructive' })
     } else {
+      // Si hay cliente vinculado y el contrato es activo con vencimiento dentro del año, limpiar revision_pendiente
+      if (form.cliente_id && form.estado === 'activo' && form.fecha_vencimiento) {
+        const venc = new Date(form.fecha_vencimiento)
+        const unAñoAtras = new Date(); unAñoAtras.setFullYear(unAñoAtras.getFullYear() - 1)
+        if (venc >= unAñoAtras) {
+          await supabase.from('clientes').update({ revision_pendiente: false }).eq('id', form.cliente_id)
+        }
+      }
       toast({ title: editId ? 'Contrato actualizado' : 'Contrato creado' })
       setShowForm(false); setEditId(null); setForm({ ...EMPTY })
       load()
@@ -325,22 +343,50 @@ export default function ContratosPage() {
                   <div>
                     <label className="block text-xs text-[#9CA3AF] mb-1.5">Fecha alta</label>
                     <Input type="date" value={form.fecha_alta}
-                      onChange={e => setForm(p => ({ ...p, fecha_alta: e.target.value }))} />
+                      onChange={e => {
+                        const val = e.target.value
+                        setForm(p => {
+                          const m = parseInt(p.duracion_meses)
+                          const venc = val && !isNaN(m) && m > 0 ? addMonths(val, m) : p.fecha_vencimiento
+                          return { ...p, fecha_alta: val, fecha_vencimiento: venc }
+                        })
+                      }} />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
+                    <label className="block text-xs text-[#9CA3AF] mb-1.5">Duración (meses)</label>
+                    <Input type="number" value={form.duracion_meses}
+                      onChange={e => {
+                        const val = e.target.value
+                        setForm(p => {
+                          const m = parseInt(val)
+                          const venc = p.fecha_alta && !isNaN(m) && m > 0 ? addMonths(p.fecha_alta, m) : p.fecha_vencimiento
+                          return { ...p, duracion_meses: val, fecha_vencimiento: venc }
+                        })
+                      }} />
+                  </div>
+                  <div>
                     <label className="block text-xs text-[#9CA3AF] mb-1.5">Vencimiento *</label>
                     <Input type="date" value={form.fecha_vencimiento}
                       onChange={e => setForm(p => ({ ...p, fecha_vencimiento: e.target.value }))} />
                   </div>
-                  <div>
-                    <label className="block text-xs text-[#9CA3AF] mb-1.5">Duración (meses)</label>
-                    <Input type="number" value={form.duracion_meses}
-                      onChange={e => setForm(p => ({ ...p, duracion_meses: e.target.value }))} />
-                  </div>
                 </div>
+
+                {/* Preview renovación */}
+                {form.fecha_vencimiento && (() => {
+                  const dias = Math.ceil((new Date(form.fecha_vencimiento).getTime() - Date.now()) / 86400000)
+                  const meses = Math.round(dias / 30)
+                  const color = dias < 0 ? 'text-red-400' : dias <= 30 ? 'text-yellow-400' : 'text-[#00E676]'
+                  const label = dias < 0
+                    ? `Vencido hace ${Math.abs(dias)} días`
+                    : meses <= 1 ? `Renovación dentro de ${dias} días`
+                    : `Renovación dentro de ${meses} meses`
+                  return (
+                    <p className={`text-xs font-medium ${color} -mt-1`}>{label}</p>
+                  )
+                })()}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>

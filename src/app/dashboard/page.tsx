@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { Users, Inbox, FileText, TrendingUp, ArrowRight, Plus, CalendarDays, Mail } from 'lucide-react'
+import { Users, Inbox, FileText, TrendingUp, ArrowRight, Plus, CalendarDays, Mail, Clock, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatCurrency } from '@/lib/utils'
@@ -14,19 +14,23 @@ interface Summary {
   ahorroTotal: number
   agendaPendientes: number
   contactosSinLeer: number
+  renovacionesProximas: number
+  paraRevision: number
 }
 
 export default function DashboardHome() {
   const [s, setS] = useState<Summary>({
     leadsNuevos: 0, clientesActivos: 0, facturasSemana: 0,
     ahorroTotal: 0, agendaPendientes: 0, contactosSinLeer: 0,
+    renovacionesProximas: 0, paraRevision: 0,
   })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const supabase = getSupabaseClient()
-    const since = new Date(); since.setDate(since.getDate() - 7)
-    const en7   = new Date(); en7.setDate(en7.getDate() + 7)
+    const since  = new Date(); since.setDate(since.getDate() - 7)
+    const en7    = new Date(); en7.setDate(en7.getDate() + 7)
+    const en30   = new Date(); en30.setDate(en30.getDate() + 30)
 
     Promise.all([
       supabase.from('leads').select('id', { count: 'exact' }).eq('estado', 'nuevo'),
@@ -34,15 +38,22 @@ export default function DashboardHome() {
       supabase.from('facturas').select('id, ahorro_estimado_anual').gte('created_at', since.toISOString()),
       supabase.from('clientes').select('id', { count: 'exact' }).not('proximo_contacto', 'is', null).lte('proximo_contacto', en7.toISOString().split('T')[0]),
       supabase.from('contactos').select('id', { count: 'exact' }).eq('leido', false),
-    ]).then(([leads, clientes, facturas, agenda, contactos]) => {
+      supabase.from('contratos').select('id', { count: 'exact' })
+        .eq('estado', 'activo').eq('renovacion_verificada', false)
+        .gte('fecha_vencimiento', new Date().toISOString().split('T')[0])
+        .lte('fecha_vencimiento', en30.toISOString().split('T')[0]),
+      supabase.from('clientes').select('id', { count: 'exact' }).eq('revision_pendiente', true),
+    ]).then(([leads, clientes, facturas, agenda, contactos, renovaciones, revision]) => {
       const semana = facturas.data ?? []
       setS({
-        leadsNuevos:       leads.count ?? 0,
-        clientesActivos:   clientes.count ?? 0,
-        facturasSemana:    semana.length,
-        ahorroTotal:       semana.reduce((a, f) => a + (f.ahorro_estimado_anual ?? 0), 0),
-        agendaPendientes:  agenda.count ?? 0,
-        contactosSinLeer:  contactos.count ?? 0,
+        leadsNuevos:          leads.count ?? 0,
+        clientesActivos:      clientes.count ?? 0,
+        facturasSemana:       semana.length,
+        ahorroTotal:          semana.reduce((a, f) => a + (f.ahorro_estimado_anual ?? 0), 0),
+        agendaPendientes:     agenda.count ?? 0,
+        contactosSinLeer:     contactos.count ?? 0,
+        renovacionesProximas: renovaciones.count ?? 0,
+        paraRevision:         revision.count ?? 0,
       })
       setLoading(false)
     })
@@ -68,8 +79,36 @@ export default function DashboardHome() {
       </div>
 
       {/* Alert widgets */}
-      {!loading && (s.agendaPendientes > 0 || s.contactosSinLeer > 0) && (
+      {!loading && (s.renovacionesProximas > 0 || s.paraRevision > 0 || s.agendaPendientes > 0 || s.contactosSinLeer > 0) && (
         <div className="grid sm:grid-cols-2 gap-4 mb-6">
+          {s.renovacionesProximas > 0 && (
+            <Link href="/dashboard/contratos" className="flex items-center gap-3 p-4 bg-[#141414] border border-yellow-500/25 rounded-xl hover:border-yellow-500/50 transition-colors group">
+              <div className="w-9 h-9 rounded-lg bg-yellow-500/10 flex items-center justify-center shrink-0">
+                <RefreshCw className="w-4 h-4 text-yellow-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-medium">
+                  {s.renovacionesProximas} {s.renovacionesProximas === 1 ? 'contrato vence' : 'contratos vencen'} en los próximos 30 días
+                </p>
+                <p className="text-[#6B7280] text-xs mt-0.5">Gestionar renovaciones</p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-[#6B7280] group-hover:text-yellow-400 transition-colors shrink-0" />
+            </Link>
+          )}
+          {s.paraRevision > 0 && (
+            <Link href="/dashboard/clientes?tab=revision" className="flex items-center gap-3 p-4 bg-[#141414] border border-amber-400/25 rounded-xl hover:border-amber-400/50 transition-colors group">
+              <div className="w-9 h-9 rounded-lg bg-amber-400/10 flex items-center justify-center shrink-0">
+                <Clock className="w-4 h-4 text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-medium">
+                  {s.paraRevision} {s.paraRevision === 1 ? 'cliente pendiente' : 'clientes pendientes'} de revisión
+                </p>
+                <p className="text-[#6B7280] text-xs mt-0.5">Sin contrato registrado o vencido &gt;1 año</p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-[#6B7280] group-hover:text-amber-400 transition-colors shrink-0" />
+            </Link>
+          )}
           {s.agendaPendientes > 0 && (
             <Link href="/dashboard/agenda" className="flex items-center gap-3 p-4 bg-[#141414] border border-[#00E676]/25 rounded-xl hover:border-[#00E676]/50 transition-colors group">
               <div className="w-9 h-9 rounded-lg bg-[#00E676]/10 flex items-center justify-center shrink-0">
