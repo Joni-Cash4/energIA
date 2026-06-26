@@ -1,15 +1,16 @@
 'use client'
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Upload, FileText, Download, Save, Loader2, AlertCircle, X, Image } from 'lucide-react'
+import { Upload, FileText, Download, Save, Loader2, AlertCircle, X, Image, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { processInvoice } from '@/lib/api'
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatCurrency, formatNumber, cn } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import type { InvoiceAnalysis, SimTarifa } from '@/types'
+import type { InvoiceAnalysis, SimTarifa, Cliente } from '@/types'
 
 // El fee de Jonathan se suma siempre encima del precio de tarifa (indexada o fija).
 // El tipo IEE se deriva de la factura real y se aplica sobre la nueva base con fee,
@@ -389,13 +390,49 @@ async function generatePdf(
 // ─── Page component ───────────────────────────────────────────────────────────
 export default function NuevaFacturaPage() {
   const { toast } = useToast()
-  const [loading, setLoading]         = useState(false)
-  const [data, setData]               = useState<InvoiceAnalysis | null>(null)
+  const [loading, setLoading]           = useState(false)
+  const [data, setData]                 = useState<InvoiceAnalysis | null>(null)
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
-  const [feeEnergia, setFeeEnergia]   = useState(5)  // €/MWh
-  const [savingPdf, setSavingPdf]     = useState(false)
+  const [feeEnergia, setFeeEnergia]     = useState(5)  // €/MWh
+  const [savingPdf, setSavingPdf]       = useState(false)
   const [savingCliente, setSavingCliente] = useState(false)
-  const [error, setError]             = useState<string | null>(null)
+  const [error, setError]               = useState<string | null>(null)
+  const [clientes, setClientes]         = useState<Pick<Cliente, 'id' | 'nombre' | 'empresa'>[]>([])
+  const [selectedClienteId, setSelectedClienteId] = useState<string>('')
+  const [facturaSaved, setFacturaSaved] = useState(false)
+
+  useEffect(() => {
+    getSupabaseClient().from('clientes').select('id,nombre,empresa').order('nombre')
+      .then(({ data: cl }) => setClientes(cl ?? []))
+  }, [])
+
+  const saveFactura = useCallback(async (clienteId: string, fee: number, analysis: InvoiceAnalysis) => {
+    const precioMedio = analysis.kwh_total > 0
+      ? analysis.total_factura / analysis.kwh_total
+      : null
+    const { error: err } = await getSupabaseClient().from('facturas').insert({
+      cliente_id:                clienteId,
+      fecha_inicio:              analysis.fecha_inicio || null,
+      fecha_fin:                 analysis.fecha_fin    || null,
+      fecha_factura:             analysis.fecha_fin    || null,
+      dias_facturados:           analysis.dias_facturados || null,
+      cups:                      analysis.cups         || null,
+      comercializadora:          analysis.comercializadora || null,
+      tarifa:                    analysis.tarifa       || null,
+      potencia_contratada:       analysis.potencia_contratada || null,
+      total_factura:             analysis.total_factura,
+      kwh_total:                 analysis.kwh_total,
+      precio_medio_kwh:          precioMedio,
+      ahorro_estimado_anual:     analysis.ahorro_estimado_anual,
+      ahorro_estimado_mensual:   analysis.ahorro_estimado_mensual || null,
+      porcentaje_ahorro:         analysis.porcentaje_ahorro || null,
+      comercializadora_anterior: analysis.comercializadora || null,
+      tarifa_anterior:           analysis.tarifa       || null,
+      fee_aplicado:              fee,
+    })
+    if (!err) setFacturaSaved(true)
+    return err
+  }, [])
 
   const onDrop = useCallback((dropped: File[]) => {
     setPendingFiles((prev) => {
@@ -460,7 +497,13 @@ export default function NuevaFacturaPage() {
       a.download = `EnergIA_${data.cups || 'informe'}.pdf`
       a.click()
       URL.revokeObjectURL(url)
-      toast({ title: 'PDF descargado correctamente' })
+      // Auto-guardar factura si hay cliente vinculado
+      if (selectedClienteId && !facturaSaved) {
+        const err = await saveFactura(selectedClienteId, feeEnergia, data)
+        toast({ title: err ? 'PDF descargado (error al guardar factura)' : 'PDF descargado y factura guardada' })
+      } else {
+        toast({ title: 'PDF descargado correctamente' })
+      }
     } catch (e) {
       console.error(e)
       toast({ title: 'Error al generar PDF', variant: 'destructive' })
@@ -473,16 +516,21 @@ export default function NuevaFacturaPage() {
     setSavingCliente(true)
     const supabase = getSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    const { error: err } = await supabase.from('clientes').insert({
-      nombre: data.cups ?? 'Cliente nuevo',
-      cups: data.cups,
+    const { data: newCliente, error: err } = await supabase.from('clientes').insert({
+      nombre:           data.cups ?? 'Cliente nuevo',
+      cups:             data.cups,
       comercializadora: data.comercializadora,
-      tarifa: data.tarifa,
-      estado: 'prospecto',
-      user_id: user?.id,
-    })
-    if (err) toast({ title: 'Error al guardar cliente', variant: 'destructive' })
-    else toast({ title: 'Cliente guardado correctamente' })
+      tarifa:           data.tarifa,
+      estado:           'prospecto',
+      user_id:          user?.id,
+    }).select('id').single()
+    if (err) {
+      toast({ title: 'Error al guardar cliente', variant: 'destructive' })
+    } else {
+      setSelectedClienteId(newCliente.id)
+      const ferr = await saveFactura(newCliente.id, feeEnergia, data)
+      toast({ title: ferr ? 'Cliente guardado (error al guardar factura)' : 'Cliente y factura guardados' })
+    }
     setSavingCliente(false)
   }
 
@@ -890,15 +938,40 @@ export default function NuevaFacturaPage() {
             </div>
 
             {/* Acciones */}
-            <div className="flex flex-wrap gap-3">
-              <Button onClick={handleDownloadPdf} disabled={savingPdf} className="gap-2">
-                {savingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                Generar PDF comparativo
-              </Button>
-              <Button variant="secondary" onClick={handleSaveCliente} disabled={savingCliente} className="gap-2">
-                {savingCliente ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Guardar cliente
-              </Button>
+            <div className="space-y-3">
+              {/* Vincular a cliente existente */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 max-w-xs">
+                  <Select value={selectedClienteId || 'none'} onValueChange={v => { setSelectedClienteId(v === 'none' ? '' : v); setFacturaSaved(false) }}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Vincular a cliente existente..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin vincular</SelectItem>
+                      {clientes.map(c => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.nombre}{c.empresa ? ` — ${c.empresa}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {facturaSaved && (
+                  <span className="text-xs text-[#00E676] font-medium">✓ Factura guardada</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button onClick={handleDownloadPdf} disabled={savingPdf} className="gap-2">
+                  {savingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  Generar PDF comparativo
+                </Button>
+                {!selectedClienteId && (
+                  <Button variant="secondary" onClick={handleSaveCliente} disabled={savingCliente} className="gap-2">
+                    {savingCliente ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                    Crear cliente nuevo
+                  </Button>
+                )}
+              </div>
             </div>
 
           </motion.div>

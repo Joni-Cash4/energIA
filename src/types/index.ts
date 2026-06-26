@@ -182,11 +182,28 @@ export interface Cliente {
 export interface Factura {
   id: string
   cliente_id: string
+  // Periodo facturado
   fecha_inicio?: string
   fecha_fin?: string
+  fecha_factura?: string
+  dias_facturados?: number
+  // Suministro
+  cups?: string
+  comercializadora?: string
+  tarifa?: string
+  potencia_contratada?: number
+  // Importes
   total_factura?: number
   kwh_total?: number
+  precio_medio_kwh?: number
+  // Ahorro estimado vs indexada
   ahorro_estimado_anual?: number
+  ahorro_estimado_mensual?: number
+  porcentaje_ahorro?: number
+  // Contexto anterior (para comparación futura)
+  comercializadora_anterior?: string
+  tarifa_anterior?: string
+  // Fee asesor y adjuntos
   fee_aplicado?: number
   pdf_url?: string
   excel_url?: string
@@ -194,8 +211,8 @@ export interface Factura {
 }
 
 export type ContratoEstado  = 'activo' | 'baja' | 'pendiente'
-export type AccionTipo      = 'llamada' | 'email' | 'reunion' | 'visita' | 'otro'
-export type AccionResultado = 'pendiente' | 'completado' | 'fracaso' | 'no_contesta'
+
+export type EstadoFirma = 'pendiente_firma' | 'firmado' | 'rechazado'
 
 export interface Contrato {
   id: string
@@ -210,6 +227,8 @@ export interface Contrato {
   fecha_vencimiento?: string
   duracion_meses?: number
   estado: ContratoEstado
+  estado_firma: EstadoFirma
+  ref_comercializadora?: string
   renovacion_verificada: boolean
   a_cobrar?: number
   notas?: string
@@ -218,17 +237,19 @@ export interface Contrato {
   cliente?: Pick<Cliente, 'id' | 'nombre' | 'empresa'>
 }
 
+export type AccionTipoVal     = 'llamada' | 'email' | 'reunion' | 'visita' | 'otro'
+export type AccionResultadoVal = 'pendiente' | 'completado' | 'fracaso' | 'no_contesta'
+
 export interface Accion {
   id: string
   user_id: string
   cliente_id?: string
   fecha: string
   hora?: string
-  tipo: AccionTipo
-  resultado: AccionResultado
+  tipo: AccionTipoVal
+  resultado: AccionResultadoVal
   notas?: string
   created_at: string
-  cliente?: Pick<Cliente, 'id' | 'nombre' | 'empresa'>
 }
 
 // ─── UI Helpers ───────────────────────────────────────────────────────────────

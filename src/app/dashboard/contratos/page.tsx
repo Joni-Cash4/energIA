@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import type { Contrato, Cliente, ContratoEstado } from '@/types'
+import type { Contrato, Cliente, ContratoEstado, EstadoFirma } from '@/types'
 
 function diasRestantes(fecha: string): number {
   return Math.ceil((new Date(fecha).getTime() - Date.now()) / 86400000)
@@ -33,14 +33,21 @@ function addMonths(dateStr: string, months: number): string {
   return d.toISOString().split('T')[0]
 }
 
+const ESTADO_FIRMA_LABELS: Record<EstadoFirma, string> = {
+  pendiente_firma: 'Pendiente firma',
+  firmado:         'Firmado',
+  rechazado:       'Rechazado',
+}
+
 const EMPTY: {
   cliente_id: string; cups: string; comercializadora: string; tarifa: string
   producto: string; fecha_firma: string; fecha_alta: string; fecha_vencimiento: string
-  duracion_meses: string; estado: ContratoEstado; a_cobrar: string; notas: string
+  duracion_meses: string; estado: ContratoEstado; estado_firma: EstadoFirma
+  ref_comercializadora: string; a_cobrar: string; notas: string
 } = {
   cliente_id: '', cups: '', comercializadora: '', tarifa: '', producto: '',
   fecha_firma: '', fecha_alta: '', fecha_vencimiento: '', duracion_meses: '12',
-  estado: 'activo', a_cobrar: '', notas: '',
+  estado: 'activo', estado_firma: 'pendiente_firma', ref_comercializadora: '', a_cobrar: '', notas: '',
 }
 
 export default function ContratosPage() {
@@ -117,10 +124,12 @@ export default function ContratosPage() {
       fecha_firma:       form.fecha_firma       || null,
       fecha_alta:        form.fecha_alta        || null,
       fecha_vencimiento: form.fecha_vencimiento,
-      duracion_meses:    form.duracion_meses ? Number(form.duracion_meses) : 12,
-      estado:            form.estado,
-      a_cobrar:          form.a_cobrar ? Number(form.a_cobrar) : null,
-      notas:             form.notas             || null,
+      duracion_meses:       form.duracion_meses ? Number(form.duracion_meses) : 12,
+      estado:               form.estado,
+      estado_firma:         form.estado_firma,
+      ref_comercializadora: form.ref_comercializadora || null,
+      a_cobrar:             form.a_cobrar ? Number(form.a_cobrar) : null,
+      notas:                form.notas || null,
     }
     const { error } = editId
       ? await supabase.from('contratos').update(payload).eq('id', editId)
@@ -135,6 +144,23 @@ export default function ContratosPage() {
         const unAñoAtras = new Date(); unAñoAtras.setFullYear(unAñoAtras.getFullYear() - 1)
         if (venc >= unAñoAtras) {
           await supabase.from('clientes').update({ revision_pendiente: false }).eq('id', form.cliente_id)
+        }
+      }
+      // Auto-log en acciones si cambió estado_firma (solo en edición)
+      if (editId && form.cliente_id) {
+        const contratoAnterior = contratos.find(c => c.id === editId)
+        const firmaAnterior = contratoAnterior?.estado_firma ?? 'pendiente_firma'
+        if (firmaAnterior !== form.estado_firma) {
+          const FIRMA_LABELS: Record<string, string> = {
+            pendiente_firma: 'Pendiente firma', firmado: 'Firmado', rechazado: 'Rechazado',
+          }
+          await supabase.from('acciones').insert({
+            user_id:    user!.id,
+            cliente_id: form.cliente_id,
+            tipo:       'otro',
+            resultado:  form.estado_firma === 'firmado' ? 'completado' : form.estado_firma === 'rechazado' ? 'fracaso' : 'pendiente',
+            notas:      `[Sistema] Estado firma actualizado: ${FIRMA_LABELS[firmaAnterior]} → ${FIRMA_LABELS[form.estado_firma]}`,
+          })
         }
       }
       toast({ title: editId ? 'Contrato actualizado' : 'Contrato creado' })
@@ -155,9 +181,11 @@ export default function ContratosPage() {
       fecha_alta:        c.fecha_alta         ?? '',
       fecha_vencimiento: c.fecha_vencimiento  ?? '',
       duracion_meses:    String(c.duracion_meses ?? 12),
-      estado:            c.estado,
-      a_cobrar:          c.a_cobrar != null ? String(c.a_cobrar) : '',
-      notas:             c.notas ?? '',
+      estado:               c.estado,
+      estado_firma:         c.estado_firma ?? 'pendiente_firma',
+      ref_comercializadora: c.ref_comercializadora ?? '',
+      a_cobrar:             c.a_cobrar != null ? String(c.a_cobrar) : '',
+      notas:                c.notas ?? '',
     })
     setEditId(c.id)
     setShowForm(true)
@@ -233,7 +261,7 @@ export default function ContratosPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[#1F1F1F]">
-                    {['Vence en', 'Cliente', 'CUPS', 'Comercializadora', 'Producto', 'Vencimiento', 'Comisión', 'Renovación'].map(h => (
+                    {['Vence en', 'Cliente', 'CUPS', 'Comercializadora', 'Producto', 'Vencimiento', 'Firma', 'Comisión', 'Renovación'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs text-[#6B7280] uppercase tracking-wide font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -256,6 +284,17 @@ export default function ContratosPage() {
                         <td className="px-4 py-3 text-[#9CA3AF]">{c.producto ?? '—'}</td>
                         <td className="px-4 py-3 text-[#9CA3AF] text-xs whitespace-nowrap">
                           {c.fecha_vencimiento ? formatDate(c.fecha_vencimiento) : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                            c.estado_firma === 'firmado'
+                              ? 'text-[#00E676] border-[#00E676]/30 bg-[#00E676]/5'
+                              : c.estado_firma === 'rechazado'
+                              ? 'text-red-400 border-red-400/30 bg-red-400/5'
+                              : 'text-yellow-400 border-yellow-400/30 bg-yellow-400/5'
+                          }`}>
+                            {ESTADO_FIRMA_LABELS[c.estado_firma ?? 'pendiente_firma']}
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-white font-medium">
                           {c.a_cobrar ? formatCurrency(c.a_cobrar) : '—'}
@@ -390,7 +429,7 @@ export default function ContratosPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-[#9CA3AF] mb-1.5">Estado</label>
+                    <label className="block text-xs text-[#9CA3AF] mb-1.5">Estado contrato</label>
                     <Select value={form.estado} onValueChange={v => setForm(p => ({ ...p, estado: v as ContratoEstado }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -404,6 +443,25 @@ export default function ContratosPage() {
                     <label className="block text-xs text-[#9CA3AF] mb-1.5">Comisión (€)</label>
                     <Input type="number" step="0.01" value={form.a_cobrar}
                       onChange={e => setForm(p => ({ ...p, a_cobrar: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-[#9CA3AF] mb-1.5">Estado firma cliente</label>
+                    <Select value={form.estado_firma} onValueChange={v => setForm(p => ({ ...p, estado_firma: v as EstadoFirma }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pendiente_firma">Pendiente firma</SelectItem>
+                        <SelectItem value="firmado">✓ Firmado</SelectItem>
+                        <SelectItem value="rechazado">✗ Rechazado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[#9CA3AF] mb-1.5">Ref. comercializadora</label>
+                    <Input placeholder="Nº referencia / ID" value={form.ref_comercializadora}
+                      onChange={e => setForm(p => ({ ...p, ref_comercializadora: e.target.value }))} />
                   </div>
                 </div>
 

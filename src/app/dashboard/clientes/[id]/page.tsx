@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck, Clock, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck, Clock, CheckCircle2, Phone, Mail, Users, MapPin, MessageSquare, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -11,7 +11,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import type { Cliente, Factura, Contrato, ClienteEstado } from '@/types'
+import type { Cliente, Factura, Contrato, ClienteEstado, Accion, AccionTipoVal, AccionResultadoVal } from '@/types'
+
+const TIPO_ICONS: Record<AccionTipoVal, typeof Phone> = {
+  llamada: Phone, email: Mail, reunion: Users, visita: MapPin, otro: MessageSquare,
+}
+const TIPO_LABELS: Record<AccionTipoVal, string> = {
+  llamada: 'Llamada', email: 'Email', reunion: 'Reunión', visita: 'Visita', otro: 'Otro',
+}
+const RESULTADO_LABELS: Record<AccionResultadoVal, string> = {
+  pendiente: 'Pendiente', completado: 'Completado', fracaso: 'No interesado', no_contesta: 'No contesta',
+}
+const RESULTADO_COLOR: Record<AccionResultadoVal, string> = {
+  pendiente: 'text-yellow-400', completado: 'text-[#00E676]', fracaso: 'text-red-400', no_contesta: 'text-[#6B7280]',
+}
 
 function diasRestantes(fecha: string) {
   return Math.ceil((new Date(fecha).getTime() - Date.now()) / 86400000)
@@ -45,6 +58,11 @@ export default function ClienteDetailPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dismissing, setDismissing] = useState(false)
+  const [acciones, setAcciones] = useState<Accion[]>([])
+  const [accionTipo, setAccionTipo] = useState<AccionTipoVal>('llamada')
+  const [accionResultado, setAccionResultado] = useState<AccionResultadoVal>('completado')
+  const [accionNotas, setAccionNotas] = useState('')
+  const [savingAccion, setSavingAccion] = useState(false)
 
   // Contact fields
   const [nombre,    setNombre]    = useState('')
@@ -76,7 +94,8 @@ export default function ClienteDetailPage() {
       supabase.from('clientes').select('*').eq('id', id).single(),
       supabase.from('facturas').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
       supabase.from('contratos').select('*').eq('cliente_id', id).order('fecha_vencimiento', { ascending: true }),
-    ]).then(([{ data: c }, { data: f }, { data: ct }]) => {
+      supabase.from('acciones').select('*').eq('cliente_id', id).order('fecha', { ascending: false }).order('created_at', { ascending: false }),
+    ]).then(([{ data: c }, { data: f }, { data: ct }, { data: ac }]) => {
       if (!c) { router.replace('/dashboard/clientes'); return }
       setCliente(c)
       setNombre(c.nombre ?? '')
@@ -101,6 +120,7 @@ export default function ClienteDetailPage() {
       setFechaInicioContrato(c.fecha_inicio_contrato ?? '')
       setFacturas(f ?? [])
       setContratos((ct ?? []) as Contrato[])
+      setAcciones((ac ?? []) as Accion[])
       setLoading(false)
     })
   }, [id, router])
@@ -112,6 +132,28 @@ export default function ClienteDetailPage() {
     if (error) toast({ title: 'Error', variant: 'destructive' })
     else { setCliente((p) => p ? { ...p, revision_pendiente: false } : p); toast({ title: 'Marcado como atendido' }) }
     setDismissing(false)
+  }
+
+  const handleSaveAccion = async () => {
+    setSavingAccion(true)
+    const supabase = getSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: nueva, error } = await supabase.from('acciones').insert({
+      user_id:   user!.id,
+      cliente_id: id,
+      fecha:     new Date().toISOString().split('T')[0],
+      tipo:      accionTipo,
+      resultado: accionResultado,
+      notas:     accionNotas || null,
+    }).select().single()
+    if (error) {
+      toast({ title: 'Error al guardar acción', variant: 'destructive' })
+    } else {
+      setAcciones(p => [nueva as Accion, ...p])
+      setAccionNotas('')
+      toast({ title: 'Acción registrada' })
+    }
+    setSavingAccion(false)
   }
 
   const handleSave = async () => {
@@ -140,7 +182,7 @@ export default function ClienteDetailPage() {
       fecha_inicio_contrato: fechaInicioContrato || null,
     }).eq('id', id)
 
-    if (error) toast({ title: 'Error al guardar', variant: 'destructive' })
+    if (error) toast({ title: 'Error al guardar', description: error.message, variant: 'destructive' })
     else {
       toast({ title: 'Cambios guardados' })
       setCliente((p) => p ? { ...p, nombre, empresa: empresa || undefined, estado, notas, email: email || undefined, telefono: telefono || undefined } : p)
@@ -346,6 +388,82 @@ export default function ClienteDetailPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+
+          {/* Acciones / Log de contactos */}
+          <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#1F1F1F]">
+              <h2 className="text-white font-semibold">Registro de contactos</h2>
+            </div>
+
+            {/* Formulario rápido */}
+            <div className="px-6 py-4 border-b border-[#1F1F1F] space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-[#9CA3AF] mb-1">Tipo</label>
+                  <Select value={accionTipo} onValueChange={v => setAccionTipo(v as AccionTipoVal)}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(TIPO_LABELS) as AccionTipoVal[]).map(t => (
+                        <SelectItem key={t} value={t}>{TIPO_LABELS[t]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-xs text-[#9CA3AF] mb-1">Resultado</label>
+                  <Select value={accionResultado} onValueChange={v => setAccionResultado(v as AccionResultadoVal)}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(RESULTADO_LABELS) as AccionResultadoVal[]).map(r => (
+                        <SelectItem key={r} value={r}>{RESULTADO_LABELS[r]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={accionNotas}
+                  onChange={e => setAccionNotas(e.target.value)}
+                  placeholder="Notas de la llamada / reunión..."
+                  className="text-sm h-8"
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveAccion() }}}
+                />
+                <Button size="sm" onClick={handleSaveAccion} disabled={savingAccion} className="gap-1.5 shrink-0 h-8">
+                  {savingAccion ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  Registrar
+                </Button>
+              </div>
+            </div>
+
+            {/* Historial */}
+            {acciones.length === 0 ? (
+              <div className="py-8 text-center text-[#6B7280] text-sm">Sin acciones registradas aún.</div>
+            ) : (
+              <div className="divide-y divide-[#1F1F1F]">
+                {acciones.map((a) => {
+                  const Icon = TIPO_ICONS[a.tipo]
+                  return (
+                    <div key={a.id} className="flex items-start gap-3 px-6 py-3">
+                      <div className="mt-0.5 w-7 h-7 rounded-full bg-[#1A1A1A] flex items-center justify-center shrink-0">
+                        <Icon className="w-3.5 h-3.5 text-[#6B7280]" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-white text-sm font-medium">{TIPO_LABELS[a.tipo]}</span>
+                          <span className={`text-xs font-medium ${RESULTADO_COLOR[a.resultado]}`}>
+                            {RESULTADO_LABELS[a.resultado]}
+                          </span>
+                          <span className="text-[#6B7280] text-xs ml-auto">{formatDate(a.fecha)}</span>
+                        </div>
+                        {a.notas && <p className="text-[#9CA3AF] text-sm mt-0.5 truncate">{a.notas}</p>}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
