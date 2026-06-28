@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck, Clock, CheckCircle2, Phone, Mail, Users, MapPin, MessageSquare, Send } from 'lucide-react'
+import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck, Clock, CheckCircle2, Phone, Mail, Users, MapPin, MessageSquare, Send, RefreshCw, Zap } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -11,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import type { Cliente, Factura, Contrato, ClienteEstado, Accion, AccionTipoVal, AccionResultadoVal } from '@/types'
+import type { Cliente, Factura, Contrato, ClienteEstado, Accion, AccionTipoVal, AccionResultadoVal, ConsumoDatadis } from '@/types'
 
 const TIPO_ICONS: Record<AccionTipoVal, typeof Phone> = {
   llamada: Phone, email: Mail, reunion: Users, visita: MapPin, otro: MessageSquare,
@@ -63,6 +64,10 @@ export default function ClienteDetailPage() {
   const [accionResultado, setAccionResultado] = useState<AccionResultadoVal>('completado')
   const [accionNotas, setAccionNotas] = useState('')
   const [savingAccion, setSavingAccion] = useState(false)
+  const [autorizacionDatadis, setAutorizacionDatadis] = useState('')
+  const [consumosDatadis, setConsumosDatadis] = useState<ConsumoDatadis[]>([])
+  const [syncingDatadis, setSyncingDatadis] = useState(false)
+  const [ultimaSyncDatadis, setUltimaSyncDatadis] = useState<string | null>(null)
 
   // Contact fields
   const [nombre,    setNombre]    = useState('')
@@ -95,7 +100,8 @@ export default function ClienteDetailPage() {
       supabase.from('facturas').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
       supabase.from('contratos').select('*').eq('cliente_id', id).order('fecha_vencimiento', { ascending: true }),
       supabase.from('acciones').select('*').eq('cliente_id', id).order('fecha', { ascending: false }).order('created_at', { ascending: false }),
-    ]).then(([{ data: c }, { data: f }, { data: ct }, { data: ac }]) => {
+      supabase.from('consumos_datadis').select('*').eq('cliente_id', id).order('year_month', { ascending: false }),
+    ]).then(([{ data: c }, { data: f }, { data: ct }, { data: ac }, { data: cd }]) => {
       if (!c) { router.replace('/dashboard/clientes'); return }
       setCliente(c)
       setNombre(c.nombre ?? '')
@@ -118,9 +124,12 @@ export default function ClienteDetailPage() {
       setKwContratados(String(c.kw_contratados ?? ''))
       setProximoContacto(c.proximo_contacto ?? '')
       setFechaInicioContrato(c.fecha_inicio_contrato ?? '')
+      setAutorizacionDatadis(c.autorizacion_datadis ?? '')
+      setUltimaSyncDatadis(c.ultima_sync_datadis ?? null)
       setFacturas(f ?? [])
       setContratos((ct ?? []) as Contrato[])
       setAcciones((ac ?? []) as Accion[])
+      setConsumosDatadis((cd ?? []) as ConsumoDatadis[])
       setLoading(false)
     })
   }, [id, router])
@@ -178,8 +187,9 @@ export default function ClienteDetailPage() {
       fee_potencia:          feePotencia ? Number(feePotencia) : null,
       kwh_anuales:           kwhAnuales ? Number(kwhAnuales) : null,
       kw_contratados:        kwContratados ? Number(kwContratados) : null,
-      proximo_contacto:      proximoContacto || null,
-      fecha_inicio_contrato: fechaInicioContrato || null,
+      proximo_contacto:       proximoContacto || null,
+      fecha_inicio_contrato:  fechaInicioContrato || null,
+      autorizacion_datadis:   autorizacionDatadis || null,
     }).eq('id', id)
 
     if (error) toast({ title: 'Error al guardar', description: error.message, variant: 'destructive' })
@@ -188,6 +198,33 @@ export default function ClienteDetailPage() {
       setCliente((p) => p ? { ...p, nombre, empresa: empresa || undefined, estado, notas, email: email || undefined, telefono: telefono || undefined } : p)
     }
     setSaving(false)
+  }
+
+  const handleSyncDatadis = async () => {
+    if (!cliente?.cups) {
+      toast({ title: 'Falta CUPS', description: 'Rellena el CUPS antes de sincronizar', variant: 'destructive' })
+      return
+    }
+    setSyncingDatadis(true)
+    try {
+      const res = await fetch('/api/datadis/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clienteId: id, nif: cliente.nif, cups: cliente.cups }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error desconocido')
+      const ahora = new Date().toISOString()
+      setUltimaSyncDatadis(ahora)
+      // Reload consumos
+      const supabase = getSupabaseClient()
+      const { data: cd } = await supabase.from('consumos_datadis').select('*').eq('cliente_id', id).order('year_month', { ascending: false })
+      setConsumosDatadis((cd ?? []) as ConsumoDatadis[])
+      toast({ title: `Sincronizado: ${data.meses_sincronizados} meses`, description: `${Math.round(data.kwh_total).toLocaleString('es-ES')} kWh totales` })
+    } catch (err) {
+      toast({ title: 'Error Datadis', description: String(err), variant: 'destructive' })
+    }
+    setSyncingDatadis(false)
   }
 
   if (loading) return (
@@ -529,6 +566,81 @@ export default function ClienteDetailPage() {
                 <label className="block text-xs text-[#9CA3AF] mb-1">Comercializadora actual</label>
                 <Input value={comercializadora} onChange={(e) => setComercializadora(e.target.value)} />
               </div>
+            </div>
+          </div>
+
+          {/* Datadis */}
+          <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-[#00E676]" />
+                <h2 className="text-white font-semibold">Datadis</h2>
+              </div>
+              {autorizacionDatadis && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="gap-1.5 h-7 text-xs"
+                  onClick={handleSyncDatadis}
+                  disabled={syncingDatadis}
+                >
+                  {syncingDatadis
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <RefreshCw className="w-3 h-3" />}
+                  Sincronizar
+                </Button>
+              )}
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-[#9CA3AF] mb-1">Fecha autorización</label>
+                <Input type="date" value={autorizacionDatadis} onChange={e => setAutorizacionDatadis(e.target.value)} />
+              </div>
+              {ultimaSyncDatadis && (
+                <p className="text-xs text-[#6B7280]">
+                  Última sync: {formatDate(ultimaSyncDatadis)}
+                </p>
+              )}
+              {consumosDatadis.length > 0 && (() => {
+                const chartData = [...consumosDatadis]
+                  .sort((a, b) => a.year_month.localeCompare(b.year_month))
+                  .map(c => ({
+                    mes: c.year_month.slice(2).replace('-', '/'),
+                    kwh: c.kwh_total,
+                  }))
+                const maxKwh = Math.max(...chartData.map(d => d.kwh))
+                const totalAnual = consumosDatadis.reduce((s, c) => s + c.kwh_total, 0)
+                return (
+                  <div className="mt-3">
+                    <div className="flex items-baseline justify-between mb-2">
+                      <p className="text-xs text-[#9CA3AF]">Consumo mensual (kWh)</p>
+                      <p className="text-xs text-[#6B7280]">
+                        Total: <span className="text-white font-mono">{Math.round(totalAnual).toLocaleString('es-ES')} kWh</span>
+                      </p>
+                    </div>
+                    <ResponsiveContainer width="100%" height={120}>
+                      <BarChart data={chartData} margin={{ top: 4, right: 0, left: -28, bottom: 0 }}>
+                        <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                        <Tooltip
+                          contentStyle={{ background: '#1F1F1F', border: '1px solid #2A2A2A', borderRadius: 8, fontSize: 12 }}
+                          labelStyle={{ color: '#9CA3AF' }}
+                          itemStyle={{ color: '#00E676' }}
+                          formatter={(v: number) => [`${v.toLocaleString('es-ES', { maximumFractionDigits: 0 })} kWh`, '']}
+                        />
+                        <Bar dataKey="kwh" radius={[3, 3, 0, 0]}>
+                          {chartData.map((d) => (
+                            <Cell key={d.mes} fill={d.kwh === maxKwh ? '#00E676' : '#1565C0'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )
+              })()}
+              {!autorizacionDatadis && (
+                <p className="text-xs text-[#6B7280]">Añade la fecha de autorización para activar la sincronización.</p>
+              )}
             </div>
           </div>
 

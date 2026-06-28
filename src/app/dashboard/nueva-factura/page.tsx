@@ -525,7 +525,8 @@ export default function NuevaFacturaPage() {
       user_id:          user?.id,
     }).select('id').single()
     if (err) {
-      toast({ title: 'Error al guardar cliente', variant: 'destructive' })
+      console.error('[handleSaveCliente]', err)
+      toast({ title: `Error al guardar cliente: ${err.message}`, variant: 'destructive' })
     } else {
       setSelectedClienteId(newCliente.id)
       const ferr = await saveFactura(newCliente.id, feeEnergia, data)

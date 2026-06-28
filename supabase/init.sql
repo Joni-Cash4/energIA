@@ -53,6 +53,8 @@ create table if not exists clientes (
   kw_contratados        numeric default 0,
   proximo_contacto      date,
   fecha_inicio_contrato date,
+  autorizacion_datadis  date,
+  ultima_sync_datadis   timestamptz,
   created_at            timestamptz default now(),
   updated_at            timestamptz default now()
 );
@@ -101,6 +103,19 @@ create table if not exists facturas (
   pdf_url                   text,
   excel_url                 text,
   created_at                timestamptz default now()
+);
+
+-- ─────────────────────────────────────────
+-- CONSUMOS DATADIS  (consumo mensual por CUPS)
+-- ─────────────────────────────────────────
+create table if not exists consumos_datadis (
+  id              uuid primary key default gen_random_uuid(),
+  cliente_id      uuid references clientes(id) on delete cascade,
+  cups            text not null,
+  year_month      text not null,
+  kwh_total       numeric,
+  fecha_consulta  timestamptz default now(),
+  unique(cliente_id, cups, year_month)
 );
 
 -- ─────────────────────────────────────────
@@ -166,14 +181,16 @@ create table if not exists contactos (
 -- ─────────────────────────────────────────
 -- RLS
 -- ─────────────────────────────────────────
-alter table leads      enable row level security;
+alter table leads             enable row level security;
+alter table consumos_datadis  enable row level security;
 alter table clientes   enable row level security;
 alter table facturas   enable row level security;
 alter table contratos  enable row level security;
 alter table acciones   enable row level security;
 alter table contactos  enable row level security;
 
-create policy "auth_all_leads"      on leads      for all using (auth.role() = 'authenticated');
+create policy "auth_all_leads"            on leads             for all using (auth.role() = 'authenticated');
+create policy "auth_all_consumos_datadis" on consumos_datadis  for all using (auth.role() = 'authenticated');
 create policy "auth_all_clientes"   on clientes   for all using (auth.role() = 'authenticated');
 create policy "auth_all_facturas"   on facturas   for all using (auth.role() = 'authenticated');
 create policy "contratos_owner"     on contratos  using (user_id = auth.uid()) with check (user_id = auth.uid());

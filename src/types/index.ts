@@ -174,9 +174,21 @@ export interface Cliente {
   kw_contratados?: number
   proximo_contacto?: string
   fecha_inicio_contrato?: string
+  // Datadis
+  autorizacion_datadis?: string
+  ultima_sync_datadis?: string
   created_at: string
   updated_at: string
   facturas?: Factura[]
+}
+
+export interface ConsumoDatadis {
+  id: string
+  cliente_id: string
+  cups: string
+  year_month: string   // YYYY-MM
+  kwh_total: number
+  fecha_consulta: string
 }
 
 export interface Factura {
