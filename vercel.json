@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/datadis-sync",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/invoice-collect-reminder",
+      "schedule": "0 9 20 * *"
+    },
+    {
+      "path": "/api/cron/client-followup",
+      "schedule": "0 9 * * *"
     }
   ]
 }

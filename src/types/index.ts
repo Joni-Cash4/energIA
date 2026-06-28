@@ -264,6 +264,25 @@ export interface Accion {
   created_at: string
 }
 
+export interface FacturaContrato {
+  id: string
+  cliente_id: string
+  cups: string
+  comercializadora: string
+  numero_factura?: string
+  fecha_factura?: string
+  periodo_inicio?: string
+  periodo_fin?: string
+  kwh_total?: number
+  importe_total?: number
+  importe_base?: number
+  precio_kwh_efectivo?: number
+  ahorro_vs_anterior?: number
+  pdf_url?: string
+  datos_extraidos?: Record<string, unknown>
+  created_at: string
+}
+
 // ─── UI Helpers ───────────────────────────────────────────────────────────────
 
 export type ComparadorStep = 1 | 2 | 3
