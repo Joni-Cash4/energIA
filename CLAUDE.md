@@ -151,6 +151,9 @@ Verificado contra Excel simulador de tarifas de Jonathan — todos los periodos 
   más competitiva".
 - NUNCA comparar con el precio de mercado de HOY para una factura de un periodo pasado —
   siempre usar `/api/market-historical` con las fechas exactas de la factura.
+- Ratio BOE/WEB: `kwhTotal` debe normalizarse a 30 días antes de dividir por kW. Sin
+  normalizar, una factura de 242 días da ratio 8× inflado → recomienda WEB cuando
+  debería ser BOE. Fórmula correcta: `(kwh_total * 30 / dias_facturados) / potencia_kw`.
 
 ## PDF generado (jsPDF, client-side)
 - **4 columnas**: Factura actual | Próxima Cristalina | Atulado BOE | Atulado WEB
