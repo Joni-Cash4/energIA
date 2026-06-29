@@ -375,17 +375,12 @@ export async function POST(req: NextRequest) {
     const feeKwh = 0 // fee Jonathan se aplica en dashboard, no en esta llamada base
     const sim_indexada = simIndexada(parsed, tarifa, pmdHistorico, sc, cap, perd, tipoIee, tipoIva, feeKwh, potenciaKw)
 
-    // Selección automática Atulado BOE vs WEB según ratio kWh/kW·mes
-    // Normalizar a 30 días para que facturas largas (ej: 242 días) no inflén el ratio.
-    const kwhTotal = parsed.kwh_total ?? 0
     const dias = parsed.dias_facturados || 30
-    const kw = parsed.potencia_contratada ?? 1
-    const kwhMensualEq = dias > 0 ? kwhTotal * 30 / dias : kwhTotal
-    const ratio = kw > 0 ? kwhMensualEq / kw : 0
-    const recomendado = ratio > UMBRAL_KWH_POR_KW ? 'WEB' : 'BOE'
-
     const sim_fija_boe = simFija(parsed, tarifa, ATULADO_BOE, tipoIee, tipoIva, potenciaKw)
     const sim_fija_web = simFija(parsed, tarifa, ATULADO_WEB, tipoIee, tipoIva, potenciaKw)
+
+    // Recomendar la opción fija más barata comparando totales reales (más preciso que ratio proxy)
+    const recomendado: 'BOE' | 'WEB' = sim_fija_boe.total <= sim_fija_web.total ? 'BOE' : 'WEB'
 
     const ahorro_mensual = r2((parsed.total_factura ?? 0) - sim_indexada.total)
 
