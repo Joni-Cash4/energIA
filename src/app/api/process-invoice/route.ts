@@ -18,7 +18,9 @@ import { getMercadoReal } from '@/lib/market-real'
 import { getZonaFromCups } from '@/lib/periodos'
 import type { SimTarifa } from '@/types'
 
-const PROMPT = `Eres un experto en facturas eléctricas españolas. Analiza esta factura (puede ser foto o PDF escaneado, en una o varias imágenes).
+const SYSTEM_PROMPT = `Eres un extractor de datos de facturas eléctricas españolas. Tu única función es devolver un JSON válido con los datos extraídos. NUNCA expliques tu razonamiento, NUNCA escribas texto fuera del JSON, NUNCA uses markdown. Solo JSON.`
+
+const PROMPT = `Analiza esta factura eléctrica y devuelve ÚNICAMENTE el JSON especificado a continuación. Sin texto previo, sin explicaciones, sin markdown. SOLO el JSON.
 
 PASO 1 — TIPO DE FACTURA:
 Si el documento NO es una factura de ELECTRICIDAD (puede ser gas natural, agua, internet, teléfono u otro suministro), devuelve ÚNICAMENTE este JSON y nada más:
@@ -39,7 +41,7 @@ INSTRUCCIONES IMPORTANTES:
 - potencia_contratada = valor en kW de P1 (solo para mostrar, no se usa para calcular).
 - potencias = un array con la potencia contratada en kW de CADA periodo tarifario (P1 a P6 para 3.0TD/6.1TD, P1 a P3 para 2.0TD), AUNQUE NO TENGAN CONSUMO DE ENERGÍA. IMPORTANTE: la potencia contratada NO siempre es igual en todos los periodos (ej: P1=30kW, P2-P5=35kW, P6=60kW es habitual en 3.0TD). Busca la tabla "Potencia contratada" o "Potencia facturada" por periodo y extrae el valor exacto de cada uno, no asumas que son iguales.
 - dias_facturados = número de días del periodo de facturación (fecha_fin - fecha_inicio).
-- dias_facturados_potencia = número de días por los que se cobra la POTENCIA en esta factura. En facturas normales coincide con dias_facturados. En facturas con acumulación de energía de periodos anteriores, la potencia puede estar facturada solo por un mes (ej: "30 Días" en "Término Potencia") aunque el periodo de energía sea de 242 días — en ese caso usa los días reales del término de potencia. Si no hay información clara, usa dias_facturados.
+- dias_facturados_potencia = días de potencia facturada. Busca "Término Potencia" y lee cuántos días pone (ej: "30 Días"). Si coincide con dias_facturados, usa el mismo valor. Si no aparece, usa dias_facturados.
 - potencia_total = importe total facturado por potencia, SUMANDO TODAS las secciones relacionadas con potencia que aparezcan en el detalle de la factura, antes de IEE e IVA. ALGUNAS FACTURAS DESGLOSAN LA POTENCIA EN VARIAS SECCIONES SEPARADAS (ej: "Término Potencia Tarifa Acceso", "Término Potencia" propio de la comercializadora, "Término Cargos Potencia Acceso") — debes sumar el importe de TODAS ellas, no solo una. Incluye también excesos de potencia si existen.
 - reactiva_total = importe total de energía reactiva + excesos de energía reactiva (si existe, sino 0).
 - alquiler_equipos = importe del alquiler de equipos de medida y control (antes de IVA).
@@ -49,9 +51,7 @@ INSTRUCCIONES IMPORTANTES:
 - importe_iva = importe en euros del IVA aplicado.
 - total_factura = importe final total incluyendo IVA.
 
-VERIFICACIÓN OBLIGATORIA antes de responder: energia_total + potencia_total + reactiva_total + alquiler_equipos + productos_total + importe_iee + importe_iva debe ser igual (o muy cercano, margen de redondeo) a total_factura. Si no cuadra, revisa qué concepto te falta o está mal sumado antes de devolver el JSON.
-
-Devuelve este JSON exacto:
+Devuelve EXACTAMENTE este JSON (sin texto antes ni después):
 {
   "cups": "string",
   "comercializadora": "string",
@@ -319,7 +319,8 @@ export async function POST(req: NextRequest) {
   try {
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
+      max_tokens: 2048,
+      system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: [...fileBlocks, { type: 'text', text: PROMPT }] }],
     })
 
