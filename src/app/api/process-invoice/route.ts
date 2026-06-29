@@ -38,7 +38,8 @@ INSTRUCCIONES IMPORTANTES:
 - kwh_total = suma de kWh de todos los periodos con consumo.
 - potencia_contratada = valor en kW de P1 (solo para mostrar, no se usa para calcular).
 - potencias = un array con la potencia contratada en kW de CADA periodo tarifario (P1 a P6 para 3.0TD/6.1TD, P1 a P3 para 2.0TD), AUNQUE NO TENGAN CONSUMO DE ENERGÍA. IMPORTANTE: la potencia contratada NO siempre es igual en todos los periodos (ej: P1=30kW, P2-P5=35kW, P6=60kW es habitual en 3.0TD). Busca la tabla "Potencia contratada" o "Potencia facturada" por periodo y extrae el valor exacto de cada uno, no asumas que son iguales.
-- dias_facturados = número de días del periodo de facturación.
+- dias_facturados = número de días del periodo de facturación (fecha_fin - fecha_inicio).
+- dias_facturados_potencia = número de días por los que se cobra la POTENCIA en esta factura. En facturas normales coincide con dias_facturados. En facturas con acumulación de energía de periodos anteriores, la potencia puede estar facturada solo por un mes (ej: "30 Días" en "Término Potencia") aunque el periodo de energía sea de 242 días — en ese caso usa los días reales del término de potencia. Si no hay información clara, usa dias_facturados.
 - potencia_total = importe total facturado por potencia, SUMANDO TODAS las secciones relacionadas con potencia que aparezcan en el detalle de la factura, antes de IEE e IVA. ALGUNAS FACTURAS DESGLOSAN LA POTENCIA EN VARIAS SECCIONES SEPARADAS (ej: "Término Potencia Tarifa Acceso", "Término Potencia" propio de la comercializadora, "Término Cargos Potencia Acceso") — debes sumar el importe de TODAS ellas, no solo una. Incluye también excesos de potencia si existen.
 - reactiva_total = importe total de energía reactiva + excesos de energía reactiva (si existe, sino 0).
 - alquiler_equipos = importe del alquiler de equipos de medida y control (antes de IVA).
@@ -62,6 +63,7 @@ Devuelve este JSON exacto:
   "potencia_contratada": number,
   "potencias": [ { "periodo": "P1" | "P2" | "P3" | "P4" | "P5" | "P6", "kw": number } ],
   "dias_facturados": number,
+  "dias_facturados_potencia": number,
   "potencia_total": number,
   "reactiva_total": number,
   "alquiler_equipos": number,
@@ -106,6 +108,7 @@ type InvoiceData = {
   potencia_contratada: number
   potencias?: { periodo: string; kw: number }[]
   dias_facturados: number
+  dias_facturados_potencia?: number
   potencia_total?: number
   reactiva_total?: number
   alquiler_equipos?: number
@@ -167,12 +170,13 @@ function simIndexada(
 ): SimTarifa {
   const periodos = PERIODOS_TARIFA[tarifa]
   const dias = data.dias_facturados || 30
-  const kwhTotal = data.kwh_total ?? 0
+  const diasPotencia = data.dias_facturados_potencia ?? dias
   const reactiva = r2(data.reactiva_total ?? 0)
   const alquiler = r2(data.alquiler_equipos ?? 0)
 
   let energiaTotal = 0
   let mercadoPuroTotal = 0
+  let kwhTotal = 0
   for (const linea of data.periodos ?? []) {
     const p = linea.periodo as Periodo
     const kwh = linea.kwh ?? 0
@@ -185,6 +189,7 @@ function simIndexada(
     const precio = peaje + cargo + mercado + feeKwh
     energiaTotal += precio * kwh
     mercadoPuroTotal += mercado * kwh
+    kwhTotal += kwh
   }
   energiaTotal = r2(energiaTotal)
 
@@ -204,7 +209,7 @@ function simIndexada(
     const kw = potenciaKw[p] ?? 0
     const pj = PEAJES_POTENCIA_2026[tarifa][p] ?? 0
     const cg = CARGOS_POTENCIA_2026[tarifa][p] ?? 0
-    potencia_periodos_idx[p] = r2(kw * dias * (pj + cg) / 365)
+    potencia_periodos_idx[p] = r2(kw * diasPotencia * (pj + cg) / 365)
   }
   const potencia = r2(Object.values(potencia_periodos_idx).reduce<number>((s, v) => s + (v ?? 0), 0))
 
@@ -232,6 +237,7 @@ function simFija(
   tipoIee: number, tipoIva: number, potenciaKw: Periodos
 ): SimTarifa {
   const dias = data.dias_facturados || 30
+  const diasPotencia = data.dias_facturados_potencia ?? dias
   const reactiva = r2(data.reactiva_total ?? 0)
   const alquiler = r2(data.alquiler_equipos ?? 0)
 
@@ -250,7 +256,7 @@ function simFija(
   const potencia_periodos_fija: Partial<Record<string, number>> = {}
   for (const p of PERIODOS_TARIFA[tarifa]) {
     const kw = potenciaKw[p] ?? 0
-    potencia_periodos_fija[p] = r2(kw * dias * (preciosPotencia[p] ?? 0))
+    potencia_periodos_fija[p] = r2(kw * diasPotencia * (preciosPotencia[p] ?? 0))
   }
   const potencia = r2(Object.values(potencia_periodos_fija).reduce<number>((s, v) => s + (v ?? 0), 0))
 
@@ -410,7 +416,7 @@ export async function POST(req: NextRequest) {
       porcentaje_ahorro: parsed.total_factura > 0
         ? Math.round((ahorro_mensual / parsed.total_factura) * 100)
         : 0,
-      kwh_anuales_sips: Math.round(kwhTotal * 12),
+      kwh_anuales_sips: Math.round((parsed.kwh_total ?? 0) / dias * 365),
       mercado_actual_mwh: Math.round(pmdMedia * 10) / 10,
       mercado_historico_ok: histOk,
       mercado_real_fuente: mercadoReal.fuente,

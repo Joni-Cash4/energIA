@@ -154,6 +154,11 @@ Verificado contra Excel simulador de tarifas de Jonathan — todos los periodos 
 - Ratio BOE/WEB: `kwhTotal` debe normalizarse a 30 días antes de dividir por kW. Sin
   normalizar, una factura de 242 días da ratio 8× inflado → recomienda WEB cuando
   debería ser BOE. Fórmula correcta: `(kwh_total * 30 / dias_facturados) / potencia_kw`.
+- `dias_facturados_potencia`: campo separado para facturas con acumulación de energía donde
+  la potencia solo se cobra por N días aunque el periodo de energía sea mayor. Las funciones
+  `simIndexada` y `simFija` usan este valor para la potencia (fallback a `dias_facturados`).
+  `kwhTotal` en simIndexada se calcula como `sum(periodos.kwh)`, no de `data.kwh_total` (que
+  puede venir del medidor ≠ kWh facturados). `kwh_anuales_sips` usa `kwh_total/dias*365`.
 
 ## PDF generado (jsPDF, client-side)
 - **4 columnas**: Factura actual | Próxima Cristalina | Atulado BOE | Atulado WEB
