@@ -5,7 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Upload, FileText, Download, Save, Loader2, AlertCircle, X, Image, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import { ChevronsUpDown, Check } from 'lucide-react'
 import { processInvoice } from '@/lib/api'
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatCurrency, formatNumber, cn } from '@/lib/utils'
@@ -399,6 +401,7 @@ export default function NuevaFacturaPage() {
   const [error, setError]               = useState<string | null>(null)
   const [clientes, setClientes]         = useState<Pick<Cliente, 'id' | 'nombre' | 'empresa'>[]>([])
   const [selectedClienteId, setSelectedClienteId] = useState<string>('')
+  const [clienteOpen, setClienteOpen] = useState(false)
   const [facturaSaved, setFacturaSaved] = useState(false)
 
   useEffect(() => {
@@ -943,19 +946,44 @@ export default function NuevaFacturaPage() {
               {/* Vincular a cliente existente */}
               <div className="flex items-center gap-3">
                 <div className="flex-1 max-w-xs">
-                  <Select value={selectedClienteId || 'none'} onValueChange={v => { setSelectedClienteId(v === 'none' ? '' : v); setFacturaSaved(false) }}>
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue placeholder="Vincular a cliente existente..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Sin vincular</SelectItem>
-                      {clientes.map(c => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.nombre}{c.empresa ? ` — ${c.empresa}` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={clienteOpen} onOpenChange={setClienteOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" aria-expanded={clienteOpen}
+                        className="h-9 w-full justify-between text-sm font-normal bg-transparent border-[#1F1F1F] hover:bg-[#1F1F1F] text-left">
+                        <span className="truncate">
+                          {selectedClienteId
+                            ? (clientes.find(c => c.id === selectedClienteId)
+                                ? `${clientes.find(c => c.id === selectedClienteId)!.nombre}${clientes.find(c => c.id === selectedClienteId)!.empresa ? ` — ${clientes.find(c => c.id === selectedClienteId)!.empresa}` : ''}`
+                                : 'Vincular a cliente existente...')
+                            : 'Vincular a cliente existente...'}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="p-0">
+                      <Command>
+                        <CommandInput placeholder="Buscar cliente..." />
+                        <CommandList>
+                          <CommandEmpty>No se encontró ningún cliente.</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem value="none" onSelect={() => { setSelectedClienteId(''); setFacturaSaved(false); setClienteOpen(false) }}>
+                              <Check className={cn('mr-2 h-4 w-4', !selectedClienteId ? 'opacity-100' : 'opacity-0')} />
+                              Sin vincular
+                            </CommandItem>
+                            {clientes.map(c => {
+                              const label = `${c.nombre}${c.empresa ? ` — ${c.empresa}` : ''}`
+                              return (
+                                <CommandItem key={c.id} value={label} onSelect={() => { setSelectedClienteId(c.id); setFacturaSaved(false); setClienteOpen(false) }}>
+                                  <Check className={cn('mr-2 h-4 w-4', selectedClienteId === c.id ? 'opacity-100' : 'opacity-0')} />
+                                  {label}
+                                </CommandItem>
+                              )
+                            })}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 {facturaSaved && (
                   <span className="text-xs text-[#00E676] font-medium">✓ Factura guardada</span>
