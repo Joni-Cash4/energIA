@@ -37,7 +37,8 @@ INSTRUCCIONES IMPORTANTES:
 - precio_kwh de cada periodo = peaje_kwh + cargos_kwh + mercado_kwh (suma de los tres componentes), el precio total que paga el cliente por esa energía.
 - mercado_kwh = precio del "coste de la energía" o "precio indexado" por kWh de ese periodo (solo el componente de mercado OMIE/pool, sin peajes ni cargos). Busca "Importe por coste de la energía", "Energía. Mercado" o similar.
 - importe de cada periodo = suma de (peaje + cargos + energía) × kWh de ese periodo (solo energía, sin potencia ni impuestos).
-- kwh_total = suma de kWh de todos los periodos con consumo.
+- kwh_total = kWh reales medidos por el contador durante el periodo (lectura final - lectura inicial). Aparece en la sección de "Lecturas" o "Consumo del periodo". Es DIFERENTE de la energía variable facturada en facturas con acumulación.
+- periodos.kwh = kWh de la sección ENERGÍA VARIABLE o TÉRMINO DE ENERGÍA ACTIVA de la factura, que es lo que se FACTURA en cada periodo. En facturas normales coincide con las lecturas del contador. En facturas con acumulación de consumos anteriores (donde el cliente no tuvo lecturas reales durante meses), la energía variable puede ser MUCHO MAYOR que el consumo del contador — usa SIEMPRE la energía variable facturada, no las lecturas. El importe de cada periodo = periodos.kwh × precio_kwh.
 - potencia_contratada = valor en kW de P1 (solo para mostrar, no se usa para calcular).
 - potencias = un array con la potencia contratada en kW de CADA periodo tarifario (P1 a P6 para 3.0TD/6.1TD, P1 a P3 para 2.0TD), AUNQUE NO TENGAN CONSUMO DE ENERGÍA. IMPORTANTE: la potencia contratada NO siempre es igual en todos los periodos (ej: P1=30kW, P2-P5=35kW, P6=60kW es habitual en 3.0TD). Busca la tabla "Potencia contratada" o "Potencia facturada" por periodo y extrae el valor exacto de cada uno, no asumas que son iguales.
 - dias_facturados = número de días del periodo de facturación (fecha_fin - fecha_inicio).
