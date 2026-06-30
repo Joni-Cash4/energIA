@@ -213,12 +213,24 @@ async function generatePdf(
     ? Math.round((data.base_imponible - (data.importe_iee ?? 0)) * 100) / 100
     : null
 
-  // Energía total para el cliente: incluye cargo gestión + otros costes regulados
-  // (el fee del asesor y los costes pass-through no se muestran como líneas separadas)
+  // Otros costes regulados de la factura actual (FNEE, GO, bono social, tasas):
+  // no los extrae la IA por separado → se derivan como la diferencia entre el subtotal
+  // real y la suma de los conceptos desglosados visibles.
+  const otrosCostesActualPdf = subtotalActual != null
+    ? Math.max(0, Math.round((
+        subtotalActual
+        - (data.potencia_total ?? 0)
+        - energiaActual
+        - (data.reactiva_total ?? 0)
+        - (data.alquiler_equipos ?? 0)
+      ) * 100) / 100)
+    : null
+
   const r2 = (n: number) => Math.round(n * 100) / 100
-  const idxEnergiaPdf = r2(simIdx.energia + simIdx.cargo_gestion + simIdx.otros_costes)
-  const boeEnergiaPdf = r2(simBoe.energia + simBoe.cargo_gestion + simBoe.otros_costes)
-  const webEnergiaPdf = r2(simWeb.energia + simWeb.cargo_gestion + simWeb.otros_costes)
+  // Energía para el PDF: sin bundlear otros_costes — se muestran en fila separada
+  const idxEnergiaPdf = r2(simIdx.energia + simIdx.cargo_gestion)
+  const boeEnergiaPdf = r2(simBoe.energia + simBoe.cargo_gestion)
+  const webEnergiaPdf = r2(simWeb.energia + simWeb.cargo_gestion)
 
   // Potencia — una sola fila en la tabla principal (el desglose va en sección separada abajo)
   row('Potencia contratada',
@@ -226,6 +238,18 @@ async function generatePdf(
 
   row('Energia activa (todos los periodos)',
     [energiaActual, idxEnergiaPdf, boeEnergiaPdf, webEnergiaPdf])
+
+  // Otros costes regulados — fila visible con el importe real de la factura actual
+  const otrosMostrar = (otrosCostesActualPdf ?? 0) > 0.1 || simIdx.otros_costes > 0
+  if (otrosMostrar) {
+    row('Otros costes (FNEE, bono social, GO, tasas)',
+      [
+        (otrosCostesActualPdf ?? 0) > 0.1 ? otrosCostesActualPdf : null,
+        simIdx.otros_costes > 0 ? simIdx.otros_costes : null,
+        simBoe.otros_costes > 0 ? simBoe.otros_costes : null,
+        simWeb.otros_costes > 0 ? simWeb.otros_costes : null,
+      ])
+  }
 
   if ((data.reactiva_total ?? 0) > 0) {
     row('Energia reactiva',
@@ -747,16 +771,33 @@ export default function NuevaFacturaPage() {
                       />
                     )}
 
-                    {/* Otros costes regulados (solo indexada) */}
-                    {simIdx.otros_costes > 0 && (
-                      <TableRow
-                        label="Otros costes regulados (FNEE, GO, bono, tasas)"
-                        actual={null}
-                        idx={simIdx.otros_costes}
-                        boe={null}
-                        web={null}
-                      />
-                    )}
+                    {/* Otros costes regulados — mostrar para la factura actual y Próxima */}
+                    {(() => {
+                      const subtotalReal = data.base_imponible
+                        ? Math.round((data.base_imponible - (data.importe_iee ?? 0)) * 100) / 100
+                        : null
+                      const energiaSum = (data.periodos ?? []).reduce((s, p) => s + (p.importe ?? 0), 0)
+                      const otrosActual = subtotalReal != null
+                        ? Math.max(0, Math.round((
+                            subtotalReal
+                            - (data.potencia_total ?? 0)
+                            - energiaSum
+                            - (data.reactiva_total ?? 0)
+                            - (data.alquiler_equipos ?? 0)
+                          ) * 100) / 100)
+                        : null
+                      const mostrar = (otrosActual ?? 0) > 0.1 || simIdx.otros_costes > 0
+                      if (!mostrar) return null
+                      return (
+                        <TableRow
+                          label="Otros costes (FNEE, bono social, GO, tasas)"
+                          actual={(otrosActual ?? 0) > 0.1 ? otrosActual : null}
+                          idx={simIdx.otros_costes > 0 ? simIdx.otros_costes : null}
+                          boe={simBoe.otros_costes > 0 ? simBoe.otros_costes : null}
+                          web={simWeb.otros_costes > 0 ? simWeb.otros_costes : null}
+                        />
+                      )
+                    })()}
 
                     {/* Reactiva */}
                     {(data.reactiva_total ?? 0) > 0 && (
