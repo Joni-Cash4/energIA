@@ -160,17 +160,25 @@ function withImpuestos(sub: number, iv: number) {
 }
 
 // ── cálculos principales ──────────────────────────────────────────────────────
-function calcComision(kwh: number, kw: number, feeE: number, feeP: number) {
-  const comisionMensual = (feeE * kwh / 12 / 1000) + (feeP * kw / 12)
+function getKwPeriodNames(tarifa: Tarifa): string[] {
+  return tarifa === '2.0TD' ? ['P1', 'P2'] : ['P1', 'P2', 'P3', 'P4', 'P5', 'P6']
+}
+
+function calcComision(kwh: number, kwSum: number, feeE: number, feeP: number) {
+  const comisionMensual = (feeE * kwh / 12 / 1000) + (feeP * kwSum / 12)
   return { comisionMensual, comisionAnual: comisionMensual * 12 }
 }
 
-function calcFija(kwh: number, kw: number, feeE: number, feeP: number, tarifa: Tarifa, mod: 'BOE' | 'WEB', tipo2td: 'DH' | 'Milenial' = 'DH') {
+function calcFija(kwh: number, kwByPeriod: Record<string, number>, kwSum: number, feeE: number, feeP: number, tarifa: Tarifa, mod: 'BOE' | 'WEB', tipo2td: 'DH' | 'Milenial' = 'DH') {
   const r = getAtuladoRate(mod, tarifa, tipo2td)
   const eA = r.e * kwh
-  const pA = r.p * kw
+  const potP = ATULADO_PERIODOS[mod][tarifa].pot
+  let pA = 0
+  for (const [p, kw] of Object.entries(kwByPeriod)) {
+    pA += (potP[p as keyof PP] ?? 0) * kw
+  }
   const feeEA = feeE * kwh / 1000
-  const feePA = feeP * kw
+  const feePA = feeP * kwSum
   const sub = eA + pA + feeEA + feePA
   const iv = getIvaRate(tarifa)
   const { iee, ivaAmt, total } = withImpuestos(sub, iv)
@@ -182,18 +190,21 @@ function calcFija(kwh: number, kw: number, feeE: number, feeP: number, tarifa: T
   }
 }
 
-function calcProxima(kwh: number, kw: number, feeE: number, feeP: number, tarifa: Tarifa, periodoKey: PeriodoKey, omieCustom: number) {
+function calcProxima(kwh: number, kwByPeriod: Record<string, number>, kwSum: number, feeE: number, feeP: number, tarifa: Tarifa, periodoKey: PeriodoKey, omieCustom: number) {
   const pc = PROXIMA_CRISTALINA
-  const peajePSum = sumV(vv(PEAJES_POTENCIA_2026[tarifa]))
-  const cargoPSum = sumV(vv(CARGOS_POTENCIA_2026[tarifa]))
+  const peajesP = PEAJES_POTENCIA_2026[tarifa] as Record<string, number | undefined>
+  const cargosP = CARGOS_POTENCIA_2026[tarifa] as Record<string, number | undefined>
+  let pA = 0
+  for (const [p, kw] of Object.entries(kwByPeriod)) {
+    pA += ((peajesP[p] ?? 0) + (cargosP[p] ?? 0)) * kw
+  }
   const bonoA = pc.bono_dia * 365
   const feeEA = feeE * kwh / 1000
-  const feePA = feeP * kw
+  const feePA = feeP * kwSum
   const iv = getIvaRate(tarifa)
 
   let eRate: number
   if (periodoKey === 'custom') {
-    // Estimación con OMIE referencia cuando no hay dato histórico
     const perdAvg = avg(vv(PERD_DEFECTO[tarifa]))
     const peajeEAvg = avg(vv(PEAJES_ENERGIA_2026[tarifa]))
     const cargoEAvg = avg(vv(CARGOS_ENERGIA_2026[tarifa]))
@@ -201,13 +212,11 @@ function calcProxima(kwh: number, kw: number, feeE: number, feeP: number, tarifa
     const feeTot = pc.fee_kwh + pc.fnee_kwh + pc.go_kwh
     eRate = mercado * (1 + pc.tasas_pct) + feeTot + peajeEAvg + cargoEAvg
   } else {
-    // Precio real del Excel: promedio de periodos disponibles para esta tarifa y mes
     const precios = vv(PRECIOS_HIST[periodoKey][tarifa])
     eRate = precios.length > 0 ? avg(precios) : avg(vv(PERD_DEFECTO[tarifa])) * (90 / 1000 + SC_FALLBACK + CAP_2026)
   }
 
   const eA = eRate * kwh
-  const pA = (peajePSum + cargoPSum) * kw
   const sub = eA + pA + bonoA + feeEA + feePA
   const { iee, ivaAmt, total } = withImpuestos(sub, iv)
 
@@ -392,7 +401,7 @@ function ProductCard({
 // ── página ────────────────────────────────────────────────────────────────────
 export default function SimuladorPage() {
   const [kwh,        setKwh]        = useState(100000)
-  const [kw,         setKw]         = useState(15)
+  const [kwPeriodos, setKwPeriodos] = useState<Record<string, number>>({ P1: 15, P2: 15, P3: 15, P4: 15, P5: 15, P6: 15 })
   const [feeE,       setFeeE]       = useState(5)
   const [feeP,       setFeeP]       = useState(1.5)
   const [tarifa,     setTarifa]     = useState<Tarifa>('3.0TD')
@@ -400,12 +409,16 @@ export default function SimuladorPage() {
   const [periodo,    setPeriodo]    = useState<PeriodoKey>('2026MARZO')
   const [omieCustom, setOmieCustom] = useState(130)
 
+  const kwPNames   = getKwPeriodNames(tarifa)
+  const kwByPeriod = Object.fromEntries(kwPNames.map(p => [p, kwPeriodos[p] ?? 15]))
+  const kwSum      = kwPNames.reduce((s, p) => s + (kwPeriodos[p] ?? 15), 0)
+
   const periodoEntry = PRECIOS_HIST[periodo]
-  const comision = calcComision(kwh, kw, feeE, feeP)
-  const proxima  = calcProxima(kwh, kw, feeE, feeP, tarifa, periodo, omieCustom)
-  const boe      = calcFija(kwh, kw, feeE, feeP, tarifa, 'BOE', tipo2td)
-  const web      = calcFija(kwh, kw, feeE, feeP, tarifa, 'WEB', tipo2td)
-  const autoMod: 'BOE' | 'WEB' = kwh / Math.max(kw, 0.001) > UMBRAL_KWH_POR_KW ? 'WEB' : 'BOE'
+  const comision = calcComision(kwh, kwSum, feeE, feeP)
+  const proxima  = calcProxima(kwh, kwByPeriod, kwSum, feeE, feeP, tarifa, periodo, omieCustom)
+  const boe      = calcFija(kwh, kwByPeriod, kwSum, feeE, feeP, tarifa, 'BOE', tipo2td)
+  const web      = calcFija(kwh, kwByPeriod, kwSum, feeE, feeP, tarifa, 'WEB', tipo2td)
+  const autoMod: 'BOE' | 'WEB' = kwh / Math.max(kwSum, 0.001) > UMBRAL_KWH_POR_KW ? 'WEB' : 'BOE'
   const labelBoe = tarifa === '2.0TD' ? (tipo2td === 'Milenial' ? 'Milenial BOE' : 'DH BOE') : 'Atulado BOE'
   const labelWeb = tarifa === '2.0TD' ? (tipo2td === 'Milenial' ? 'Milenial WEB' : 'DH WEB') : 'Atulado WEB'
 
@@ -432,8 +445,27 @@ export default function SimuladorPage() {
                 <Input type="number" value={kwh} onChange={(e) => setKwh(Number(e.target.value))} min={1000} step={1000} />
               </div>
               <div>
-                <label className="block text-sm text-[#9CA3AF] mb-2">kW contratados</label>
-                <Input type="number" value={kw} onChange={(e) => setKw(Number(e.target.value))} min={1} step={0.5} />
+                <label className="block text-sm text-[#9CA3AF] mb-2">
+                  kW contratados por periodo
+                </label>
+                <div className={`grid gap-2 ${tarifa === '2.0TD' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                  {kwPNames.map(p => (
+                    <div key={p}>
+                      <label className="block text-xs text-[#6B7280] mb-1">{p}</label>
+                      <Input
+                        type="number"
+                        value={kwPeriodos[p] ?? 15}
+                        onChange={(e) => setKwPeriodos(prev => ({ ...prev, [p]: Number(e.target.value) }))}
+                        min={0.1}
+                        step={0.1}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-[#4B5563] mt-1.5">
+                  Total: <span className="text-[#9CA3AF] font-medium">{kwSum.toFixed(1)} kW</span>
+                  <span className="ml-2 text-[#3B3B3B]">({kwPNames.map(p => `${p}:${kwPeriodos[p] ?? 15}`).join(' · ')})</span>
+                </p>
               </div>
               <div>
                 <label className="block text-sm text-[#9CA3AF] mb-2">
@@ -528,7 +560,7 @@ export default function SimuladorPage() {
 
         <div className="space-y-5">
           <motion.div
-            key={`${feeE}-${feeP}-${kwh}-${kw}`}
+            key={`${feeE}-${feeP}-${kwh}-${kwSum}`}
             initial={{ opacity: 0.6, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
@@ -546,10 +578,10 @@ export default function SimuladorPage() {
               </div>
             </div>
             <p className="text-xs text-[#4B5563] mt-4 text-center">
-              {formatNumber(kwh)} kWh/año · {kw} kW · {tarifa}
+              {formatNumber(kwh)} kWh/año · {kwSum.toFixed(1)} kW total · {tarifa}
               <span className="mx-1.5">·</span>
               Auto recomendado: <span className={autoMod === 'WEB' ? 'text-violet-400' : 'text-blue-400'}>{autoMod}</span>
-              <span className="ml-1">({formatNumber(kwh / Math.max(kw, 0.001), 0)} kWh/kW)</span>
+              <span className="ml-1">({formatNumber(kwh / Math.max(kwSum, 0.001), 0)} kWh/kW)</span>
             </p>
           </motion.div>
 
@@ -574,7 +606,7 @@ export default function SimuladorPage() {
 
       {/* ── Comparativa 3 productos ──────────────────────────────────────── */}
       <motion.div
-        key={`cards-${feeE}-${feeP}-${kwh}-${kw}-${tarifa}-${periodo}-${tipo2td}`}
+        key={`cards-${feeE}-${feeP}-${kwh}-${kwSum}-${tarifa}-${periodo}-${tipo2td}`}
         initial={{ opacity: 0.7 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.25 }}
@@ -614,7 +646,7 @@ export default function SimuladorPage() {
         <div className="px-5 py-4 border-b border-[#1F1F1F]">
           <h2 className="text-white font-semibold">Tabla de escenarios</h2>
           <p className="text-[#6B7280] text-xs mt-0.5">
-            {formatNumber(kwh)} kWh/año · {kw} kW · {tarifa}
+            {formatNumber(kwh)} kWh/año · {kwSum.toFixed(1)} kW total · {tarifa}
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -628,10 +660,10 @@ export default function SimuladorPage() {
             </thead>
             <tbody>
               {ESCENARIOS.map((s) => {
-                const r = calcComision(kwh, kw, s.feeE, s.feeP)
-                const px = calcProxima(kwh, kw, s.feeE, s.feeP, tarifa, periodo, omieCustom)
-                const b  = calcFija(kwh, kw, s.feeE, s.feeP, tarifa, 'BOE', tipo2td)
-                const w  = calcFija(kwh, kw, s.feeE, s.feeP, tarifa, 'WEB', tipo2td)
+                const r = calcComision(kwh, kwSum, s.feeE, s.feeP)
+                const px = calcProxima(kwh, kwByPeriod, kwSum, s.feeE, s.feeP, tarifa, periodo, omieCustom)
+                const b  = calcFija(kwh, kwByPeriod, kwSum, s.feeE, s.feeP, tarifa, 'BOE', tipo2td)
+                const w  = calcFija(kwh, kwByPeriod, kwSum, s.feeE, s.feeP, tarifa, 'WEB', tipo2td)
                 const active = s.feeE === feeE && s.feeP === feeP
                 return (
                   <tr
