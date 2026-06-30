@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, FileText, Users, Inbox, Zap, LogOut,
-  ChevronRight, TrendingUp, CalendarDays, Mail, Sliders, FileCheck,
+  ChevronRight, TrendingUp, CalendarDays, Mail, Sliders, FileCheck, Receipt,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getSupabaseClient } from '@/lib/supabase'
@@ -16,6 +16,7 @@ const navItems = [
   { href: '/dashboard/clientes',       label: 'Clientes',        icon: Users },
   { href: '/dashboard/leads',          label: 'Leads',           icon: Inbox },
   { href: '/dashboard/contratos',      label: 'Contratos',       icon: FileCheck, badge: 'contratos' },
+  { href: '/dashboard/comisiones',     label: 'Comisiones',      icon: Receipt },
   { href: '/dashboard/cartera',        label: 'Cartera',         icon: TrendingUp },
   { href: '/dashboard/agenda',         label: 'Agenda',          icon: CalendarDays },
   { href: '/dashboard/contactos',      label: 'Mensajes web',    icon: Mail, badge: 'contactos' },

@@ -1,9 +1,9 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck, Clock, CheckCircle2, Phone, Mail, Users, MapPin, MessageSquare, Send, RefreshCw, Zap } from 'lucide-react'
+import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck, Clock, CheckCircle2, Phone, Mail, Users, MapPin, MessageSquare, Send, RefreshCw, Zap, Upload, FileText } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import type { Cliente, Factura, Contrato, ClienteEstado, Accion, AccionTipoVal, AccionResultadoVal, ConsumoDatadis } from '@/types'
+import type { Cliente, Factura, Contrato, ClienteEstado, Accion, AccionTipoVal, AccionResultadoVal, ConsumoDatadis, FacturaContrato } from '@/types'
 
 const TIPO_ICONS: Record<AccionTipoVal, typeof Phone> = {
   llamada: Phone, email: Mail, reunion: Users, visita: MapPin, otro: MessageSquare,
@@ -68,6 +68,9 @@ export default function ClienteDetailPage() {
   const [consumosDatadis, setConsumosDatadis] = useState<ConsumoDatadis[]>([])
   const [syncingDatadis, setSyncingDatadis] = useState(false)
   const [ultimaSyncDatadis, setUltimaSyncDatadis] = useState<string | null>(null)
+  const [facturasContrato, setFacturasContrato] = useState<FacturaContrato[]>([])
+  const [uploadingFactura, setUploadingFactura] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Contact fields
   const [nombre,    setNombre]    = useState('')
@@ -101,7 +104,8 @@ export default function ClienteDetailPage() {
       supabase.from('contratos').select('*').eq('cliente_id', id).order('fecha_vencimiento', { ascending: true }),
       supabase.from('acciones').select('*').eq('cliente_id', id).order('fecha', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('consumos_datadis').select('*').eq('cliente_id', id).order('year_month', { ascending: false }),
-    ]).then(([{ data: c }, { data: f }, { data: ct }, { data: ac }, { data: cd }]) => {
+      supabase.from('facturas_contrato').select('*').eq('cliente_id', id).order('periodo_fin', { ascending: false }),
+    ]).then(([{ data: c }, { data: f }, { data: ct }, { data: ac }, { data: cd }, { data: fc }]) => {
       if (!c) { router.replace('/dashboard/clientes'); return }
       setCliente(c)
       setNombre(c.nombre ?? '')
@@ -130,6 +134,7 @@ export default function ClienteDetailPage() {
       setContratos((ct ?? []) as Contrato[])
       setAcciones((ac ?? []) as Accion[])
       setConsumosDatadis((cd ?? []) as ConsumoDatadis[])
+      setFacturasContrato((fc ?? []) as FacturaContrato[])
       setLoading(false)
     })
   }, [id, router])
@@ -198,6 +203,23 @@ export default function ClienteDetailPage() {
       setCliente((p) => p ? { ...p, nombre, empresa: empresa || undefined, estado, notas, email: email || undefined, telefono: telefono || undefined } : p)
     }
     setSaving(false)
+  }
+
+  const handleUploadFactura = async (file: File) => {
+    setUploadingFactura(true)
+    try {
+      const form = new FormData()
+      form.append('pdf', file)
+      form.append('clienteId', id)
+      const res = await fetch('/api/facturas-contrato/upload', { method: 'POST', body: form })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error desconocido')
+      setFacturasContrato(prev => [data.factura as FacturaContrato, ...prev])
+      toast({ title: 'Factura procesada', description: `Nº ${data.factura.numero_factura ?? '—'}` })
+    } catch (err) {
+      toast({ title: 'Error al subir factura', description: String(err), variant: 'destructive' })
+    }
+    setUploadingFactura(false)
   }
 
   const handleSyncDatadis = async () => {
@@ -417,6 +439,92 @@ export default function ClienteDetailPage() {
                         <td className="px-5 py-3">
                           {f.pdf_url && (
                             <a href={f.pdf_url} target="_blank" rel="noopener noreferrer" className="text-[#6B7280] hover:text-[#00E676]">
+                              <Download className="w-4 h-4" />
+                            </a>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Facturas del contrato */}
+          <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#1F1F1F] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-[#00E676]" />
+                <h2 className="text-white font-semibold">Facturas del contrato</h2>
+              </div>
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0]
+                    if (file) handleUploadFactura(file)
+                    e.target.value = ''
+                  }}
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingFactura}
+                >
+                  {uploadingFactura
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Upload className="w-3.5 h-3.5" />}
+                  {uploadingFactura ? 'Procesando…' : 'Subir PDF'}
+                </Button>
+              </div>
+            </div>
+
+            {facturasContrato.length === 0 ? (
+              <div className="py-10 text-center text-[#6B7280] text-sm">
+                {uploadingFactura
+                  ? <div className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin text-[#00E676]" /><span>Extrayendo datos con IA…</span></div>
+                  : 'No hay facturas subidas aún. Sube un PDF para extraer los datos automáticamente.'}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[#1F1F1F]">
+                      {['Período', 'Nº Factura', 'Importe', 'kWh', '€/kWh', 'Ahorro', ''].map(h => (
+                        <th key={h} className="px-5 py-3 text-left text-xs text-[#6B7280] uppercase tracking-wide font-medium whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {facturasContrato.map((f) => (
+                      <tr key={f.id} className="border-b border-[#1F1F1F] last:border-0 hover:bg-[#1A1A1A]">
+                        <td className="px-5 py-3 text-[#9CA3AF] text-xs whitespace-nowrap">
+                          {f.periodo_inicio && f.periodo_fin
+                            ? `${formatDate(f.periodo_inicio)} – ${formatDate(f.periodo_fin)}`
+                            : f.fecha_factura ? formatDate(f.fecha_factura) : '—'}
+                        </td>
+                        <td className="px-5 py-3 text-[#9CA3AF] font-mono text-xs">{f.numero_factura ?? '—'}</td>
+                        <td className="px-5 py-3 text-white font-medium">{f.importe_total ? formatCurrency(f.importe_total) : '—'}</td>
+                        <td className="px-5 py-3 text-[#9CA3AF]">{f.kwh_total?.toLocaleString('es-ES') ?? '—'}</td>
+                        <td className="px-5 py-3 text-[#9CA3AF] font-mono text-xs">
+                          {f.precio_kwh_efectivo ? `${(f.precio_kwh_efectivo * 1000).toFixed(2)} €/MWh` : '—'}
+                        </td>
+                        <td className="px-5 py-3">
+                          {f.ahorro_vs_anterior !== null && f.ahorro_vs_anterior !== undefined ? (
+                            <span className={`text-xs font-semibold ${f.ahorro_vs_anterior >= 0 ? 'text-[#00E676]' : 'text-red-400'}`}>
+                              {f.ahorro_vs_anterior >= 0 ? '+' : ''}{formatCurrency(f.ahorro_vs_anterior)}
+                            </span>
+                          ) : <span className="text-[#6B7280] text-xs">—</span>}
+                        </td>
+                        <td className="px-5 py-3">
+                          {f.pdf_url && (
+                            <a href={f.pdf_url} target="_blank" rel="noopener noreferrer" className="text-[#6B7280] hover:text-[#00E676] transition-colors">
                               <Download className="w-4 h-4" />
                             </a>
                           )}
