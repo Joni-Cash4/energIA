@@ -164,8 +164,10 @@ function getKwPeriodNames(tarifa: Tarifa): string[] {
   return tarifa === '2.0TD' ? ['P1', 'P2'] : ['P1', 'P2', 'P3', 'P4', 'P5', 'P6']
 }
 
-function calcComision(kwh: number, kwSum: number, feeE: number, feeP: number) {
-  const comisionMensual = (feeE * kwh / 12 / 1000) + (feeP * kwSum / 12)
+const REPARTO_ATULADO = { e: 0.95, p: 0.65 }
+
+function calcComision(kwh: number, kwSum: number, feeE: number, feeP: number, repartoE = 1.0, repartoP = 1.0) {
+  const comisionMensual = (feeE * kwh / 12 / 1000 * repartoE) + (feeP * kwSum / 12 * repartoP)
   return { comisionMensual, comisionAnual: comisionMensual * 12 }
 }
 
@@ -414,7 +416,8 @@ export default function SimuladorPage() {
   const kwSum      = kwPNames.reduce((s, p) => s + (kwPeriodos[p] ?? 15), 0)
 
   const periodoEntry = PRECIOS_HIST[periodo]
-  const comision = calcComision(kwh, kwSum, feeE, feeP)
+  const comision        = calcComision(kwh, kwSum, feeE, feeP)
+  const comisionAtulado = calcComision(kwh, kwSum, feeE, feeP, REPARTO_ATULADO.e, REPARTO_ATULADO.p)
   const proxima  = calcProxima(kwh, kwByPeriod, kwSum, feeE, feeP, tarifa, periodo, omieCustom)
   const boe      = calcFija(kwh, kwByPeriod, kwSum, feeE, feeP, tarifa, 'BOE', tipo2td)
   const web      = calcFija(kwh, kwByPeriod, kwSum, feeE, feeP, tarifa, 'WEB', tipo2td)
@@ -567,14 +570,30 @@ export default function SimuladorPage() {
             className="bg-[#141414] border border-[#00E676]/25 rounded-2xl p-6"
           >
             <h2 className="text-white font-semibold mb-4">Tu comisión</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-[#0F0F0F] rounded-xl p-4 text-center">
-                <p className="text-[#6B7280] text-xs uppercase tracking-wide mb-1">Comisión / mes</p>
-                <p className="text-2xl font-bold text-white">{formatCurrency(comision.comisionMensual)}</p>
+            <div className="grid grid-cols-2 gap-3">
+              {/* Próxima — 100% */}
+              <div>
+                <p className="text-amber-400/70 text-xs font-semibold uppercase tracking-wide mb-2">Próxima <span className="text-[#4B5563] font-normal normal-case">(100%)</span></p>
+                <div className="bg-[#0F0F0F] rounded-xl p-3 text-center mb-2">
+                  <p className="text-[#6B7280] text-xs mb-0.5">Por mes</p>
+                  <p className="text-xl font-bold text-white">{formatCurrency(comision.comisionMensual)}</p>
+                </div>
+                <div className="bg-[#1a1a0a] border border-amber-500/20 rounded-xl p-3 text-center">
+                  <p className="text-[#6B7280] text-xs mb-0.5">Por año</p>
+                  <p className="text-xl font-bold text-amber-400">{formatCurrency(comision.comisionAnual)}</p>
+                </div>
               </div>
-              <div className="bg-[#00E676]/5 border border-[#00E676]/20 rounded-xl p-4 text-center">
-                <p className="text-[#6B7280] text-xs uppercase tracking-wide mb-1">Comisión / año</p>
-                <p className="text-2xl font-bold text-[#00E676]">{formatCurrency(comision.comisionAnual)}</p>
+              {/* Atulado — 95%E / 65%P */}
+              <div>
+                <p className="text-blue-400/70 text-xs font-semibold uppercase tracking-wide mb-2">Atulado <span className="text-[#4B5563] font-normal normal-case">(95%E / 65%P)</span></p>
+                <div className="bg-[#0F0F0F] rounded-xl p-3 text-center mb-2">
+                  <p className="text-[#6B7280] text-xs mb-0.5">Por mes</p>
+                  <p className="text-xl font-bold text-white">{formatCurrency(comisionAtulado.comisionMensual)}</p>
+                </div>
+                <div className="bg-[#0a0a1a] border border-blue-500/20 rounded-xl p-3 text-center">
+                  <p className="text-[#6B7280] text-xs mb-0.5">Por año</p>
+                  <p className="text-xl font-bold text-blue-400">{formatCurrency(comisionAtulado.comisionAnual)}</p>
+                </div>
               </div>
             </div>
             <p className="text-xs text-[#4B5563] mt-4 text-center">
@@ -653,14 +672,15 @@ export default function SimuladorPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1F1F1F]">
-                {['Escenario','Fee E','Fee P','Com./mes','Com./año','Próxima/mes',`${labelBoe}/mes`,`${labelWeb}/mes`].map(h => (
+                {['Escenario','Fee E','Fee P','Com. Próxima/año','Com. Atulado/año','Próxima/mes',`${labelBoe}/mes`,`${labelWeb}/mes`].map(h => (
                   <th key={h} className="px-3 py-3 text-left text-xs text-[#6B7280] uppercase tracking-wide font-medium whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {ESCENARIOS.map((s) => {
-                const r = calcComision(kwh, kwSum, s.feeE, s.feeP)
+                const r  = calcComision(kwh, kwSum, s.feeE, s.feeP)
+                const rA = calcComision(kwh, kwSum, s.feeE, s.feeP, REPARTO_ATULADO.e, REPARTO_ATULADO.p)
                 const px = calcProxima(kwh, kwByPeriod, kwSum, s.feeE, s.feeP, tarifa, periodo, omieCustom)
                 const b  = calcFija(kwh, kwByPeriod, kwSum, s.feeE, s.feeP, tarifa, 'BOE', tipo2td)
                 const w  = calcFija(kwh, kwByPeriod, kwSum, s.feeE, s.feeP, tarifa, 'WEB', tipo2td)
@@ -676,8 +696,8 @@ export default function SimuladorPage() {
                     </td>
                     <td className="px-3 py-3 text-[#9CA3AF] text-xs whitespace-nowrap">{s.feeE} €/MWh</td>
                     <td className="px-3 py-3 text-[#9CA3AF] text-xs whitespace-nowrap">{s.feeP} €/kW·a</td>
-                    <td className="px-3 py-3 text-white font-medium tabular-nums">{formatCurrency(r.comisionMensual)}</td>
-                    <td className="px-3 py-3 font-bold text-[#00E676] tabular-nums">{formatCurrency(r.comisionAnual)}</td>
+                    <td className="px-3 py-3 font-bold text-amber-400 tabular-nums">{formatCurrency(r.comisionAnual)}</td>
+                    <td className="px-3 py-3 font-bold text-blue-400 tabular-nums">{formatCurrency(rA.comisionAnual)}</td>
                     <td className="px-3 py-3 font-semibold text-amber-400 tabular-nums">{formatCurrency(px.totalMes)}</td>
                     <td className="px-3 py-3 font-semibold text-blue-400 tabular-nums">{formatCurrency(b.totalMes)}</td>
                     <td className="px-3 py-3 font-semibold text-violet-400 tabular-nums">{formatCurrency(w.totalMes)}</td>
