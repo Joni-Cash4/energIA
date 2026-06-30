@@ -62,6 +62,17 @@ export async function POST(req: Request) {
     if (!process.env.DATADIS_USERNAME || !process.env.DATADIS_PASSWORD) {
       return NextResponse.json({ error: 'Credenciales Datadis no configuradas en el servidor' }, { status: 500 })
     }
+    // DEBUG TEMPORAL — verificar que los env vars lleguen completos
+    const pwdLen = process.env.DATADIS_PASSWORD.length
+    const userLen = process.env.DATADIS_USERNAME.length
+    const pwdHasAmpersand = process.env.DATADIS_PASSWORD.includes('&')
+    console.log(`[datadis] user len=${userLen} pwd len=${pwdLen} has&=${pwdHasAmpersand}`)
+    if (pwdLen < 10) {
+      return NextResponse.json({
+        error: `DEBUG: password en Vercel parece truncada (${pwdLen} chars). Contiene &: ${pwdHasAmpersand}. Re-configura DATADIS_PASSWORD en Vercel.`,
+        debug: { userLen, pwdLen, pwdHasAmpersand }
+      }, { status: 500 })
+    }
 
     const token = await getToken()
 
