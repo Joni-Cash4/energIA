@@ -3,13 +3,14 @@ import { NextResponse } from 'next/server'
 const BASE = 'https://datadis.es'
 
 async function getToken(): Promise<string> {
+  const body = new URLSearchParams({
+    username: process.env.DATADIS_USERNAME ?? '',
+    password: process.env.DATADIS_PASSWORD ?? '',
+  })
   const res = await fetch(`${BASE}/nikola-auth/tokens/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      username: process.env.DATADIS_USERNAME,
-      password: process.env.DATADIS_PASSWORD,
-    }),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
   })
   if (!res.ok) throw new Error(`Auth Datadis ${res.status}: ${await res.text()}`)
   return res.text()
