@@ -236,11 +236,21 @@ export default function ClienteDetailPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Error desconocido')
-      const ahora = new Date().toISOString()
-      setUltimaSyncDatadis(ahora)
-      // Reload consumos
+
+      // Escribir consumos en Supabase con la sesión del cliente
       const supabase = getSupabaseClient()
-      const { data: cd } = await supabase.from('consumos_datadis').select('*').eq('cliente_id', id).order('year_month', { ascending: false })
+      if (data.consumos?.length > 0) {
+        await supabase
+          .from('consumos_datadis')
+          .upsert(data.consumos, { onConflict: 'cliente_id,cups,year_month' })
+      }
+
+      const ahora = new Date().toISOString()
+      await supabase.from('clientes').update({ ultima_sync_datadis: ahora }).eq('id', id)
+      setUltimaSyncDatadis(ahora)
+
+      const { data: cd } = await supabase
+        .from('consumos_datadis').select('*').eq('cliente_id', id).order('year_month', { ascending: false })
       setConsumosDatadis((cd ?? []) as ConsumoDatadis[])
       toast({ title: `Sincronizado: ${data.meses_sincronizados} meses`, description: `${Math.round(data.kwh_total).toLocaleString('es-ES')} kWh totales` })
     } catch (err) {
