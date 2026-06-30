@@ -164,6 +164,7 @@ function getKwPeriodNames(tarifa: Tarifa): string[] {
   return tarifa === '2.0TD' ? ['P1', 'P2'] : ['P1', 'P2', 'P3', 'P4', 'P5', 'P6']
 }
 
+const REPARTO_PROXIMA = { e: 1.00, p: 0.65 }
 const REPARTO_ATULADO = { e: 0.95, p: 0.65 }
 
 function calcComision(kwh: number, kwSum: number, feeE: number, feeP: number, repartoE = 1.0, repartoP = 1.0) {
@@ -416,7 +417,7 @@ export default function SimuladorPage() {
   const kwSum      = kwPNames.reduce((s, p) => s + (kwPeriodos[p] ?? 15), 0)
 
   const periodoEntry = PRECIOS_HIST[periodo]
-  const comision        = calcComision(kwh, kwSum, feeE, feeP)
+  const comision        = calcComision(kwh, kwSum, feeE, feeP, REPARTO_PROXIMA.e, REPARTO_PROXIMA.p)
   const comisionAtulado = calcComision(kwh, kwSum, feeE, feeP, REPARTO_ATULADO.e, REPARTO_ATULADO.p)
   const proxima  = calcProxima(kwh, kwByPeriod, kwSum, feeE, feeP, tarifa, periodo, omieCustom)
   const boe      = calcFija(kwh, kwByPeriod, kwSum, feeE, feeP, tarifa, 'BOE', tipo2td)
@@ -573,7 +574,7 @@ export default function SimuladorPage() {
             <div className="grid grid-cols-2 gap-3">
               {/* Próxima — 100% */}
               <div>
-                <p className="text-amber-400/70 text-xs font-semibold uppercase tracking-wide mb-2">Próxima <span className="text-[#4B5563] font-normal normal-case">(100%)</span></p>
+                <p className="text-amber-400/70 text-xs font-semibold uppercase tracking-wide mb-2">Próxima <span className="text-[#4B5563] font-normal normal-case">(100%E / 65%P)</span></p>
                 <div className="bg-[#0F0F0F] rounded-xl p-3 text-center mb-2">
                   <p className="text-[#6B7280] text-xs mb-0.5">Por mes</p>
                   <p className="text-xl font-bold text-white">{formatCurrency(comision.comisionMensual)}</p>
@@ -679,7 +680,7 @@ export default function SimuladorPage() {
             </thead>
             <tbody>
               {ESCENARIOS.map((s) => {
-                const r  = calcComision(kwh, kwSum, s.feeE, s.feeP)
+                const r  = calcComision(kwh, kwSum, s.feeE, s.feeP, REPARTO_PROXIMA.e, REPARTO_PROXIMA.p)
                 const rA = calcComision(kwh, kwSum, s.feeE, s.feeP, REPARTO_ATULADO.e, REPARTO_ATULADO.p)
                 const px = calcProxima(kwh, kwByPeriod, kwSum, s.feeE, s.feeP, tarifa, periodo, omieCustom)
                 const b  = calcFija(kwh, kwByPeriod, kwSum, s.feeE, s.feeP, tarifa, 'BOE', tipo2td)
