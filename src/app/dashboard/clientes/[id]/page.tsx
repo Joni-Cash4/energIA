@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import type { Cliente, Factura, Contrato, ClienteEstado, Accion, AccionTipoVal, AccionResultadoVal, ConsumoDatadis, FacturaContrato } from '@/types'
+import type { Cliente, Factura, Contrato, ClienteEstado, Accion, AccionTipoVal, AccionResultadoVal, ConsumoDatadis, PotenciaDatadis, FacturaContrato } from '@/types'
 
 const TIPO_ICONS: Record<AccionTipoVal, typeof Phone> = {
   llamada: Phone, email: Mail, reunion: Users, visita: MapPin, otro: MessageSquare,
@@ -66,6 +66,7 @@ export default function ClienteDetailPage() {
   const [savingAccion, setSavingAccion] = useState(false)
   const [autorizacionDatadis, setAutorizacionDatadis] = useState('')
   const [consumosDatadis, setConsumosDatadis] = useState<ConsumoDatadis[]>([])
+  const [potenciaDatadis, setPotenciaDatadis] = useState<PotenciaDatadis[]>([])
   const [syncingDatadis, setSyncingDatadis] = useState(false)
   const [ultimaSyncDatadis, setUltimaSyncDatadis] = useState<string | null>(null)
   const [facturasContrato, setFacturasContrato] = useState<FacturaContrato[]>([])
@@ -105,7 +106,8 @@ export default function ClienteDetailPage() {
       supabase.from('acciones').select('*').eq('cliente_id', id).order('fecha', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('consumos_datadis').select('*').eq('cliente_id', id).order('year_month', { ascending: false }),
       supabase.from('facturas_contrato').select('*').eq('cliente_id', id).order('periodo_fin', { ascending: false }),
-    ]).then(([{ data: c }, { data: f }, { data: ct }, { data: ac }, { data: cd }, { data: fc }]) => {
+      supabase.from('potencia_datadis').select('*').eq('cliente_id', id).order('year_month', { ascending: false }),
+    ]).then(([{ data: c }, { data: f }, { data: ct }, { data: ac }, { data: cd }, { data: fc }, { data: pd }]) => {
       if (!c) { router.replace('/dashboard/clientes'); return }
       setCliente(c)
       setNombre(c.nombre ?? '')
@@ -135,6 +137,7 @@ export default function ClienteDetailPage() {
       setAcciones((ac ?? []) as Accion[])
       setConsumosDatadis((cd ?? []) as ConsumoDatadis[])
       setFacturasContrato((fc ?? []) as FacturaContrato[])
+      setPotenciaDatadis((pd ?? []) as PotenciaDatadis[])
       setLoading(false)
     })
   }, [id, router])
@@ -252,6 +255,11 @@ export default function ClienteDetailPage() {
       const { data: cd } = await supabase
         .from('consumos_datadis').select('*').eq('cliente_id', id).order('year_month', { ascending: false })
       setConsumosDatadis((cd ?? []) as ConsumoDatadis[])
+
+      const { data: pd } = await supabase
+        .from('potencia_datadis').select('*').eq('cliente_id', id).order('year_month', { ascending: false })
+      setPotenciaDatadis((pd ?? []) as PotenciaDatadis[])
+
       toast({ title: `Sincronizado: ${data.meses_sincronizados} meses`, description: `${Math.round(data.kwh_total).toLocaleString('es-ES')} kWh totales` })
     } catch (err) {
       toast({ title: 'Error Datadis', description: String(err), variant: 'destructive' })
@@ -753,6 +761,51 @@ export default function ClienteDetailPage() {
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
+                  </div>
+                )
+              })()}
+              {potenciaDatadis.length > 0 && (() => {
+                const periodos = Array.from(new Set(potenciaDatadis.map(p => p.periodo)))
+                  .sort((a, b) => Number(a) - Number(b))
+                const meses = Array.from(new Set(potenciaDatadis.map(p => p.year_month)))
+                  .sort().reverse()
+                const kwLimite = Number(kwContratados) || null
+                return (
+                  <div className="mt-4">
+                    <p className="text-xs text-[#9CA3AF] mb-2">Potencia máxima demandada (kW) por periodo</p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-[#1F1F1F]">
+                            <th className="px-2 py-1.5 text-left text-[#6B7280] uppercase tracking-wide font-medium">Mes</th>
+                            {periodos.map(p => (
+                              <th key={p} className="px-2 py-1.5 text-right text-[#6B7280] uppercase tracking-wide font-medium">P{p}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {meses.map(mes => (
+                            <tr key={mes} className="border-b border-[#1F1F1F] last:border-0">
+                              <td className="px-2 py-1.5 text-[#9CA3AF] whitespace-nowrap">{mes}</td>
+                              {periodos.map(p => {
+                                const reg = potenciaDatadis.find(x => x.year_month === mes && x.periodo === p)
+                                const excede = kwLimite != null && reg != null && reg.potencia_max_kw > kwLimite
+                                return (
+                                  <td key={p} className={`px-2 py-1.5 text-right font-mono ${excede ? 'text-red-400 font-semibold' : 'text-white'}`}>
+                                    {reg ? reg.potencia_max_kw.toFixed(2) : '—'}
+                                  </td>
+                                )
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {kwLimite != null && (
+                      <p className="text-xs text-[#6B7280] mt-2">
+                        Potencia contratada: <span className="text-white font-mono">{kwLimite} kW</span> — en rojo los excesos.
+                      </p>
+                    )}
                   </div>
                 )
               })()}

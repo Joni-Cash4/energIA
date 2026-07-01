@@ -191,6 +191,18 @@ export interface ConsumoDatadis {
   fecha_consulta: string
 }
 
+export interface PotenciaDatadis {
+  id: string
+  cliente_id: string
+  cups: string
+  year_month: string       // YYYY-MM del ciclo de lectura
+  periodo: string          // '1'..'6' (P1..P6 Datadis)
+  potencia_max_kw: number
+  fecha_pico?: string
+  hora_pico?: string
+  fecha_consulta: string
+}
+
 export interface Factura {
   id: string
   cliente_id: string
