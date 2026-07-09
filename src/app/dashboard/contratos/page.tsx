@@ -262,7 +262,9 @@ export default function ContratosPage() {
                 <thead>
                   <tr className="border-b border-[#1F1F1F]">
                     {['Vence en', 'Cliente', 'CUPS', 'Comercializadora', 'Producto', 'Vencimiento', 'Firma', 'Comisión', 'Renovación'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs text-[#6B7280] uppercase tracking-wide font-medium whitespace-nowrap">{h}</th>
+                      <th key={h} className={`px-4 py-3 text-left text-xs text-[#6B7280] uppercase tracking-wide font-medium whitespace-nowrap ${
+                        h === 'Renovación' ? 'sticky right-0 bg-[#141414] z-10 shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.6)]' : ''
+                      }`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -273,7 +275,7 @@ export default function ContratosPage() {
                     const nombre = clienteInfo?.nombre ?? c.cups ?? '—'
                     return (
                       <motion.tr key={c.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
-                        className="border-b border-[#1F1F1F] last:border-0 hover:bg-[#1A1A1A] transition-colors cursor-pointer"
+                        className="group border-b border-[#1F1F1F] last:border-0 hover:bg-[#1A1A1A] transition-colors cursor-pointer"
                         onClick={() => openEdit(c)}>
                         <td className="px-4 py-3">
                           {dias !== null ? <DiaBadge dias={dias} verificado={c.renovacion_verificada} /> : '—'}
@@ -299,7 +301,7 @@ export default function ContratosPage() {
                         <td className="px-4 py-3 text-white font-medium">
                           {c.a_cobrar ? formatCurrency(c.a_cobrar) : '—'}
                         </td>
-                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <td className="px-4 py-3 sticky right-0 bg-[#141414] group-hover:bg-[#1A1A1A] transition-colors shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.6)]" onClick={e => e.stopPropagation()}>
                           <button
                             onClick={() => handleToggle(c.id, c.renovacion_verificada)}
                             disabled={toggling === c.id}
