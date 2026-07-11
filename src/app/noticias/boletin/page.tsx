@@ -6,7 +6,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
 } from 'recharts'
-import { TrendingUp, TrendingDown, Zap, Leaf, Activity, AlertTriangle } from 'lucide-react'
+import { TrendingUp, TrendingDown, Zap, Leaf, Activity, AlertTriangle, Mail, Check } from 'lucide-react'
 import { Navbar } from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
 import { Toaster } from '@/components/ui/toaster'
@@ -74,6 +74,69 @@ function KpiCard({ icon: Icon, label, value, unit, sub }: {
   )
 }
 
+function Suscripcion() {
+  const [email, setEmail] = useState('')
+  const [estado, setEstado] = useState<'idle' | 'enviando' | 'ok' | 'error'>('idle')
+  const [mensaje, setMensaje] = useState('')
+
+  const suscribir = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setEstado('enviando')
+    try {
+      const res = await fetch('/api/boletin/suscribir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      setEstado('ok')
+      setMensaje(json.yaSuscrito ? 'Ya estabas suscrito — te llegará cada lunes.' : '¡Hecho! Cada lunes lo tendrás en tu correo.')
+    } catch (err) {
+      setEstado('error')
+      setMensaje(err instanceof Error && err.message ? err.message : 'No se pudo completar la suscripción. Inténtalo de nuevo.')
+    }
+  }
+
+  return (
+    <div className="bg-gradient-to-r from-[#00E676]/10 to-transparent border border-[#00E676]/30 rounded-2xl p-5 sm:p-6 mb-8">
+      <div className="flex items-center gap-2 mb-1">
+        <Mail className="w-4 h-4 text-[#00E676]" />
+        <p className="text-white font-semibold text-sm">Recibe el boletín cada lunes en tu correo</p>
+      </div>
+      <p className="text-[#9CA3AF] text-xs mb-4">Gratis, sin spam: solo el análisis semanal del mercado. Date de baja cuando quieras con un clic.</p>
+      {estado === 'ok' ? (
+        <p className="flex items-center gap-2 text-[#00E676] text-sm font-medium">
+          <Check className="w-4 h-4" /> {mensaje}
+        </p>
+      ) : (
+        <form onSubmit={suscribir} className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="tu@email.com"
+            className="flex-1 bg-[#0A0A0A] border border-[#1F1F1F] text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#00E676]/50 placeholder:text-[#4B5563]"
+          />
+          <button
+            type="submit"
+            disabled={estado === 'enviando'}
+            className="bg-[#00E676] text-black font-medium text-sm px-5 py-2.5 rounded-xl hover:bg-[#00C853] transition-colors disabled:opacity-60 whitespace-nowrap"
+          >
+            {estado === 'enviando' ? 'Suscribiendo…' : 'Suscribirme gratis'}
+          </button>
+        </form>
+      )}
+      {estado === 'error' && <p className="text-red-400 text-xs mt-2">{mensaje}</p>}
+      <p className="text-[#4B5563] text-[11px] mt-3">
+        Al suscribirte aceptas recibir el boletín semanal. Tratamos tu email conforme a nuestra{' '}
+        <Link href="/privacidad" className="underline hover:text-[#9CA3AF]">política de privacidad</Link>.
+      </p>
+    </div>
+  )
+}
+
 export default function BoletinPage() {
   const [data, setData] = useState<Boletin | null>(null)
   const [loading, setLoading] = useState(true)
@@ -117,6 +180,9 @@ export default function BoletinPage() {
               demanda y mix de generación. Redacción propia, sin letra pequeña.
             </p>
           </motion.div>
+
+          {/* Suscripción por email */}
+          <Suscripcion />
 
           {/* Selector de semana */}
           {data && (
