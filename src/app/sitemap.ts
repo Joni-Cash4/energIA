@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next'
 import { NOTICIAS_PROPIAS } from '@/lib/noticias-propias'
+import { latestCompleteMonday } from '@/lib/boletin'
 
 const BASE_URL = 'https://www.iaenergia.es'
 
@@ -23,5 +24,17 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.5,
   }))
 
-  return [...paginas, ...noticias]
+  // Últimas 12 semanas del boletín (mismo archivo que muestra la página)
+  const ultimoLunes = latestCompleteMonday()
+  const boletines: MetadataRoute.Sitemap = Array.from({ length: 12 }, (_, i) => {
+    const lunes = new Date(ultimoLunes)
+    lunes.setUTCDate(lunes.getUTCDate() - 7 * i)
+    return {
+      url: `${BASE_URL}/noticias/boletin/${lunes.toISOString().split('T')[0]}`,
+      changeFrequency: 'yearly' as const,
+      priority: 0.5,
+    }
+  })
+
+  return [...paginas, ...noticias, ...boletines]
 }

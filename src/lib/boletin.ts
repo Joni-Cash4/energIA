@@ -71,7 +71,7 @@ function fmtDay(d: Date, opts: Intl.DateTimeFormatOptions): string {
   return d.toLocaleDateString('es-ES', { ...opts, timeZone: 'UTC' })
 }
 
-function weekLabel(monday: Date): string {
+export function weekLabel(monday: Date): string {
   const sunday = addDays(monday, 6)
   const sameMonth = monday.getUTCMonth() === sunday.getUTCMonth()
   const ini = fmtDay(monday, sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'short' })

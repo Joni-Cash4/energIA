@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import { Navbar } from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
-import { FaqAccordion, FAQ_ITEMS } from '@/components/landing/FaqAccordion'
+import { FaqAccordion } from '@/components/landing/FaqAccordion'
+import { FAQ_ITEMS } from '@/lib/faq-items'
 import { Toaster } from '@/components/ui/toaster'
 
 export const metadata: Metadata = {
@@ -10,9 +11,21 @@ export const metadata: Metadata = {
   openGraph: { title: 'FAQ — IAenergía', description: 'Todo lo que necesitas saber sobre el ahorro en tu factura eléctrica.' },
 }
 
+// Datos estructurados FAQPage — permite resultados enriquecidos en Google
+const faqJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: FAQ_ITEMS.map((item) => ({
+    '@type': 'Question',
+    name: item.q,
+    acceptedAnswer: { '@type': 'Answer', text: item.a },
+  })),
+}
+
 export default function FaqPage() {
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <Navbar />
       <main className="min-h-screen pt-16">
         <div className="max-w-3xl mx-auto px-4 py-16 text-center">

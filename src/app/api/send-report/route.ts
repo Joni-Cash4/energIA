@@ -283,6 +283,24 @@ export async function POST(req: NextRequest) {
 
     await supabase.from('contactos').insert({ nombre, email, telefono: telefono || null, mensaje })
 
+    // También como lead en el pipeline del dashboard (antes solo iba a
+    // "Mensajes web" y la pestaña Leads quedaba siempre vacía)
+    const { error: leadError } = await supabase.from('leads').insert({
+      nombre,
+      email,
+      telefono: telefono || null,
+      empresa: empresa || null,
+      cups: invoice_data?.cups || null,
+      comercializadora: invoice_data?.comercializadora || null,
+      tarifa: invoice_data?.tarifa || null,
+      total_factura: invoice_data?.total_factura ?? null,
+      kwh_total: invoice_data?.kwh_total ?? null,
+      ahorro_estimado_anual: invoice_data?.ahorro_estimado_anual ?? null,
+      kwh_anuales_sips: invoice_data?.kwh_anuales_sips ?? null,
+      estado: 'nuevo',
+    })
+    if (leadError) console.error('[send-report] insert lead falló:', leadError)
+
     // 2. Enviar emails (si hay API key configurada)
     const resendKey = process.env.RESEND_API_KEY
     if (resendKey && invoice_data) {
