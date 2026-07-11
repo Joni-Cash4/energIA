@@ -1,8 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ExternalLink, RefreshCw } from 'lucide-react'
+import { ExternalLink, RefreshCw, BarChart2, ArrowRight } from 'lucide-react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { Navbar } from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
 import { Toaster } from '@/components/ui/toaster'
@@ -114,6 +115,26 @@ export default function NoticiasPage() {
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Actualizar
             </Button>
+          </motion.div>
+
+          {/* Boletín semanal — contenido propio, siempre visible */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="mb-8">
+            <Link
+              href="/noticias/boletin"
+              className="group flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-gradient-to-r from-[#00E676]/10 to-transparent border border-[#00E676]/30 rounded-2xl p-5 hover:border-[#00E676]/60 transition-colors"
+            >
+              <div className="w-11 h-11 rounded-xl bg-[#00E676]/15 flex items-center justify-center shrink-0">
+                <BarChart2 className="w-5 h-5 text-[#00E676]" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[#00E676] text-xs uppercase tracking-widest mb-0.5">Boletín IAenergía · cada semana</p>
+                <h2 className="text-white font-bold text-lg leading-snug">El mercado eléctrico, esta semana: precios, demanda y mix de generación</h2>
+                <p className="text-[#9CA3AF] text-sm mt-1">Análisis semanal con datos públicos de Red Eléctrica. Redacción propia, sin letra pequeña.</p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 text-[#00E676] text-sm font-medium whitespace-nowrap">
+                Leer boletín <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </span>
+            </Link>
           </motion.div>
 
           {/* Filters */}
