@@ -28,7 +28,7 @@ export function FinalCTA() {
               ¿Listo para ahorrar?
             </h2>
             <p className="text-[#9CA3AF] text-lg mb-8 max-w-xl mx-auto">
-              Miles de empresas ya han reducido su factura eléctrica con EnergIA.
+              Miles de empresas ya han reducido su factura eléctrica con IAenergía.
               Únete gratis y descubre tu ahorro en segundos.
             </p>
 
