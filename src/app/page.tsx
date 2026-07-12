@@ -9,6 +9,7 @@ import { Calculadora } from '@/components/landing/Calculadora'
 import { FaqAccordion } from '@/components/landing/FaqAccordion'
 import { FinalCTA } from '@/components/landing/FinalCTA'
 import { PorQueAhorrar } from '@/components/landing/PorQueAhorrar'
+import { CasosReales } from '@/components/landing/CasosReales'
 import { ExitModal } from '@/components/landing/ExitModal'
 import { Toaster } from '@/components/ui/toaster'
 
@@ -36,6 +37,7 @@ export default function HomePage() {
         <Transparencia />
         <HowItWorks />
         <PorQueAhorrar />
+        <CasosReales />
         <Calculadora />
         <FaqAccordion />
         <FinalCTA />
