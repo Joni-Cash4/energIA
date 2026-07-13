@@ -45,6 +45,7 @@ const testimonios: Testimonio[] = [
     nombre: 'Jokin',
     negocio: 'Gerente · Makailo Etxarri',
     ahorroTxt: '80-90 € de ahorro al mes',
+    foto: '/casos/makailo-etxarri.jpg',
   },
 ]
 
