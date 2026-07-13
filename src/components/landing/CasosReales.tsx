@@ -11,6 +11,7 @@ interface Testimonio {
   nombre: string
   negocio: string
   ahorroPct?: number
+  ahorroTxt?: string
   foto?: string
 }
 
@@ -34,10 +35,18 @@ const casoDestacado: CasoDestacado = {
   fotoNegocio: '/casos/la-carranzana.webp',
 }
 
-// El grid solo se muestra cuando hay testimonios. Formato de cada entrada:
-// { cita: '...', nombre: 'Nombre I.', negocio: 'Tipo de negocio', ahorroPct: 18, foto: '/casos/x.webp' }
-// (ahorroPct y foto son opcionales)
-const testimonios: Testimonio[] = []
+// Formato de cada entrada:
+// { cita: '...', nombre: 'Nombre I.', negocio: 'Tipo de negocio', ahorroPct: 18, ahorroTxt: 'texto libre para el badge', foto: '/casos/x.webp' }
+// (ahorroPct, ahorroTxt y foto son opcionales)
+const testimonios: Testimonio[] = [
+  // CASO REAL — Jokin, gerente de Makailo Etxarri SL (bacalao)
+  {
+    cita: 'Tenemos neveras que consumen bastante, pero no sabía interpretar las facturas. Jonathan me pidió un par y en 5 minutos me dijo: «tenéis potencia contratada de más, y vuestra compañía no tiene precios competitivos». Ajustamos potencias, buscamos mejores tarifas y el ahorro fue importante. Desde entonces se encarga cada año de buscarnos las mejores tarifas.',
+    nombre: 'Jokin',
+    negocio: 'Gerente · Makailo Etxarri',
+    ahorroTxt: '80-90 € de ahorro al mes',
+  },
+]
 
 function iniciales(nombre: string) {
   return nombre
@@ -155,10 +164,10 @@ export function CasosReales() {
                   <p className="text-[#6B7280] text-xs">{t.negocio}</p>
                 </div>
               </div>
-              {t.ahorroPct && (
+              {(t.ahorroPct || t.ahorroTxt) && (
                 <div className="inline-flex items-center gap-1.5 self-start bg-[#00E676]/10 text-[#00E676] text-xs font-semibold px-3 py-1.5 rounded-full">
                   <TrendingDown className="w-3.5 h-3.5" />
-                  −{t.ahorroPct}% en su factura
+                  {t.ahorroTxt ?? `−${t.ahorroPct}% en su factura`}
                 </div>
               )}
             </motion.div>
