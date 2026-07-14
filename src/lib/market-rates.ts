@@ -137,18 +137,25 @@ export const ATULADO_BOE = {
 
 export const ATULADO_WEB = {
   nombre: 'Discriminación horaria WEB',
-  vigencia: '01/10/2025',
+  vigencia: '01/07/2026', // Precio Fijo Atulado POT Web, revisión trimestral 01/07/2026-30/09/2026
   energia: {
-    '2.0TD': { P1: 0.164870, P2: 0.094047, P3: 0.067692 },
-    '3.0TD': { P1: 0.139513, P2: 0.109794, P3: 0.098539, P4: 0.077939, P5: 0.072987, P6: 0.100292 },
-    '6.1TD': { P1: 0.117394, P2: 0.093043, P3: 0.088636, P4: 0.072318, P5: 0.065076, P6: 0.089390 },
+    '2.0TD': { P1: 0.242430, P2: 0.163363, P3: 0.138409 }, // 2.0TD DH Empresas
+    '3.0TD': { P1: 0.200568, P2: 0.184159, P3: 0.15916, P4: 0.143648, P5: 0.136003, P6: 0.186337 },
+    '6.1TD': { P1: 0.132394, P2: 0.108043, P3: 0.103636, P4: 0.087318, P5: 0.080076, P6: 0.10439 },
   } as Record<Tarifa, Partial<Record<Periodo, number>>>,
   potencia: {
-    '2.0TD': { P1: 0.103716, P2: 0.041623, P3: 0.0 },
-    '3.0TD': { P1: 0.059999, P2: 0.032983, P3: 0.021735, P4: 0.015654, P5: 0.009390, P6: 0.006219 },
-    '6.1TD': { P1: 0.085255, P2: 0.046400, P3: 0.028092, P4: 0.019784, P5: 0.008325, P6: 0.005254 },
+    '2.0TD': { P1: 0.103717, P2: 0.041623, P3: 0.0 },
+    '3.0TD': { P1: 0.059999, P2: 0.032983, P3: 0.021735, P4: 0.015654, P5: 0.009391, P6: 0.006219 },
+    '6.1TD': { P1: 0.085255, P2: 0.046400, P3: 0.028092, P4: 0.019784, P5: 0.008326, P6: 0.005254 },
   } as Record<Tarifa, Partial<Record<Periodo, number>>>,
 }
+
+// 2.0TD Empresas Atulado WEB tiene DOS variantes con la misma vigencia (01/07/2026-
+// 30/09/2026): plana (mismo precio los 3 periodos) o discriminada por horas (arriba,
+// en ATULADO_WEB.energia['2.0TD']). Cuál compensa depende del reparto de consumo del
+// cliente entre P1/P2/P3 — process-invoice simula ambas y usa la mas barata para cada
+// cliente, igual que ya se hace para elegir entre BOE y WEB.
+export const ATULADO_WEB_PLANO_2TD = { P1: 0.168827, P2: 0.168827, P3: 0.168827 }
 
 // Umbral de selección automática BOE vs WEB (kWh/kW·mes)
 export const UMBRAL_KWH_POR_KW = 50.0

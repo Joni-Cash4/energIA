@@ -113,7 +113,7 @@ async function generatePdf(
     { label: 'FACTURA ACTUAL',      total: data.total_factura, sub: data.comercializadora ?? '—',  color: C.gray   },
     { label: 'PROXIMA CRISTALINA',  total: simIdx.total,       sub: 'Tarifa indexada mercado',       color: C.green  },
     { label: `ATULADO BOE${recWeb ? '' : ' *'}`,  total: simBoe.total, sub: 'Tarifa fija BOE', color: C.blue   },
-    { label: `ATULADO WEB${recWeb ? ' *' : ''}`,  total: simWeb.total, sub: 'Tarifa fija WEB', color: C.violet },
+    { label: `ATULADO WEB${recWeb ? ' *' : ''}`,  total: simWeb.total, sub: simWeb.nota ?? 'Tarifa fija WEB', color: C.violet },
   ]
   summaries.forEach(({ label, total, sub, color }, i) => {
     const x = M + i * (bW + bG)
@@ -705,6 +705,9 @@ export default function NuevaFacturaPage() {
                     <span className="text-[10px] bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded">★ Recom.</span>
                   )}
                 </div>
+                {simWeb.nota && (
+                  <p className="text-[#6B7280] text-[10px] mb-0.5">{simWeb.nota}</p>
+                )}
                 <p className="text-2xl font-bold text-white">{formatCurrency(simWeb.total)}</p>
                 <p className={cn('text-xs mt-2 font-semibold', data.total_factura - simWeb.total >= 0 ? 'text-[#00E676]' : 'text-red-400')}>
                   {data.total_factura - simWeb.total >= 0 ? 'Ahorras ' : '+Coste '}

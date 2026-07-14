@@ -8,6 +8,7 @@ import {
   PROXIMA_CRISTALINA,
   ATULADO_BOE,
   ATULADO_WEB,
+  ATULADO_WEB_PLANO_2TD,
   PERIODOS_TARIFA,
   UMBRAL_KWH_POR_KW,
   normalizaTarifa,
@@ -377,7 +378,19 @@ export async function POST(req: NextRequest) {
 
     const dias = parsed.dias_facturados || 30
     const sim_fija_boe = simFija(parsed, tarifa, ATULADO_BOE, tipoIee, tipoIva, potenciaKw)
-    const sim_fija_web = simFija(parsed, tarifa, ATULADO_WEB, tipoIee, tipoIva, potenciaKw)
+    let sim_fija_web = simFija(parsed, tarifa, ATULADO_WEB, tipoIee, tipoIva, potenciaKw)
+
+    // 2.0TD Empresas WEB tiene variante plana ademas de la discriminada — se simulan
+    // las dos y se usa la mas barata para el reparto de consumo real de este cliente.
+    if (tarifa === '2.0TD') {
+      const webPlano = {
+        ...ATULADO_WEB,
+        nombre: 'Tarifa plana WEB',
+        energia: { ...ATULADO_WEB.energia, '2.0TD': ATULADO_WEB_PLANO_2TD },
+      }
+      const sim_fija_web_plano = simFija(parsed, tarifa, webPlano, tipoIee, tipoIva, potenciaKw)
+      if (sim_fija_web_plano.total < sim_fija_web.total) sim_fija_web = sim_fija_web_plano
+    }
 
     // Recomendar la opción fija más barata comparando totales reales (más preciso que ratio proxy)
     const recomendado: 'BOE' | 'WEB' = sim_fija_boe.total <= sim_fija_web.total ? 'BOE' : 'WEB'
