@@ -260,7 +260,7 @@ export async function buildBoletin(startParam?: string | null): Promise<BoletinD
   )
 
   // ── Archivo de semanas disponibles ──
-  const semanas = Array.from({ length: 12 }, (_, i) => {
+  const semanas = Array.from({ length: 17 }, (_, i) => {
     const m = addDays(defaultMonday, -7 * i)
     return { inicio: dateStr(m), label: weekLabel(m) }
   })
