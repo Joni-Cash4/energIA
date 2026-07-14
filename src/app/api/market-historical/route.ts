@@ -26,17 +26,29 @@ async function fetchOmieDia(fecha: Date): Promise<{ hora: number; precio: number
     })
     if (!res.ok || res.headers.get('content-type')?.includes('html')) return []
     const text = await res.text()
-    const resultado: { hora: number; precio: number }[] = []
+
+    // La columna 4 es el INDICE de periodo dentro del dia, no la hora directamente:
+    // 1-24/25 en el formato horario legado, o 1-92/96/100 en el formato de cuarto de
+    // hora (MTU 15 min) que usa OMIE desde oct-2025. Hay que derivar la hora real a
+    // partir del numero de filas del propio dia, no asumir 1-24 a ciegas.
+    const filas: { indice: number; precio: number }[] = []
     for (const linea of text.split('\n')) {
       const partes = linea.replace(/,/g, '.').split(';')
       if (partes.length >= 5) {
-        const hora = parseInt(partes[3]) - 1 // OMIE usa horas 1-24 → 0-23
-        const precio = parseFloat(partes[4])  // €/MWh
-        if (!isNaN(hora) && !isNaN(precio) && hora >= 0 && hora <= 23 && precio >= 0 && precio <= 2000) {
-          resultado.push({ hora, precio })
+        const indice = parseInt(partes[3])
+        const precio = parseFloat(partes[4])  // €/MWh — puede ser negativo (excedente solar)
+        if (!isNaN(indice) && !isNaN(precio) && indice >= 1 && precio >= -500 && precio <= 3000) {
+          filas.push({ indice, precio })
         }
       }
     }
+    if (filas.length === 0) return []
+
+    const cuartosPorHora = Math.max(1, Math.round(filas.length / 24)) // 1 legado, 4 MTU 15 min
+    const resultado = filas.map(({ indice, precio }) => ({
+      hora: Math.min(23, Math.floor((indice - 1) / cuartosPorHora)),
+      precio,
+    }))
     return resultado
   } catch {
     return []

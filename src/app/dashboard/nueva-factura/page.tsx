@@ -112,8 +112,8 @@ async function generatePdf(
   const summaries: { label: string; total: number; sub: string; color: [number,number,number] }[] = [
     { label: 'FACTURA ACTUAL',      total: data.total_factura, sub: data.comercializadora ?? '—',  color: C.gray   },
     { label: 'PROXIMA CRISTALINA',  total: simIdx.total,       sub: 'Tarifa indexada mercado',       color: C.green  },
-    { label: `ATULADO BOE${recWeb ? '' : '  ★'}`,  total: simBoe.total, sub: 'Tarifa fija BOE', color: C.blue   },
-    { label: `ATULADO WEB${recWeb ? '  ★' : ''}`,  total: simWeb.total, sub: 'Tarifa fija WEB', color: C.violet },
+    { label: `ATULADO BOE${recWeb ? '' : ' *'}`,  total: simBoe.total, sub: 'Tarifa fija BOE', color: C.blue   },
+    { label: `ATULADO WEB${recWeb ? ' *' : ''}`,  total: simWeb.total, sub: 'Tarifa fija WEB', color: C.violet },
   ]
   summaries.forEach(({ label, total, sub, color }, i) => {
     const x = M + i * (bW + bG)
