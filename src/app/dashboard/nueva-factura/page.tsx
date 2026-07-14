@@ -424,7 +424,7 @@ export default function NuevaFacturaPage() {
   const [loading, setLoading]           = useState(false)
   const [data, setData]                 = useState<InvoiceAnalysis | null>(null)
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
-  const [feeEnergia, setFeeEnergia]     = useState(5)  // €/MWh
+  const [feeEnergia, setFeeEnergia]     = useState(10)  // €/MWh — fee estándar Jonathan
   const [savingPdf, setSavingPdf]       = useState(false)
   const [savingCliente, setSavingCliente] = useState(false)
   const [error, setError]               = useState<string | null>(null)

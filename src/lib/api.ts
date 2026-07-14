@@ -3,9 +3,12 @@ import type { InvoiceAnalysis, MarketPrice, NewsItem } from '@/types'
 
 // ─── Invoice ─────────────────────────────────────────────────────────────────
 
-export async function processInvoice(files: File[]): Promise<InvoiceAnalysis> {
+// feeMwh > 0 hace que la API integre ese fee de energía en las simulaciones
+// (comparador público). El dashboard no lo pasa: allí el fee se aplica en cliente.
+export async function processInvoice(files: File[], feeMwh = 0): Promise<InvoiceAnalysis> {
   const form = new FormData()
   files.forEach((f) => form.append('files', f))
+  if (feeMwh > 0) form.append('fee_mwh', String(feeMwh))
   const res = await fetch('/api/process-invoice', { method: 'POST', body: form })
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { error?: string }

@@ -406,7 +406,7 @@ export default function SimuladorPage() {
   const [kwh,        setKwh]        = useState(100000)
   const [kwPeriodos, setKwPeriodos] = useState<Record<string, number>>({ P1: 15, P2: 15, P3: 15, P4: 15, P5: 15, P6: 15 })
   const [feeE,       setFeeE]       = useState(10)
-  const [feeP,       setFeeP]       = useState(1.5)
+  const [feeP,       setFeeP]       = useState(0)
   const [tarifa,     setTarifa]     = useState<Tarifa>('3.0TD')
   const [tipo2td,    setTipo2td]    = useState<'DH' | 'Milenial'>('DH')
   const [periodo,    setPeriodo]    = useState<PeriodoKey>('2026MARZO')

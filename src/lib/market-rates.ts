@@ -109,6 +109,11 @@ export const HORAS_PERIODO: Record<Tarifa, Partial<Record<Periodo, number[]>>> =
   },
 }
 
+// ─── Fee del asesor para el comparador PÚBLICO (clientes desde casa) ─────────
+// Criterio Jonathan 2026-07-14: energía 10 €/MWh, potencia 0. El dashboard
+// interno NO usa esto — allí el fee sale del campo ajustable de cada página.
+export const FEE_PUBLICO_ENERGIA_MWH = 10
+
 // ─── PRÓXIMA CRISTALINA — fee + otros costes pass-through ────────────────────
 export const PROXIMA_CRISTALINA = {
   fee_kwh: 0.007,       // €/kWh — cargo por gestión, confirmado factura real

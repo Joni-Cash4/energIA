@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Upload, FileText, Loader2, AlertCircle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { processInvoice } from '@/lib/api'
+import { FEE_PUBLICO_ENERGIA_MWH } from '@/lib/market-rates'
 import { cn } from '@/lib/utils'
 import type { InvoiceAnalysis } from '@/types'
 
@@ -43,7 +44,7 @@ export function Step1Upload({ onComplete }: Props) {
     }, 1200)
 
     try {
-      const data = await processInvoice(pendingFiles)
+      const data = await processInvoice(pendingFiles, FEE_PUBLICO_ENERGIA_MWH)
       clearInterval(interval)
       onComplete(data)
     } catch (err) {

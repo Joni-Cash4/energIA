@@ -240,7 +240,7 @@ function simIndexada(
 function simFija(
   data: InvoiceData, tarifa: Tarifa,
   producto: { nombre: string; energia: Periodos; potencia: Periodos; feeIncluido?: boolean },
-  tipoIee: number, tipoIva: number, potenciaKw: Periodos
+  tipoIee: number, tipoIva: number, potenciaKw: Periodos, feeKwh = 0
 ): SimTarifa {
   const dias = data.dias_facturados || 30
   const diasPotencia = data.dias_facturados_potencia ?? dias
@@ -251,13 +251,18 @@ function simFija(
   const preciosPotencia = producto.potencia
 
   let energia = 0
+  let kwhTotal = 0
   for (const linea of data.periodos ?? []) {
     const p = linea.periodo as Periodo
     const kwh = linea.kwh ?? 0
     if (kwh <= 0) continue
     energia += kwh * (preciosEnergia[p] ?? 0)
+    kwhTotal += kwh
   }
   energia = r2(energia)
+
+  // Fee del comparador público: solo sobre productos sin comisión integrada
+  const cargo_gestion = producto.feeIncluido ? 0 : r2(kwhTotal * feeKwh)
 
   const potencia_periodos_fija: Partial<Record<string, number>> = {}
   for (const p of PERIODOS_TARIFA[tarifa]) {
@@ -267,7 +272,7 @@ function simFija(
   const potencia = r2(Object.values(potencia_periodos_fija).reduce<number>((s, v) => s + (v ?? 0), 0))
 
   // IEE: tipo efectivo derivado de la factura real × base de esta simulación
-  const subtotalBase = r2(energia + potencia + reactiva)
+  const subtotalBase = r2(energia + potencia + reactiva + cargo_gestion)
   const iee = r2(subtotalBase * tipoIee)
   const subtotal = r2(subtotalBase + alquiler)
   const base_iva = r2(subtotal + iee)
@@ -276,7 +281,7 @@ function simFija(
 
   return {
     energia, potencia, potencia_periodos: potencia_periodos_fija,
-    reactiva, otros_costes: 0, cargo_gestion: 0,
+    reactiva, otros_costes: 0, cargo_gestion,
     subtotal, iee, alquiler, base_iva, iva, iva_pct: tipoIva, total,
     nota: producto.nombre,
     fee_incluido: !!producto.feeIncluido,
@@ -378,7 +383,9 @@ export async function POST(req: NextRequest) {
     const potenciaKw = potenciaPorPeriodo(parsed, tarifa)
     const potenciasDesglosadas = !!parsed.potencias && parsed.potencias.length > 0
 
-    const feeKwh = 0 // fee Jonathan se aplica en dashboard, no en esta llamada base
+    // fee_mwh > 0 solo lo manda el comparador público (fee integrado en la simulación).
+    // El dashboard no lo manda (0): allí el fee se aplica en cliente con el campo ajustable.
+    const feeKwh = (Number(form.get('fee_mwh')) || 0) / 1000
     const sim_indexada = simIndexada(parsed, tarifa, pmdHistorico, sc, cap, perd, tipoIee, tipoIva, feeKwh, potenciaKw)
 
     const dias = parsed.dias_facturados || 30
@@ -410,7 +417,7 @@ export async function POST(req: NextRequest) {
 
     // Simular todos y quedarnos con el ranking (más barato primero)
     const ranking = candidatos
-      .map((c) => simFija(parsed, tarifa, c, tipoIee, tipoIva, potenciaKw))
+      .map((c) => simFija(parsed, tarifa, c, tipoIee, tipoIva, potenciaKw, feeKwh))
       .sort((a, b) => a.total - b.total)
 
     const sim_fija_boe = ranking[0]                 // slot 1 = mejor opción fija
