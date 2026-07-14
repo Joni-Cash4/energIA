@@ -13,6 +13,7 @@ export type ProductoFijo = {
   potencia: Partial<Record<Periodo, number>> // €/kW·DÍA (ya convertido desde €/kW·año)
   fecha_anexo: string | null
   dias_anexo: number | null
+  fee_incluido: boolean                      // true = el anexo YA lleva la comisión del agente
 }
 
 export async function getProductosFijos(tarifa: Tarifa): Promise<ProductoFijo[]> {
@@ -22,7 +23,7 @@ export async function getProductosFijos(tarifa: Tarifa): Promise<ProductoFijo[]>
   try {
     const { data, error } = await supabase
       .from('tarifas_fijas')
-      .select('comercializadora, producto, tarifa_acceso, energia, potencia, fecha_anexo')
+      .select('comercializadora, producto, tarifa_acceso, energia, potencia, fecha_anexo, fee_incluido')
       .eq('activo', true)
       .eq('tarifa_acceso', tarifa)
 
@@ -44,6 +45,7 @@ export async function getProductosFijos(tarifa: Tarifa): Promise<ProductoFijo[]>
         dias_anexo: row.fecha_anexo
           ? Math.floor((hoy - new Date(row.fecha_anexo).getTime()) / 86400000)
           : null,
+        fee_incluido: !!row.fee_incluido,
       }
     })
   } catch (err) {

@@ -117,8 +117,8 @@ async function generatePdf(
   const summaries: { label: string; total: number; sub: string; color: [number,number,number] }[] = [
     { label: 'FACTURA ACTUAL',      total: data.total_factura, sub: data.comercializadora ?? '—',  color: C.gray   },
     { label: 'PROXIMA CRISTALINA',  total: simIdx.total,       sub: 'Tarifa indexada mercado',       color: C.green  },
-    { label: short(`${fija1.toUpperCase()}${recWeb ? '' : ' *'}`, 34),  total: simBoe.total, sub: 'Mejor tarifa fija', color: C.blue   },
-    { label: short(`${fija2.toUpperCase()}${recWeb ? ' *' : ''}`, 34),  total: simWeb.total, sub: '2a mejor tarifa fija', color: C.violet },
+    { label: short(`${fija1.toUpperCase()}${recWeb ? '' : ' *'}`, 34),  total: simBoe.total, sub: simBoe.fee_incluido ? 'Mejor fija (comision incluida)' : 'Mejor tarifa fija', color: C.blue   },
+    { label: short(`${fija2.toUpperCase()}${recWeb ? ' *' : ''}`, 34),  total: simWeb.total, sub: simWeb.fee_incluido ? '2a mejor fija (comision incluida)' : '2a mejor tarifa fija', color: C.violet },
   ]
   summaries.forEach(({ label, total, sub, color }, i) => {
     const x = M + i * (bW + bG)
@@ -508,15 +508,22 @@ export default function NuevaFacturaPage() {
     return applyFee(data.sim_indexada, feeKwh, data.kwh_total ?? 0)
   }, [data, feeKwh])
 
-  const simBoe = useMemo(() => {
-    if (!data?.sim_fija_boe) return null
-    return applyFee(data.sim_fija_boe, feeKwh, data.kwh_total ?? 0)
+  // Fijas: el fee del deslizador se suma SOLO a los productos que no llevan la
+  // comisión integrada en el anexo (Atulado, Total...). Eleia/Naturgy ya la
+  // traen dentro (fee_incluido) — sumarles el fee las penalizaría en falso.
+  // Con el fee real aplicado se re-ordena y se muestran las 2 más baratas.
+  const simsFijas = useMemo(() => {
+    if (!data) return []
+    const base = data.sim_fijas && data.sim_fijas.length > 0
+      ? data.sim_fijas
+      : ([data.sim_fija_boe, data.sim_fija_web].filter(Boolean) as SimTarifa[])
+    return base
+      .map((s) => (s.fee_incluido ? s : applyFee(s, feeKwh, data.kwh_total ?? 0)))
+      .sort((a, b) => a.total - b.total)
   }, [data, feeKwh])
 
-  const simWeb = useMemo(() => {
-    if (!data?.sim_fija_web) return null
-    return applyFee(data.sim_fija_web, feeKwh, data.kwh_total ?? 0)
-  }, [data, feeKwh])
+  const simBoe = simsFijas[0] ?? null
+  const simWeb = simsFijas[1] ?? simsFijas[0] ?? null
 
   const handleDownloadPdf = async () => {
     if (!data || !simIdx || !simBoe || !simWeb) return
@@ -695,7 +702,7 @@ export default function NuevaFacturaPage() {
                     <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded">★ Recom.</span>
                   )}
                 </div>
-                <p className="text-[#6B7280] text-[10px] mb-0.5">Mejor tarifa fija</p>
+                <p className="text-[#6B7280] text-[10px] mb-0.5">Mejor tarifa fija{simBoe.fee_incluido ? ' · comisión ya incluida' : ' · tu fee aplicado'}</p>
                 <p className="text-2xl font-bold text-white">{formatCurrency(simBoe.total)}</p>
                 <p className={cn('text-xs mt-2 font-semibold', data.total_factura - simBoe.total >= 0 ? 'text-[#00E676]' : 'text-red-400')}>
                   {data.total_factura - simBoe.total >= 0 ? 'Ahorras ' : '+Coste '}
@@ -711,7 +718,7 @@ export default function NuevaFacturaPage() {
                     <span className="text-[10px] bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded">★ Recom.</span>
                   )}
                 </div>
-                <p className="text-[#6B7280] text-[10px] mb-0.5">2ª mejor tarifa fija</p>
+                <p className="text-[#6B7280] text-[10px] mb-0.5">2ª mejor tarifa fija{simWeb.fee_incluido ? ' · comisión ya incluida' : ' · tu fee aplicado'}</p>
                 <p className="text-2xl font-bold text-white">{formatCurrency(simWeb.total)}</p>
                 <p className={cn('text-xs mt-2 font-semibold', data.total_factura - simWeb.total >= 0 ? 'text-[#00E676]' : 'text-red-400')}>
                   {data.total_factura - simWeb.total >= 0 ? 'Ahorras ' : '+Coste '}

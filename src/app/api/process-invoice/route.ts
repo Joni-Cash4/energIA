@@ -239,7 +239,7 @@ function simIndexada(
 // tarifa de acceso del cliente (vienen de Supabase/maestro o del fallback).
 function simFija(
   data: InvoiceData, tarifa: Tarifa,
-  producto: { nombre: string; energia: Periodos; potencia: Periodos },
+  producto: { nombre: string; energia: Periodos; potencia: Periodos; feeIncluido?: boolean },
   tipoIee: number, tipoIva: number, potenciaKw: Periodos
 ): SimTarifa {
   const dias = data.dias_facturados || 30
@@ -279,6 +279,7 @@ function simFija(
     reactiva, otros_costes: 0, cargo_gestion: 0,
     subtotal, iee, alquiler, base_iva, iva, iva_pct: tipoIva, total,
     nota: producto.nombre,
+    fee_incluido: !!producto.feeIncluido,
   }
 }
 
@@ -389,18 +390,20 @@ export async function POST(req: NextRequest) {
       nombre: p.etiqueta,
       energia: p.energia as Periodos,
       potencia: p.potencia as Periodos,
+      feeIncluido: p.fee_incluido,
     }))
     const fijasDesdeSupabase = candidatos.length > 0
     if (candidatos.length === 0) {
       candidatos = [
-        { nombre: 'Atulado BOE', energia: ATULADO_BOE.energia[tarifa] ?? {}, potencia: ATULADO_BOE.potencia[tarifa] ?? {} },
-        { nombre: 'Atulado WEB', energia: ATULADO_WEB.energia[tarifa] ?? {}, potencia: ATULADO_WEB.potencia[tarifa] ?? {} },
+        { nombre: 'Atulado BOE', energia: ATULADO_BOE.energia[tarifa] ?? {}, potencia: ATULADO_BOE.potencia[tarifa] ?? {}, feeIncluido: false },
+        { nombre: 'Atulado WEB', energia: ATULADO_WEB.energia[tarifa] ?? {}, potencia: ATULADO_WEB.potencia[tarifa] ?? {}, feeIncluido: false },
       ]
       if (tarifa === '2.0TD') {
         candidatos.push({
           nombre: 'Atulado WEB plana',
           energia: ATULADO_WEB_PLANO_2TD as Periodos,
           potencia: ATULADO_WEB.potencia['2.0TD'] ?? {},
+          feeIncluido: false,
         })
       }
     }
@@ -463,6 +466,9 @@ export async function POST(req: NextRequest) {
       sim_fija_web,
       // Ranking completo de fijas (para elegir a mano otra opción en el futuro)
       ranking_fijas: ranking.map((s) => ({ nombre: s.nota ?? '', total: s.total })),
+      // Todas las sims fijas sin fee — el dashboard aplica el fee del deslizador
+      // solo a las que no lo llevan integrado y re-ordena con precios finales reales
+      sim_fijas: ranking,
       fijas_fuente: fijasDesdeSupabase ? 'supabase' : 'fallback',
     })
   } catch (err) {

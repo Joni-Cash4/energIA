@@ -34,6 +34,7 @@ export interface SimTarifa {
   iva_pct: number
   total: number
   nota?: string  // aviso si algún dato es aproximado
+  fee_incluido?: boolean  // true = el precio del producto YA lleva la comisión — no sumarle el fee del deslizador
 }
 
 export interface InvoiceAnalysis {
@@ -78,6 +79,9 @@ export interface InvoiceAnalysis {
   sim_fija_boe?: SimTarifa
   sim_fija_web?: SimTarifa
   ranking_fijas?: { nombre: string; total: number }[]
+  // Todas las simulaciones fijas (sin fee): el dashboard aplica el fee solo a
+  // las que no lo llevan integrado y re-ordena con el valor real del deslizador.
+  sim_fijas?: SimTarifa[]
   fijas_fuente?: 'supabase' | 'fallback'
 }
 
