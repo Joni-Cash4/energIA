@@ -525,11 +525,22 @@ export default function NuevaFacturaPage() {
   const simBoe = simsFijas[0] ?? null
   const simWeb = simsFijas[1] ?? simsFijas[0] ?? null
 
+  // El backend calcula precio_kwh_nuevo por periodo con feeKwh=0 (el fee se
+  // aplica aqui, en el dashboard). Sin este recalculo la tabla/PDF de precio
+  // por periodo se queda congelada en fee=0 pase lo que pase con el deslizador.
+  const periodosConFee = useMemo(() => {
+    if (!data?.periodos) return data?.periodos ?? []
+    return data.periodos.map((p) => {
+      const precio_kwh_nuevo = Math.round(((p.precio_kwh_nuevo ?? 0) + feeKwh) * 10000) / 10000
+      return { ...p, precio_kwh_nuevo, importe_nuevo: Math.round(precio_kwh_nuevo * (p.kwh ?? 0) * 100) / 100 }
+    })
+  }, [data, feeKwh])
+
   const handleDownloadPdf = async () => {
     if (!data || !simIdx || !simBoe || !simWeb) return
     setSavingPdf(true)
     try {
-      const blob = await generatePdf(data, simIdx, simBoe, simWeb)
+      const blob = await generatePdf({ ...data, periodos: periodosConFee }, simIdx, simBoe, simWeb)
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
@@ -887,7 +898,7 @@ export default function NuevaFacturaPage() {
             </div>
 
             {/* Desglose por periodo — indexada */}
-            {(data.periodos ?? []).length > 0 && (
+            {periodosConFee.length > 0 && (
               <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl overflow-hidden mb-6">
                 <div className="px-6 py-4 border-b border-[#1F1F1F]">
                   <h2 className="text-white font-semibold">Precio por periodo — Próxima Cristalina (mercado del periodo facturado)</h2>
@@ -902,7 +913,7 @@ export default function NuevaFacturaPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#1F1F1F]">
-                      {(data.periodos ?? []).map((p) => (
+                      {periodosConFee.map((p) => (
                         <tr key={p.periodo} className="hover:bg-[#1A1A1A]">
                           <td className="px-4 py-3 text-white font-medium">{p.periodo}</td>
                           <td className="px-4 py-3 text-right text-[#9CA3AF]">{formatNumber(p.kwh ?? 0)}</td>
