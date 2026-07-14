@@ -16,6 +16,7 @@ import {
   type Tarifa,
 } from '@/lib/market-rates'
 import { getMercadoReal } from '@/lib/market-real'
+import { getProductosFijos } from '@/lib/tarifas-fijas'
 import { getZonaFromCups } from '@/lib/periodos'
 import type { SimTarifa } from '@/types'
 
@@ -233,9 +234,12 @@ function simIndexada(
   }
 }
 
-// ── Simulación Atulado (BOE o WEB) — precio fijo ──────────────────────────────
+// ── Simulación de un producto de precio fijo ──────────────────────────────────
+// preciosEnergia en €/kWh, preciosPotencia en €/kW·día — ya resueltos para la
+// tarifa de acceso del cliente (vienen de Supabase/maestro o del fallback).
 function simFija(
-  data: InvoiceData, tarifa: Tarifa, producto: typeof ATULADO_BOE,
+  data: InvoiceData, tarifa: Tarifa,
+  producto: { nombre: string; energia: Periodos; potencia: Periodos },
   tipoIee: number, tipoIva: number, potenciaKw: Periodos
 ): SimTarifa {
   const dias = data.dias_facturados || 30
@@ -243,8 +247,8 @@ function simFija(
   const reactiva = r2(data.reactiva_total ?? 0)
   const alquiler = r2(data.alquiler_equipos ?? 0)
 
-  const preciosEnergia = producto.energia[tarifa] ?? {}
-  const preciosPotencia = producto.potencia[tarifa] ?? {}
+  const preciosEnergia = producto.energia
+  const preciosPotencia = producto.potencia
 
   let energia = 0
   for (const linea of data.periodos ?? []) {
@@ -377,23 +381,38 @@ export async function POST(req: NextRequest) {
     const sim_indexada = simIndexada(parsed, tarifa, pmdHistorico, sc, cap, perd, tipoIee, tipoIva, feeKwh, potenciaKw)
 
     const dias = parsed.dias_facturados || 30
-    const sim_fija_boe = simFija(parsed, tarifa, ATULADO_BOE, tipoIee, tipoIva, potenciaKw)
-    let sim_fija_web = simFija(parsed, tarifa, ATULADO_WEB, tipoIee, tipoIva, potenciaKw)
 
-    // 2.0TD Empresas WEB tiene variante plana ademas de la discriminada — se simulan
-    // las dos y se usa la mas barata para el reparto de consumo real de este cliente.
-    if (tarifa === '2.0TD') {
-      const webPlano = {
-        ...ATULADO_WEB,
-        nombre: 'Tarifa plana WEB',
-        energia: { ...ATULADO_WEB.energia, '2.0TD': ATULADO_WEB_PLANO_2TD },
+    // Candidatos de precio fijo: TODOS los productos vigentes del maestro de
+    // Jonathan (sincronizado a Supabase). Si la tabla está vacía o Supabase no
+    // responde, fallback a las constantes Atulado hardcodeadas de siempre.
+    let candidatos = (await getProductosFijos(tarifa)).map((p) => ({
+      nombre: p.etiqueta,
+      energia: p.energia as Periodos,
+      potencia: p.potencia as Periodos,
+    }))
+    const fijasDesdeSupabase = candidatos.length > 0
+    if (candidatos.length === 0) {
+      candidatos = [
+        { nombre: 'Atulado BOE', energia: ATULADO_BOE.energia[tarifa] ?? {}, potencia: ATULADO_BOE.potencia[tarifa] ?? {} },
+        { nombre: 'Atulado WEB', energia: ATULADO_WEB.energia[tarifa] ?? {}, potencia: ATULADO_WEB.potencia[tarifa] ?? {} },
+      ]
+      if (tarifa === '2.0TD') {
+        candidatos.push({
+          nombre: 'Atulado WEB plana',
+          energia: ATULADO_WEB_PLANO_2TD as Periodos,
+          potencia: ATULADO_WEB.potencia['2.0TD'] ?? {},
+        })
       }
-      const sim_fija_web_plano = simFija(parsed, tarifa, webPlano, tipoIee, tipoIva, potenciaKw)
-      if (sim_fija_web_plano.total < sim_fija_web.total) sim_fija_web = sim_fija_web_plano
     }
 
-    // Recomendar la opción fija más barata comparando totales reales (más preciso que ratio proxy)
-    const recomendado: 'BOE' | 'WEB' = sim_fija_boe.total <= sim_fija_web.total ? 'BOE' : 'WEB'
+    // Simular todos y quedarnos con el ranking (más barato primero)
+    const ranking = candidatos
+      .map((c) => simFija(parsed, tarifa, c, tipoIee, tipoIva, potenciaKw))
+      .sort((a, b) => a.total - b.total)
+
+    const sim_fija_boe = ranking[0]                 // slot 1 = mejor opción fija
+    const sim_fija_web = ranking[1] ?? ranking[0]   // slot 2 = segunda mejor
+    const recomendado: 'BOE' | 'WEB' = 'BOE'        // slot 1 siempre es el más barato
 
     const ahorro_mensual = r2((parsed.total_factura ?? 0) - sim_indexada.total)
 
@@ -442,6 +461,9 @@ export async function POST(req: NextRequest) {
       sim_indexada,
       sim_fija_boe,
       sim_fija_web,
+      // Ranking completo de fijas (para elegir a mano otra opción en el futuro)
+      ranking_fijas: ranking.map((s) => ({ nombre: s.nota ?? '', total: s.total })),
+      fijas_fuente: fijasDesdeSupabase ? 'supabase' : 'fallback',
     })
   } catch (err) {
     console.error('[process-invoice]', err)

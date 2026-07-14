@@ -71,10 +71,14 @@ export interface InvoiceAnalysis {
   mercado_real_fuente?: 'supabase' | 'hardcoded' | 'fallback'
   potencias_desglosadas?: boolean
   atulado_recomendado?: 'BOE' | 'WEB'
-  // v2.0 — simulaciones reales (PERD×(PMD+SC+CAP), BOE 2026, Atulado BOE/WEB)
+  // v2.0 — simulaciones reales (PERD×(PMD+SC+CAP), BOE 2026, fijas del maestro)
+  // sim_fija_boe/web son slots históricos: 1ª y 2ª mejor fija del ranking.
+  // El nombre real del producto va en SimTarifa.nota.
   sim_indexada?: SimTarifa
   sim_fija_boe?: SimTarifa
   sim_fija_web?: SimTarifa
+  ranking_fijas?: { nombre: string; total: number }[]
+  fijas_fuente?: 'supabase' | 'fallback'
 }
 
 export interface MarketPrice {

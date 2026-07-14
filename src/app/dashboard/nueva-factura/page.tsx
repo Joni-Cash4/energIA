@@ -107,13 +107,18 @@ async function generatePdf(
   // ─── 4 boxes resumen ─────────────────────────────────────────────────────────
   // 4 cajas × 45mm + 3 huecos × 3.33mm ≈ 190mm
   const recWeb = data.atulado_recomendado === 'WEB'
+  // Nombres reales de los productos fijos (slots 1 y 2 del ranking del maestro).
+  // Fallback a los nombres históricos si el backend aún no manda nota.
+  const short = (s: string, n: number) => (s.length > n ? s.slice(0, n - 3) + '...' : s)
+  const fija1 = simBoe.nota ?? 'Atulado BOE'
+  const fija2 = simWeb.nota ?? 'Atulado WEB'
   const bW = 45
   const bG = Math.round(((W - 2*M) - 4*bW) / 3)
   const summaries: { label: string; total: number; sub: string; color: [number,number,number] }[] = [
     { label: 'FACTURA ACTUAL',      total: data.total_factura, sub: data.comercializadora ?? '—',  color: C.gray   },
     { label: 'PROXIMA CRISTALINA',  total: simIdx.total,       sub: 'Tarifa indexada mercado',       color: C.green  },
-    { label: `ATULADO BOE${recWeb ? '' : ' *'}`,  total: simBoe.total, sub: 'Tarifa fija BOE', color: C.blue   },
-    { label: `ATULADO WEB${recWeb ? ' *' : ''}`,  total: simWeb.total, sub: simWeb.nota ?? 'Tarifa fija WEB', color: C.violet },
+    { label: short(`${fija1.toUpperCase()}${recWeb ? '' : ' *'}`, 34),  total: simBoe.total, sub: 'Mejor tarifa fija', color: C.blue   },
+    { label: short(`${fija2.toUpperCase()}${recWeb ? ' *' : ''}`, 34),  total: simWeb.total, sub: '2a mejor tarifa fija', color: C.violet },
   ]
   summaries.forEach(({ label, total, sub, color }, i) => {
     const x = M + i * (bW + bG)
@@ -135,7 +140,7 @@ async function generatePdf(
   y += 25
 
   // Badges ahorro (bajo las 3 opciones)
-  const ahorroLabels = ['Indexada vs actual', 'BOE vs actual', 'WEB vs actual']
+  const ahorroLabels = ['Indexada vs actual', 'Mejor fija vs actual', '2a fija vs actual']
   const ahorroSims  = [simIdx, simBoe, simWeb]
   ahorroSims.forEach((s, i) => {
     const ahorro = Math.round((data.total_factura - s.total) * 100) / 100
@@ -166,7 +171,7 @@ async function generatePdf(
   doc.setFontSize(6)
   doc.setTextColor(...C.white)
   doc.setFont('helvetica', 'bold')
-  const colHeaders = ['Concepto', 'Factura actual', 'Proxima Cristalina', 'Atulado BOE', 'Atulado WEB']
+  const colHeaders = ['Concepto', 'Factura actual', 'Proxima Cristalina', short(fija1, 24), short(fija2, 24)]
   colHeaders.forEach((h, i) => {
     if (i === 0) doc.text(h, colX[0] + 1, y + 4.5)
     else doc.text(h, rightOf(i) - 1, y + 4.5, { align: 'right' })
@@ -346,7 +351,7 @@ async function generatePdf(
     doc.rect(M, y, W - 2*M, 6, 'F')
     doc.setFontSize(6.5)
     doc.setTextColor(...C.white)
-    const ppH = ['Periodo', 'kW contrat.', 'EUR/kW·dia', 'Proxima Cristalina', 'Atulado BOE', 'Atulado WEB']
+    const ppH = ['Periodo', 'kW contrat.', 'EUR/kW·dia', 'Proxima Cristalina', short(fija1, 20), short(fija2, 20)]
     ppH.forEach((h, i) => doc.text(h, M + 2 + i * ppW, y + 4))
     y += 6
 
@@ -402,7 +407,7 @@ async function generatePdf(
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(150, 150, 150)
   doc.text(
-    'IAenergia — iaenergia.es  |  Proxima Cristalina: PERD×(PMD+SC+CAP) periodo facturado + peajes/cargos BOE 2026. Atulado BOE/WEB: tarifas fijas vigentes. No oferta vinculante.',
+    'IAenergia — iaenergia.es  |  Proxima Cristalina: PERD×(PMD+SC+CAP) periodo facturado + peajes/cargos BOE 2026. Fijas: 2 mejores tarifas vigentes del mercado. No oferta vinculante.',
     W / 2, 289, { align: 'center' }
   )
   doc.text(
@@ -682,14 +687,15 @@ export default function NuevaFacturaPage() {
                 </p>
               </div>
 
-              {/* Atulado BOE */}
+              {/* Mejor tarifa fija (slot 1 del ranking del maestro) */}
               <div className="bg-[#141414] border border-blue-500/30 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-1">
-                  <p className="text-blue-400 text-xs uppercase tracking-wide">Atulado BOE</p>
+                  <p className="text-blue-400 text-xs uppercase tracking-wide">{simBoe.nota ?? 'Atulado BOE'}</p>
                   {data.atulado_recomendado !== 'WEB' && (
                     <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded">★ Recom.</span>
                   )}
                 </div>
+                <p className="text-[#6B7280] text-[10px] mb-0.5">Mejor tarifa fija</p>
                 <p className="text-2xl font-bold text-white">{formatCurrency(simBoe.total)}</p>
                 <p className={cn('text-xs mt-2 font-semibold', data.total_factura - simBoe.total >= 0 ? 'text-[#00E676]' : 'text-red-400')}>
                   {data.total_factura - simBoe.total >= 0 ? 'Ahorras ' : '+Coste '}
@@ -697,17 +703,15 @@ export default function NuevaFacturaPage() {
                 </p>
               </div>
 
-              {/* Atulado WEB */}
+              {/* Segunda mejor tarifa fija (slot 2 del ranking) */}
               <div className="bg-[#141414] border border-violet-500/30 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-1">
-                  <p className="text-violet-400 text-xs uppercase tracking-wide">Atulado WEB</p>
+                  <p className="text-violet-400 text-xs uppercase tracking-wide">{simWeb.nota ?? 'Atulado WEB'}</p>
                   {data.atulado_recomendado === 'WEB' && (
                     <span className="text-[10px] bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded">★ Recom.</span>
                   )}
                 </div>
-                {simWeb.nota && (
-                  <p className="text-[#6B7280] text-[10px] mb-0.5">{simWeb.nota}</p>
-                )}
+                <p className="text-[#6B7280] text-[10px] mb-0.5">2ª mejor tarifa fija</p>
                 <p className="text-2xl font-bold text-white">{formatCurrency(simWeb.total)}</p>
                 <p className={cn('text-xs mt-2 font-semibold', data.total_factura - simWeb.total >= 0 ? 'text-[#00E676]' : 'text-red-400')}>
                   {data.total_factura - simWeb.total >= 0 ? 'Ahorras ' : '+Coste '}
@@ -719,7 +723,7 @@ export default function NuevaFacturaPage() {
             {/* Nota metodología */}
             <div className="text-xs text-[#6B7280] mb-6 bg-[#141414] border border-[#1F1F1F] rounded-xl px-4 py-3">
               <span className="text-white font-medium">Próxima Cristalina</span>: PERD × (PMD OMIE real + SC + CAP) del periodo facturado + peajes/cargos BOE 2026 + fee gestión + costes regulados.&ensp;
-              <span className="text-white font-medium">Atulado BOE / WEB</span>: tarifas fijas vigentes (precios toda hora incluidos).&ensp;
+              <span className="text-white font-medium">Tarifas fijas</span>: las 2 más baratas para tu consumo de entre todas las vigentes del maestro de precios{data.fijas_fuente === 'fallback' ? ' (fuente: valores de respaldo — sincroniza el maestro)' : ''}.&ensp;
               IEE <span className="text-white">{formatNumber((data.tipo_iee_detectado ?? 0) * 100, 2)}%</span> y IVA <span className="text-white">{formatNumber((data.tipo_iva_detectado ?? 0.21) * 100, 0)}%</span> derivados del tipo efectivo real de tu factura.&ensp;
               SC/CAP/PERD fuente{' '}
               <span className={cn('font-semibold', data.mercado_real_fuente === 'supabase' ? 'text-[#00E676]' : 'text-yellow-500')}>
@@ -740,8 +744,8 @@ export default function NuevaFacturaPage() {
                       <th className="px-4 py-3 text-left text-xs text-[#6B7280] uppercase tracking-wide">Concepto</th>
                       <th className="px-4 py-3 text-right text-xs text-[#6B7280] uppercase tracking-wide">Actual</th>
                       <th className="px-4 py-3 text-right text-xs text-[#00E676] uppercase tracking-wide">Próxima</th>
-                      <th className="px-4 py-3 text-right text-xs text-blue-400 uppercase tracking-wide">Atulado BOE</th>
-                      <th className="px-4 py-3 text-right text-xs text-violet-400 uppercase tracking-wide">Atulado WEB</th>
+                      <th className="px-4 py-3 text-right text-xs text-blue-400 uppercase tracking-wide">{simBoe.nota ?? 'Atulado BOE'}</th>
+                      <th className="px-4 py-3 text-right text-xs text-violet-400 uppercase tracking-wide">{simWeb.nota ?? 'Atulado WEB'}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#1F1F1F]">
@@ -920,8 +924,8 @@ export default function NuevaFacturaPage() {
                         <th className="px-4 py-3 text-right text-xs text-[#6B7280] uppercase tracking-wide">kW contrat.</th>
                         <th className="px-4 py-3 text-right text-xs text-[#6B7280] uppercase tracking-wide">Precio (€/kW·día)</th>
                         <th className="px-4 py-3 text-right text-xs text-[#00E676] uppercase tracking-wide">Próxima</th>
-                        <th className="px-4 py-3 text-right text-xs text-blue-400 uppercase tracking-wide">Atulado BOE</th>
-                        <th className="px-4 py-3 text-right text-xs text-violet-400 uppercase tracking-wide">Atulado WEB</th>
+                        <th className="px-4 py-3 text-right text-xs text-blue-400 uppercase tracking-wide">{simBoe.nota ?? 'Atulado BOE'}</th>
+                        <th className="px-4 py-3 text-right text-xs text-violet-400 uppercase tracking-wide">{simWeb.nota ?? 'Atulado WEB'}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#1F1F1F]">
