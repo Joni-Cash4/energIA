@@ -269,6 +269,43 @@ export interface Contrato {
   cliente?: Pick<Cliente, 'id' | 'nombre' | 'empresa'>
 }
 
+export interface EmpresaPago {
+  id: string
+  user_id: string
+  nombre: string
+  nif: string
+  direccion?: string
+  cp?: string
+  poblacion?: string
+  provincia?: string
+  retencion_pct: number
+  comercializadoras_keywords: string[]
+  es_default: boolean
+  activo: boolean
+  created_at: string
+}
+
+export type ComisionTipo = 'alta' | 'renovacion' | 'correccion'
+
+export interface ComisionGenerada {
+  id: string
+  user_id: string
+  contrato_id?: string
+  cliente_id?: string
+  cups?: string
+  comercializadora?: string
+  empresa_pago_id: string
+  tipo: ComisionTipo
+  importe: number
+  fecha: string
+  facturado: boolean
+  numero_factura?: string
+  notas?: string
+  created_at: string
+  empresa_pago?: Pick<EmpresaPago, 'id' | 'nombre' | 'nif' | 'retencion_pct'>
+  cliente?: Pick<Cliente, 'id' | 'nombre' | 'empresa'>
+}
+
 export type AccionTipoVal     = 'llamada' | 'email' | 'reunion' | 'visita' | 'otro'
 export type AccionResultadoVal = 'pendiente' | 'completado' | 'fracaso' | 'no_contesta'
 

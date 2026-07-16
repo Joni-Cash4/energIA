@@ -1,15 +1,17 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, CheckCircle2, Loader2, X, Save, FileCheck } from 'lucide-react'
+import { Plus, CheckCircle2, Loader2, X, Save, FileCheck, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import type { Contrato, Cliente, ContratoEstado, EstadoFirma } from '@/types'
+import { resolverEmpresaPago } from '@/lib/comisiones'
+import type { Contrato, Cliente, ContratoEstado, EstadoFirma, EmpresaPago } from '@/types'
 
 function diasRestantes(fecha: string): number {
   return Math.ceil((new Date(fecha).getTime() - Date.now()) / 86400000)
@@ -54,24 +56,32 @@ export default function ContratosPage() {
   const { toast } = useToast()
   const [contratos, setContratos] = useState<Contrato[]>([])
   const [clientes, setClientes] = useState<Pick<Cliente, 'id' | 'nombre' | 'empresa'>[]>([])
+  const [empresasPago, setEmpresasPago] = useState<EmpresaPago[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'proximos' | 'todos'>('proximos')
+  const [busqueda, setBusqueda] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState({ ...EMPTY })
   const [saving, setSaving] = useState(false)
   const [toggling, setToggling] = useState<string | null>(null)
+  const [renovarPopoverId, setRenovarPopoverId] = useState<string | null>(null)
+  const [renovarFecha, setRenovarFecha] = useState('')
+  const [renovarImporte, setRenovarImporte] = useState('')
+  const [renovarSaving, setRenovarSaving] = useState(false)
 
   const load = useCallback(async () => {
     const supabase = getSupabaseClient()
-    const [{ data: c }, { data: cl }] = await Promise.all([
+    const [{ data: c }, { data: cl }, { data: ep }] = await Promise.all([
       supabase.from('contratos')
         .select('*')
         .order('fecha_vencimiento', { ascending: true, nullsFirst: false }),
       supabase.from('clientes').select('id,nombre,empresa').order('nombre'),
+      supabase.from('empresas_pago').select('*').eq('activo', true),
     ])
     setContratos((c ?? []) as Contrato[])
     setClientes(cl ?? [])
+    setEmpresasPago((ep ?? []) as EmpresaPago[])
     setLoading(false)
   }, [])
 
@@ -95,14 +105,81 @@ export default function ContratosPage() {
     c.estado === 'activo'
   )
 
-  const filtered = tab === 'proximos' ? proximos : contratos
+  const baseList = tab === 'proximos' ? proximos : contratos
+  const q = busqueda.trim().toLowerCase()
+  const filtered = q
+    ? baseList.filter(c => {
+        const cliente = clientes.find(cl => cl.id === c.cliente_id)
+        return [cliente?.nombre, cliente?.empresa, c.cups, c.comercializadora, c.producto, c.ref_comercializadora]
+          .some(v => v?.toLowerCase().includes(q))
+      })
+    : baseList
+
+  function openRenovarPopover(c: Contrato) {
+    setRenovarFecha(new Date().toISOString().split('T')[0])
+    setRenovarImporte(c.a_cobrar != null ? String(c.a_cobrar) : '')
+    setRenovarPopoverId(c.id)
+  }
+
+  async function confirmRenovacion(c: Contrato) {
+    if (!renovarFecha || !renovarImporte) return
+    setRenovarSaving(true)
+    const supabase = getSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    const { error } = await supabase.from('contratos')
+      .update({ renovacion_verificada: true }).eq('id', c.id)
+    if (error) {
+      toast({ title: 'Error al registrar la renovación', variant: 'destructive' })
+      setRenovarSaving(false)
+      return
+    }
+
+    const empresa = resolverEmpresaPago(c.comercializadora, empresasPago)
+    if (empresa) {
+      await supabase.from('comisiones_generadas').insert({
+        user_id: user!.id,
+        contrato_id: c.id,
+        cliente_id: c.cliente_id ?? null,
+        cups: c.cups ?? null,
+        comercializadora: c.comercializadora ?? null,
+        empresa_pago_id: empresa.id,
+        tipo: 'renovacion',
+        importe: Number(renovarImporte),
+        fecha: renovarFecha,
+      })
+    } else {
+      toast({ title: 'Renovación guardada, pero no se pudo asignar empresa de facturación', variant: 'destructive' })
+    }
+
+    setContratos(p => p.map(x => x.id === c.id ? { ...x, renovacion_verificada: true } : x))
+    toast({ title: 'Renovación registrada' })
+    setRenovarPopoverId(null)
+    setRenovarSaving(false)
+  }
 
   async function handleToggle(id: string, current: boolean) {
+    if (!current) {
+      const c = contratos.find(x => x.id === id)
+      if (c) openRenovarPopover(c)
+      return
+    }
+    if (!window.confirm('¿Desmarcar como renovado? Se eliminará el registro de comisión de renovación asociado si aún no está facturado.')) return
     setToggling(id)
-    const { error } = await getSupabaseClient()
-      .from('contratos').update({ renovacion_verificada: !current }).eq('id', id)
-    if (!error) setContratos(p => p.map(c => c.id === id ? { ...c, renovacion_verificada: !current } : c))
-    else toast({ title: 'Error', variant: 'destructive' })
+    const supabase = getSupabaseClient()
+    const { error } = await supabase.from('contratos').update({ renovacion_verificada: false }).eq('id', id)
+    if (!error) {
+      setContratos(p => p.map(c => c.id === id ? { ...c, renovacion_verificada: false } : c))
+      const { data: rows } = await supabase.from('comisiones_generadas')
+        .select('id')
+        .eq('contrato_id', id).eq('tipo', 'renovacion').eq('facturado', false)
+        .order('created_at', { ascending: false }).limit(1)
+      if (rows && rows[0]) {
+        await supabase.from('comisiones_generadas').delete().eq('id', rows[0].id)
+      }
+    } else {
+      toast({ title: 'Error', variant: 'destructive' })
+    }
     setToggling(null)
   }
 
@@ -131,13 +208,36 @@ export default function ContratosPage() {
       a_cobrar:             form.a_cobrar ? Number(form.a_cobrar) : null,
       notas:                form.notas || null,
     }
-    const { error } = editId
-      ? await supabase.from('contratos').update(payload).eq('id', editId)
-      : await supabase.from('contratos').insert(payload)
+    let error
+    let insertedId: string | null = null
+    if (editId) {
+      ({ error } = await supabase.from('contratos').update(payload).eq('id', editId))
+    } else {
+      const res = await supabase.from('contratos').insert(payload).select('id').single()
+      error = res.error
+      insertedId = res.data?.id ?? null
+    }
 
     if (error) {
       toast({ title: 'Error al guardar el contrato', variant: 'destructive' })
     } else {
+      // Nuevo contrato con comisión de alta → registrar en el ledger de facturación
+      if (!editId && insertedId && payload.a_cobrar && payload.fecha_alta) {
+        const empresa = resolverEmpresaPago(payload.comercializadora, empresasPago)
+        if (empresa) {
+          await supabase.from('comisiones_generadas').insert({
+            user_id: user!.id,
+            contrato_id: insertedId,
+            cliente_id: payload.cliente_id,
+            cups: payload.cups,
+            comercializadora: payload.comercializadora,
+            empresa_pago_id: empresa.id,
+            tipo: 'alta',
+            importe: payload.a_cobrar,
+            fecha: payload.fecha_alta,
+          })
+        }
+      }
       // Si hay cliente vinculado y el contrato es activo con vencimiento dentro del año, limpiar revision_pendiente
       if (form.cliente_id && form.estado === 'activo' && form.fecha_vencimiento) {
         const venc = new Date(form.fecha_vencimiento)
@@ -223,8 +323,8 @@ export default function ContratosPage() {
         ))}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-5">
+      {/* Tabs + buscador */}
+      <div className="flex flex-wrap items-center gap-2 mb-5">
         {([
           { key: 'proximos', label: `Próximos${proximos.length > 0 ? ` (${proximos.length})` : ''}` },
           { key: 'todos',    label: 'Todos' },
@@ -238,6 +338,22 @@ export default function ContratosPage() {
             {label}
           </button>
         ))}
+        <div className="relative ml-auto w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
+          <Input
+            placeholder="Buscar cliente, CUPS, comercializadora..."
+            value={busqueda}
+            onChange={e => setBusqueda(e.target.value)}
+            className="pl-9"
+          />
+          {busqueda && (
+            <button
+              onClick={() => setBusqueda('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Table */}
@@ -302,19 +418,48 @@ export default function ContratosPage() {
                           {c.a_cobrar ? formatCurrency(c.a_cobrar) : '—'}
                         </td>
                         <td className="px-4 py-3 sticky right-0 bg-[#141414] group-hover:bg-[#1A1A1A] transition-colors shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.6)]" onClick={e => e.stopPropagation()}>
-                          <button
-                            onClick={() => handleToggle(c.id, c.renovacion_verificada)}
-                            disabled={toggling === c.id}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                              c.renovacion_verificada
-                                ? 'bg-[#00E676]/10 border-[#00E676]/30 text-[#00E676]'
-                                : 'bg-[#1A1A1A] border-[#2A2A2A] text-[#6B7280] hover:border-[#3A3A3A] hover:text-white'
-                            }`}>
-                            {toggling === c.id
-                              ? <Loader2 className="w-3 h-3 animate-spin" />
-                              : <CheckCircle2 className="w-3 h-3" />}
-                            {c.renovacion_verificada ? 'Verificado' : 'Verificar'}
-                          </button>
+                          {c.renovacion_verificada ? (
+                            <button
+                              onClick={() => handleToggle(c.id, true)}
+                              disabled={toggling === c.id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors bg-[#00E676]/10 border-[#00E676]/30 text-[#00E676]">
+                              {toggling === c.id
+                                ? <Loader2 className="w-3 h-3 animate-spin" />
+                                : <CheckCircle2 className="w-3 h-3" />}
+                              Verificado
+                            </button>
+                          ) : (
+                            <Popover open={renovarPopoverId === c.id} onOpenChange={open => { if (!open) setRenovarPopoverId(null) }}>
+                              <PopoverTrigger asChild>
+                                <button
+                                  onClick={() => openRenovarPopover(c)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors bg-[#1A1A1A] border-[#2A2A2A] text-[#6B7280] hover:border-[#3A3A3A] hover:text-white">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Verificar
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-64 p-4" onClick={e => e.stopPropagation()}>
+                                <p className="text-white text-xs font-medium mb-3">Registrar renovación</p>
+                                <div className="space-y-3">
+                                  <div>
+                                    <label className="block text-[10px] text-[#9CA3AF] mb-1">Fecha renovación</label>
+                                    <Input type="date" value={renovarFecha}
+                                      onChange={e => setRenovarFecha(e.target.value)} className="h-8 text-xs" />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] text-[#9CA3AF] mb-1">Importe comisión (€)</label>
+                                    <Input type="number" step="0.01" value={renovarImporte}
+                                      onChange={e => setRenovarImporte(e.target.value)} className="h-8 text-xs" />
+                                  </div>
+                                  <Button onClick={() => confirmRenovacion(c)} disabled={renovarSaving || !renovarFecha || !renovarImporte}
+                                    className="w-full h-8 text-xs gap-1.5">
+                                    {renovarSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                                    Confirmar
+                                  </Button>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          )}
                         </td>
                       </motion.tr>
                     )
