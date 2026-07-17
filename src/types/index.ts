@@ -324,6 +324,7 @@ export interface Accion {
 export type GestionTipoVal   = 'solicitamos' | 'nos_solicitan'
 export type GestionEstadoVal = 'pendiente' | 'en_curso' | 'resuelto'
 export type GestionViaVal    = 'email' | 'telefono' | 'portal' | 'carta' | 'otro'
+export type GestionOrigenVal = 'manual' | 'audio'
 
 export interface Gestion {
   id: string
@@ -341,6 +342,9 @@ export interface Gestion {
   resolucion?: string
   fecha_resolucion?: string
   notas?: string
+  origen: GestionOrigenVal
+  transcripcion?: string
+  revisar_cliente: boolean
   created_at: string
   updated_at: string
   cliente?: Pick<Cliente, 'id' | 'nombre' | 'empresa'>

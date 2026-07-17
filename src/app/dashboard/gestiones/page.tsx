@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, CheckCircle2, Loader2, X, Save, ClipboardList, Send, History } from 'lucide-react'
+import { Plus, CheckCircle2, Loader2, X, Save, ClipboardList, Send, History, Mic, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -54,6 +54,7 @@ export default function GestionesPage() {
   const [tab, setTab] = useState<'abiertas' | 'todas'>('abiertas')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
+  const [editing, setEditing] = useState<Gestion | null>(null)
   const [form, setForm] = useState({ ...EMPTY })
   const [saving, setSaving] = useState(false)
   // Historial de la gestión en edición
@@ -153,6 +154,7 @@ export default function GestionesPage() {
       resolucion:          form.resolucion || null,
       fecha_resolucion:    resuelto ? new Date().toISOString().split('T')[0] : null,
       notas:               form.notas || null,
+      revisar_cliente:     form.cliente_id ? false : (editing?.revisar_cliente ?? false),
     }
     const { data, error } = editId
       ? await supabase.from('gestiones').update(payload).eq('id', editId).select('id').single()
@@ -202,6 +204,7 @@ export default function GestionesPage() {
       notas:               g.notas               ?? '',
     })
     setEditId(g.id)
+    setEditing(g)
     setEventos([])
     setNuevoEvento('')
     loadEventos(g.id)
@@ -211,6 +214,7 @@ export default function GestionesPage() {
   function openNew() {
     setForm({ ...EMPTY })
     setEditId(null)
+    setEditing(null)
     setEventos([])
     setNuevoEvento('')
     setShowForm(true)
@@ -290,18 +294,24 @@ export default function GestionesPage() {
                 <tbody>
                   {filtered.map((g, i) => (
                     <motion.tr key={g.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
-                      className="border-b border-[#1F1F1F] last:border-0 hover:bg-[#1A1A1A] transition-colors cursor-pointer"
+                      className={`border-b last:border-0 hover:bg-[#1A1A1A] transition-colors cursor-pointer ${
+                        g.revisar_cliente ? 'border-yellow-500/30 bg-yellow-500/[0.03]' : 'border-[#1F1F1F]'
+                      }`}
                       onClick={() => openEdit(g)}>
                       <td className="px-4 py-3"><SeguimientoBadge g={g} /></td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {g.cliente_id ? (
-                          <Link href={`/dashboard/clientes/${g.cliente_id}`} onClick={e => e.stopPropagation()}
-                            className="text-white font-medium hover:text-[#00E676] transition-colors">
-                            {nombreDe(g)}
-                          </Link>
-                        ) : (
-                          <span className="text-white font-medium">{nombreDe(g)}</span>
-                        )}
+                        <div className="flex items-center gap-1.5">
+                          {g.origen === 'audio' && <Mic className="w-3.5 h-3.5 text-[#6B7280] shrink-0" />}
+                          {g.cliente_id ? (
+                            <Link href={`/dashboard/clientes/${g.cliente_id}`} onClick={e => e.stopPropagation()}
+                              className="text-white font-medium hover:text-[#00E676] transition-colors">
+                              {nombreDe(g)}
+                            </Link>
+                          ) : (
+                            <span className="text-white font-medium">{nombreDe(g)}</span>
+                          )}
+                          {g.revisar_cliente && <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 shrink-0" />}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-[#9CA3AF] whitespace-nowrap">{g.compania}</td>
                       <td className="px-4 py-3">
@@ -361,6 +371,24 @@ export default function GestionesPage() {
               </div>
 
               <div className="p-6 space-y-4">
+                {editing?.revisar_cliente && (
+                  <div className="flex items-start gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                    <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
+                    <p className="text-yellow-200 text-xs">
+                      Creada desde un audio sin match seguro de cliente — revisa el nombre y selecciónalo abajo.
+                    </p>
+                  </div>
+                )}
+
+                {editing?.transcripcion && (
+                  <div className="bg-[#0F0F0F] border border-[#2A2A2A] rounded-lg p-3">
+                    <p className="text-[#6B7280] text-[11px] uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                      <Mic className="w-3 h-3" />Transcripción del audio
+                    </p>
+                    <p className="text-[#D1D5DB] text-xs whitespace-pre-wrap">{editing.transcripcion}</p>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs text-[#9CA3AF] mb-1.5">Cliente</label>
                   <Select value={form.cliente_id || undefined} onValueChange={v => {
