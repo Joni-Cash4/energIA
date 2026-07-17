@@ -4,19 +4,21 @@ import { Navbar } from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
 import { MapPin, Clock, Phone, Video, Star, ArrowRight, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { getAsesorFotoUrl } from '@/lib/asesor-foto'
 
 export const metadata: Metadata = {
   title: 'Tu asesor energético — IAenergía',
   description: 'Asesor independiente especializado en energía. Análisis personalizado de tu factura, sin comisiones ocultas.',
 }
 
+// Casos reales — mismos testimonios que src/components/landing/CasosReales.tsx
 const reseñas = [
-  { nombre: 'Carlos M.', lugar: 'Bilbao', texto: 'Cambié de Endesa a tarifa indexada y ahorro 47€/mes. Jonathan me lo explicó todo sin prisa.', estrellas: 5 },
-  { nombre: 'Ana P.', lugar: 'Getxo', texto: 'Lo que más me gustó es que no intentó venderme nada. Analizó mi factura y me dijo exactamente qué hacer.', estrellas: 5 },
-  { nombre: 'Roberto F.', lugar: 'Vitoria', texto: 'Videollamada muy clara. En 20 minutos entendí mi factura por primera vez en años.', estrellas: 5 },
+  { nombre: 'Mariano G.', lugar: 'Bar Restaurante La Carranzana', texto: 'Desde que empezamos a revisar facturas, mirando cambios de tarifa y estudiando operadores, tenemos más tranquilidad: hay un poco de ahorro y lo tenemos claro.', estrellas: 5 },
+  { nombre: 'Jokin', lugar: 'Gerente · Makailo Etxarri', texto: 'Tenemos neveras que consumen bastante, pero no sabía interpretar las facturas. Jonathan me pidió un par y en 5 minutos me dijo: «tenéis potencia contratada de más, y vuestra compañía no tiene precios competitivos». Ajustamos potencias, buscamos mejores tarifas y el ahorro fue importante.', estrellas: 5 },
 ]
 
-export default function AsesorPage() {
+export default async function AsesorPage() {
+  const fotoUrl = await getAsesorFotoUrl()
   return (
     <>
       <Navbar />
@@ -27,9 +29,11 @@ export default function AsesorPage() {
           <div className="flex flex-col md:flex-row items-center gap-10 mb-16">
             {/* Foto placeholder */}
             <div className="shrink-0">
-              <div className="w-44 h-44 rounded-3xl bg-[#141414] border-2 border-[#00E676]/30 flex items-center justify-center text-6xl">
-                👤
-              </div>
+              <img
+                src={fotoUrl}
+                alt="Jonathan, asesor energético de IAenergía"
+                className="w-44 h-44 rounded-3xl object-cover border-2 border-[#00E676]/30"
+              />
             </div>
             <div>
               <p className="text-[#00E676] text-sm uppercase tracking-widest mb-2">Tu asesor energético</p>
@@ -122,7 +126,7 @@ export default function AsesorPage() {
           {/* Reseñas */}
           <div className="mb-10">
             <h2 className="text-white font-bold text-xl mb-6">Lo que dicen los clientes</h2>
-            <div className="grid sm:grid-cols-3 gap-4">
+            <div className="grid sm:grid-cols-2 gap-4">
               {reseñas.map((r) => (
                 <div key={r.nombre} className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-5">
                   <div className="flex gap-0.5 mb-3">
