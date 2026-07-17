@@ -23,7 +23,7 @@ export async function sendTelegramMessage(chatId: number, text: string): Promise
   })
 }
 
-export async function downloadTelegramFile(fileId: string): Promise<{ base64: string; mimeType: string }> {
+export async function downloadTelegramFile(fileId: string): Promise<{ buffer: Buffer; mimeType: string; filePath: string }> {
   const token = process.env.TELEGRAM_BOT_TOKEN
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN no configurado')
 
@@ -36,5 +36,5 @@ export async function downloadTelegramFile(fileId: string): Promise<{ base64: st
   if (!fileRes.ok) throw new Error(`Descarga de audio de Telegram falló: ${fileRes.status}`)
   const arrayBuffer = await fileRes.arrayBuffer()
 
-  return { base64: Buffer.from(arrayBuffer).toString('base64'), mimeType: mimeFromPath(filePath) }
+  return { buffer: Buffer.from(arrayBuffer), mimeType: mimeFromPath(filePath), filePath }
 }

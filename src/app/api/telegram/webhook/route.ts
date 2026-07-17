@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import Anthropic from '@anthropic-ai/sdk'
 import { sendTelegramMessage, downloadTelegramFile } from '@/lib/telegram'
+import { transcribeAudio } from '@/lib/groq'
 
 const EXTRACT_SYSTEM_PROMPT = `Eres un asistente que convierte transcripciones de notas de voz de un asesor energético en una gestión estructurada para su CRM. Tu única función es devolver un JSON válido. NUNCA expliques tu razonamiento, NUNCA escribas texto fuera del JSON, NUNCA uses markdown. Solo JSON.`
 
@@ -59,15 +59,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { base64, mimeType } = await downloadTelegramFile(fileId)
-
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-    const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
-    const transcriptResult = await geminiModel.generateContent([
-      { inlineData: { mimeType, data: base64 } },
-      'Transcribe este audio en español. Devuelve ÚNICAMENTE el texto transcrito, sin comentarios ni formato adicional. Si no se entiende nada o está en silencio, devuelve una cadena vacía.',
-    ])
-    const transcripcion = transcriptResult.response.text().trim()
+    const { buffer, mimeType, filePath } = await downloadTelegramFile(fileId)
+    const transcripcion = await transcribeAudio(buffer, mimeType, filePath)
 
     if (!transcripcion) {
       await sendTelegramMessage(chatId, '⚠️ No he podido transcribir el audio (vacío o ininteligible).')
