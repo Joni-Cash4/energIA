@@ -58,6 +58,8 @@ create policy "gestion_eventos_owner" on gestion_eventos
 
 create index if not exists gestion_eventos_gestion_idx on gestion_eventos (gestion_id);
 
--- ── 3. Permisos al rol authenticated ─────────────────────────────────────────
-grant select, insert, update, delete on gestiones       to authenticated;
-grant select, insert, update, delete on gestion_eventos to authenticated;
+-- ── 3. Permisos ──────────────────────────────────────────────────────────────
+-- service_role no recibe grants automáticos en este proyecto: sin su grant,
+-- la API con la secret key devuelve 403 (la usa el recordatorio diario).
+grant select, insert, update, delete on gestiones, gestion_eventos to authenticated;
+grant select, insert, update, delete on gestiones, gestion_eventos to service_role;
