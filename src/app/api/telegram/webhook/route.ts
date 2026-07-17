@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
     const { data: gestion, error } = await supabase.from('gestiones').insert(payload).select('id').single()
     if (error || !gestion) {
       console.error('Error insertando gestión desde audio', error)
-      await sendTelegramMessage(chatId, '⚠️ Error al guardar la gestión. Revisa los logs de Vercel.')
+      await sendTelegramMessage(chatId, `⚠️ Error al guardar la gestión: ${error?.message ?? 'sin dato'}`)
       return NextResponse.json({ ok: true })
     }
 
@@ -135,7 +135,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('Error procesando audio de Telegram', err)
-    await sendTelegramMessage(chatId, '⚠️ Error procesando el audio. Revisa los logs de Vercel.')
+    const detail = err instanceof Error ? err.message : String(err)
+    await sendTelegramMessage(chatId, `⚠️ Error procesando el audio: ${detail}`)
     return NextResponse.json({ ok: true })
   }
 }
