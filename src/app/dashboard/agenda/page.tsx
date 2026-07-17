@@ -1,33 +1,44 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { CalendarDays, CheckCircle2, Loader2, Phone } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Loader2, Phone, ClipboardList } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import type { Cliente } from '@/types'
+import type { Cliente, Gestion } from '@/types'
 
 export default function AgendaPage() {
   const { toast } = useToast()
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const [gestiones, setGestiones] = useState<Gestion[]>([])
   const [loading, setLoading] = useState(true)
   const [marking, setMarking] = useState<string | null>(null)
 
   const load = async () => {
     const supabase = getSupabaseClient()
-    const hoy = new Date()
     const en7 = new Date(); en7.setDate(en7.getDate() + 7)
+    const en7Str = en7.toISOString().split('T')[0]
 
-    const { data } = await supabase
-      .from('clientes')
-      .select('*')
-      .not('proximo_contacto', 'is', null)
-      .lte('proximo_contacto', en7.toISOString().split('T')[0])
-      .order('proximo_contacto')
+    const [{ data }, { data: g }] = await Promise.all([
+      supabase
+        .from('clientes')
+        .select('*')
+        .not('proximo_contacto', 'is', null)
+        .lte('proximo_contacto', en7Str)
+        .order('proximo_contacto'),
+      supabase
+        .from('gestiones')
+        .select('*, cliente:clientes(id,nombre,empresa)')
+        .neq('estado', 'resuelto')
+        .not('proximo_seguimiento', 'is', null)
+        .lte('proximo_seguimiento', en7Str)
+        .order('proximo_seguimiento'),
+    ])
 
     setClientes(data ?? [])
+    setGestiones((g ?? []) as Gestion[])
     setLoading(false)
   }
 
@@ -53,17 +64,20 @@ export default function AgendaPage() {
   const hoy = new Date().toISOString().split('T')[0]
   const vencidos  = clientes.filter((c) => c.proximo_contacto! < hoy)
   const proximos  = clientes.filter((c) => c.proximo_contacto! >= hoy)
+  const gestionesVencidas = gestiones.filter((g) => g.proximo_seguimiento! <= hoy)
+  const gestionesProximas = gestiones.filter((g) => g.proximo_seguimiento! > hoy)
+  const totalPendientes = clientes.length + gestiones.length
 
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">Agenda</h1>
-          <p className="text-[#6B7280] text-sm mt-1">Clientes pendientes de contactar esta semana</p>
+          <p className="text-[#6B7280] text-sm mt-1">Contactos de clientes y gestiones con compañías de esta semana</p>
         </div>
         <div className="flex items-center gap-2 px-4 py-2 bg-[#141414] border border-[#1F1F1F] rounded-xl">
           <CalendarDays className="w-4 h-4 text-[#00E676]" />
-          <span className="text-white font-semibold">{clientes.length}</span>
+          <span className="text-white font-semibold">{totalPendientes}</span>
           <span className="text-[#6B7280] text-sm">pendientes</span>
         </div>
       </div>
@@ -72,7 +86,7 @@ export default function AgendaPage() {
         <div className="flex justify-center py-20">
           <div className="w-7 h-7 rounded-full border-2 border-[#00E676]/30 border-t-[#00E676] animate-spin" />
         </div>
-      ) : clientes.length === 0 ? (
+      ) : totalPendientes === 0 ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -83,7 +97,7 @@ export default function AgendaPage() {
           </div>
           <h2 className="text-white font-semibold mb-2">¡Todo al día!</h2>
           <p className="text-[#6B7280] text-sm max-w-xs">
-            No tienes clientes pendientes de contactar esta semana.
+            No tienes contactos ni gestiones pendientes esta semana.
             Añade una fecha de próximo contacto en la ficha de cada cliente.
           </p>
         </motion.div>
@@ -117,9 +131,62 @@ export default function AgendaPage() {
               </div>
             </div>
           )}
+
+          {/* Gestiones con compañías */}
+          {gestiones.length > 0 && (
+            <div>
+              <h2 className="text-[#9CA3AF] text-sm font-medium uppercase tracking-wide mb-3 flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-[#42A5F5]" />
+                Gestiones con compañías ({gestiones.length})
+              </h2>
+              <div className="space-y-3">
+                {gestionesVencidas.map((g, i) => (
+                  <GestionCard key={g.id} gestion={g} i={i} overdue />
+                ))}
+                {gestionesProximas.map((g, i) => (
+                  <GestionCard key={g.id} gestion={g} i={gestionesVencidas.length + i} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
+  )
+}
+
+function GestionCard({ gestion: g, i, overdue }: { gestion: Gestion; i: number; overdue?: boolean }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: i * 0.05 }}
+      className={`flex items-center justify-between gap-4 p-5 bg-[#141414] border rounded-xl ${
+        overdue ? 'border-red-500/30' : 'border-[#1F1F1F]'
+      }`}
+    >
+      <div className="flex items-center gap-4 min-w-0">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${overdue ? 'bg-red-500/15' : 'bg-[#42A5F5]/10'}`}>
+          <ClipboardList className={`w-4 h-4 ${overdue ? 'text-red-400' : 'text-[#42A5F5]'}`} />
+        </div>
+        <div className="min-w-0">
+          <Link href="/dashboard/gestiones" className="text-white font-medium hover:text-[#00E676] transition-colors">
+            {g.cliente?.nombre ?? g.titular ?? '—'} · {g.compania}
+          </Link>
+          <p className="text-[#9CA3AF] text-xs truncate max-w-lg">{g.asunto}</p>
+          <p className={`text-xs mt-0.5 ${overdue ? 'text-red-400' : 'text-[#6B7280]'}`}>
+            {overdue ? '⚠ Vencida · ' : ''}
+            {g.proximo_seguimiento ? formatDate(g.proximo_seguimiento) : '—'}
+          </p>
+        </div>
+      </div>
+      <Link
+        href="/dashboard/gestiones"
+        className="text-xs text-[#6B7280] hover:text-[#00E676] transition-colors shrink-0 whitespace-nowrap"
+      >
+        Ver gestión →
+      </Link>
+    </motion.div>
   )
 }
 
