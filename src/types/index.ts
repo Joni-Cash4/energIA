@@ -321,6 +321,40 @@ export interface Accion {
   created_at: string
 }
 
+export type GestionTipoVal   = 'solicitamos' | 'nos_solicitan'
+export type GestionEstadoVal = 'pendiente' | 'en_curso' | 'resuelto'
+export type GestionViaVal    = 'email' | 'telefono' | 'portal' | 'carta' | 'otro'
+
+export interface Gestion {
+  id: string
+  user_id: string
+  cliente_id?: string
+  titular?: string           // fallback si la gestión no está ligada a un cliente del CRM
+  cups?: string
+  compania: string
+  tipo: GestionTipoVal
+  asunto: string
+  via: GestionViaVal
+  fecha_alta: string
+  proximo_seguimiento?: string
+  estado: GestionEstadoVal
+  resolucion?: string
+  fecha_resolucion?: string
+  notas?: string
+  created_at: string
+  updated_at: string
+  cliente?: Pick<Cliente, 'id' | 'nombre' | 'empresa'>
+}
+
+export interface GestionEvento {
+  id: string
+  gestion_id: string
+  user_id: string
+  fecha: string
+  nota: string
+  created_at: string
+}
+
 export interface FacturaContrato {
   id: string
   cliente_id: string

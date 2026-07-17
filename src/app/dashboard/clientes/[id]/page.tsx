@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck, Clock, CheckCircle2, Phone, Mail, Users, MapPin, MessageSquare, Send, RefreshCw, Zap, Upload, FileText } from 'lucide-react'
+import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck, Clock, CheckCircle2, Phone, Mail, Users, MapPin, MessageSquare, Send, RefreshCw, Zap, Upload, FileText, ClipboardList } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import type { Cliente, Factura, Contrato, ClienteEstado, Accion, AccionTipoVal, AccionResultadoVal, ConsumoDatadis, PotenciaDatadis, FacturaContrato } from '@/types'
+import type { Cliente, Factura, Contrato, ClienteEstado, Accion, AccionTipoVal, AccionResultadoVal, ConsumoDatadis, PotenciaDatadis, FacturaContrato, Gestion } from '@/types'
 
 const TIPO_ICONS: Record<AccionTipoVal, typeof Phone> = {
   llamada: Phone, email: Mail, reunion: Users, visita: MapPin, otro: MessageSquare,
@@ -60,6 +60,7 @@ export default function ClienteDetailPage() {
   const [saving, setSaving] = useState(false)
   const [dismissing, setDismissing] = useState(false)
   const [acciones, setAcciones] = useState<Accion[]>([])
+  const [gestiones, setGestiones] = useState<Gestion[]>([])
   const [accionTipo, setAccionTipo] = useState<AccionTipoVal>('llamada')
   const [accionResultado, setAccionResultado] = useState<AccionResultadoVal>('completado')
   const [accionNotas, setAccionNotas] = useState('')
@@ -107,7 +108,8 @@ export default function ClienteDetailPage() {
       supabase.from('consumos_datadis').select('*').eq('cliente_id', id).order('year_month', { ascending: false }),
       supabase.from('facturas_contrato').select('*').eq('cliente_id', id).order('periodo_fin', { ascending: false }),
       supabase.from('potencia_datadis').select('*').eq('cliente_id', id).order('year_month', { ascending: false }),
-    ]).then(([{ data: c }, { data: f }, { data: ct }, { data: ac }, { data: cd }, { data: fc }, { data: pd }]) => {
+      supabase.from('gestiones').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
+    ]).then(([{ data: c }, { data: f }, { data: ct }, { data: ac }, { data: cd }, { data: fc }, { data: pd }, { data: ge }]) => {
       if (!c) { router.replace('/dashboard/clientes'); return }
       setCliente(c)
       setNombre(c.nombre ?? '')
@@ -138,6 +140,7 @@ export default function ClienteDetailPage() {
       setConsumosDatadis((cd ?? []) as ConsumoDatadis[])
       setFacturasContrato((fc ?? []) as FacturaContrato[])
       setPotenciaDatadis((pd ?? []) as PotenciaDatadis[])
+      setGestiones((ge ?? []) as Gestion[])
       setLoading(false)
     })
   }, [id, router])
@@ -627,6 +630,54 @@ export default function ClienteDetailPage() {
                     </div>
                   )
                 })}
+              </div>
+            )}
+          </div>
+
+          {/* Gestiones con compañías */}
+          <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#1F1F1F] flex items-center justify-between">
+              <h2 className="text-white font-semibold flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-[#42A5F5]" />
+                Gestiones con compañías
+              </h2>
+              <Link href={`/dashboard/gestiones?cliente_id=${id}`}
+                className="text-xs text-[#00E676] hover:underline flex items-center gap-1">
+                <Plus className="w-3 h-3" />Nueva gestión
+              </Link>
+            </div>
+            {gestiones.length === 0 ? (
+              <div className="py-8 text-center text-[#6B7280] text-sm">Sin gestiones registradas para este cliente.</div>
+            ) : (
+              <div className="divide-y divide-[#1F1F1F]">
+                {gestiones.map((g) => (
+                  <Link key={g.id} href="/dashboard/gestiones"
+                    className="flex items-start gap-3 px-6 py-3 hover:bg-[#1A1A1A] transition-colors">
+                    <div className={`mt-0.5 w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                      g.estado === 'resuelto' ? 'bg-[#00E676]/10' : 'bg-[#42A5F5]/10'
+                    }`}>
+                      <ClipboardList className={`w-3.5 h-3.5 ${g.estado === 'resuelto' ? 'text-[#00E676]' : 'text-[#42A5F5]'}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-white text-sm font-medium">{g.compania}</span>
+                        <span className={`text-xs font-medium ${
+                          g.estado === 'resuelto' ? 'text-[#00E676]'
+                          : g.estado === 'en_curso' ? 'text-yellow-400' : 'text-[#9CA3AF]'
+                        }`}>
+                          {g.estado === 'resuelto' ? 'Resuelta' : g.estado === 'en_curso' ? 'En curso' : 'Pendiente'}
+                        </span>
+                        <span className="text-[#6B7280] text-xs ml-auto">
+                          {formatDate(g.fecha_alta)}{g.fecha_resolucion ? ` → ${formatDate(g.fecha_resolucion)}` : ''}
+                        </span>
+                      </div>
+                      <p className="text-[#9CA3AF] text-sm mt-0.5 line-clamp-2">{g.asunto}</p>
+                      {g.resolucion && (
+                        <p className="text-[#00E676]/80 text-xs mt-0.5 line-clamp-2">✓ {g.resolucion}</p>
+                      )}
+                    </div>
+                  </Link>
+                ))}
               </div>
             )}
           </div>

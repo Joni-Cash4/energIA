@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, FileText, Users, Inbox, Zap, LogOut,
-  ChevronRight, TrendingUp, CalendarDays, Mail, Sliders, FileCheck, Receipt, Banknote, UserCircle,
+  ChevronRight, TrendingUp, CalendarDays, Mail, Sliders, FileCheck, Receipt, Banknote, UserCircle, ClipboardList,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getSupabaseClient } from '@/lib/supabase'
@@ -16,6 +16,7 @@ const navItems = [
   { href: '/dashboard/clientes',       label: 'Clientes',        icon: Users },
   { href: '/dashboard/leads',          label: 'Leads',           icon: Inbox },
   { href: '/dashboard/contratos',      label: 'Contratos',       icon: FileCheck, badge: 'contratos' },
+  { href: '/dashboard/gestiones',      label: 'Gestiones',       icon: ClipboardList, badge: 'gestiones' },
   { href: '/dashboard/comisiones',     label: 'Comisiones',      icon: Receipt },
   { href: '/dashboard/facturacion',    label: 'Facturación',     icon: Banknote },
   { href: '/dashboard/cartera',        label: 'Cartera',         icon: TrendingUp },
@@ -29,6 +30,7 @@ export function DashboardNav() {
   const router = useRouter()
   const [sinLeer, setSinLeer] = useState(0)
   const [proximosContratos, setProximosContratos] = useState(0)
+  const [gestionesVencidas, setGestionesVencidas] = useState(0)
 
   useEffect(() => {
     const supabase = getSupabaseClient()
@@ -41,6 +43,10 @@ export function DashboardNav() {
       .eq('renovacion_verificada', false)
       .eq('estado', 'activo')
       .then(({ count }) => setProximosContratos(count ?? 0))
+    supabase.from('gestiones').select('id', { count: 'exact' })
+      .neq('estado', 'resuelto')
+      .lte('proximo_seguimiento', new Date().toISOString().split('T')[0])
+      .then(({ count }) => setGestionesVencidas(count ?? 0))
   }, [])
 
   async function handleLogout() {
@@ -66,8 +72,8 @@ export function DashboardNav() {
       <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5 overflow-y-auto">
         {navItems.map(({ href, label, icon: Icon, badge }) => {
           const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
-          const showBadge = (badge === 'contactos' && sinLeer > 0) || (badge === 'contratos' && proximosContratos > 0)
-          const badgeCount = badge === 'contactos' ? sinLeer : proximosContratos
+          const showBadge = (badge === 'contactos' && sinLeer > 0) || (badge === 'contratos' && proximosContratos > 0) || (badge === 'gestiones' && gestionesVencidas > 0)
+          const badgeCount = badge === 'contactos' ? sinLeer : badge === 'gestiones' ? gestionesVencidas : proximosContratos
           return (
             <Link
               key={href}
