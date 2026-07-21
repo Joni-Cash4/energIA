@@ -31,16 +31,20 @@ export const CARGOS_ENERGIA_2026: Record<Tarifa, Partial<Record<Periodo, number>
 }
 
 // ─── Peajes + cargos de POTENCIA (€/kW·año) — dividir /365 para €/kW·día ────
+// 2.0TD y 6.1TD: total combinado (peaje+cargo) sin desglosar, tomado de la tabla
+// BOE €/kW·día de Jonathan (confirmada 2026-07-21, ×365) — todo bajo PEAJES,
+// CARGOS a 0 hasta tener el reparto oficial exacto. 2.0TD solo factura potencia
+// en P1/P2 (P3 no aplica). 3.0TD sí tiene el reparto real (BOE-A-2025-26348).
 export const PEAJES_POTENCIA_2026: Record<Tarifa, Partial<Record<Periodo, number>>> = {
-  '2.0TD': { P1: 30.6726, P2: 1.9555, P3: 0.8911 },
+  '2.0TD': { P1: 27.7046, P2: 0.7253 },
   '3.0TD': { P1: 14.9351, P2: 7.8943, P3: 2.5030, P4: 1.9078, P5: 0.5353, P6: 0.5353 }, // BOE-A-2025-26348 (Resolución CNMC dic. 2025)
-  '6.1TD': { P1: 9.4313, P2: 4.8776, P3: 1.3978, P4: 0.8819, P5: 0.4759, P6: 0.4441 },
+  '6.1TD': { P1: 29.5953, P2: 15.5147, P3: 6.8018, P4: 5.3940, P5: 2.1250, P6: 1.0041 },
 }
 
 export const CARGOS_POTENCIA_2026: Record<Tarifa, Partial<Record<Periodo, number>>> = {
-  '2.0TD': { P1: 17.3228, P2: 1.1048, P3: 0.5034 },
+  '2.0TD': {},
   '3.0TD': { P1: 5.4418, P2: 2.7232, P3: 1.9785, P4: 1.9784, P5: 1.9784, P6: 0.9068 }, // cargos ajustados a Row1 exacto; P6 corregido
-  '6.1TD': { P1: 4.4626, P2: 2.1072, P3: 0.7155, P4: 0.4533, P5: 0.2431, P6: 0.1849 },
+  '6.1TD': {},
 }
 
 // ─── CAP — pagos por capacidad (€/kWh) — BOE 2026, fallback si ESIOS no disponible
