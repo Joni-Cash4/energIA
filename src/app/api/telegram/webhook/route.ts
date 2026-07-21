@@ -8,11 +8,11 @@ const EXTRACT_SYSTEM_PROMPT = `Eres un asistente que convierte transcripciones d
 
 type ClienteLite = { id: string; nombre: string; empresa: string | null; comercializadora: string | null }
 
-function buildExtractPrompt(transcripcion: string, clientes: ClienteLite[]): string {
+function buildExtractPrompt(contenido: string, clientes: ClienteLite[]): string {
   const listado = clientes.map(c => `${c.id} | ${c.nombre}${c.empresa ? ` (${c.empresa})` : ''}`).join('\n')
-  return `Transcripción de una nota de voz de Jonathan (asesor energético) tras colgar una llamada con un cliente:
+  return `Mensaje de Jonathan (asesor energético), por voz o texto, sobre una gestión a realizar con un cliente:
 """
-${transcripcion}
+${contenido}
 """
 
 Lista de clientes existentes (id | nombre (empresa)):
@@ -54,17 +54,28 @@ export async function POST(req: NextRequest) {
   }
 
   const fileId: string | undefined = message.voice?.file_id ?? message.audio?.file_id
-  if (!fileId) {
+  const textoRaw: string | undefined = typeof message.text === 'string' ? message.text.trim() : undefined
+  const esComando = textoRaw?.startsWith('/')
+
+  if (!fileId && (!textoRaw || esComando)) {
     return NextResponse.json({ ok: true })
   }
 
   try {
-    const { buffer, mimeType, filePath } = await downloadTelegramFile(fileId)
-    const transcripcion = await transcribeAudio(buffer, mimeType, filePath)
+    let contenido: string
+    let origen: 'audio' | 'texto'
 
-    if (!transcripcion) {
-      await sendTelegramMessage(chatId, '⚠️ No he podido transcribir el audio (vacío o ininteligible).')
-      return NextResponse.json({ ok: true })
+    if (fileId) {
+      const { buffer, mimeType, filePath } = await downloadTelegramFile(fileId)
+      contenido = await transcribeAudio(buffer, mimeType, filePath)
+      origen = 'audio'
+      if (!contenido) {
+        await sendTelegramMessage(chatId, '⚠️ No he podido transcribir el audio (vacío o ininteligible).')
+        return NextResponse.json({ ok: true })
+      }
+    } else {
+      contenido = textoRaw!
+      origen = 'texto'
     }
 
     const supabase = createClient(
@@ -83,7 +94,7 @@ export async function POST(req: NextRequest) {
       model: 'claude-sonnet-4-6',
       max_tokens: 512,
       system: EXTRACT_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildExtractPrompt(transcripcion, (clientes ?? []) as ClienteLite[]) }],
+      messages: [{ role: 'user', content: buildExtractPrompt(contenido, (clientes ?? []) as ClienteLite[]) }],
     })
     const raw = (extractMessage.content[0] as { type: string; text: string }).text.trim()
     const json = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
@@ -100,18 +111,18 @@ export async function POST(req: NextRequest) {
       titular: clienteMatch ? null : (parsed.titular_sugerido || null),
       compania: parsed.compania || clienteMatch?.comercializadora || 'Por confirmar',
       tipo: 'solicitamos' as const,
-      asunto: parsed.asunto || transcripcion.slice(0, 200),
-      via: 'telefono' as const,
+      asunto: parsed.asunto || contenido.slice(0, 200),
+      via: origen === 'audio' ? ('telefono' as const) : ('otro' as const),
       proximo_seguimiento: parsed.proximo_seguimiento || null,
       estado: 'pendiente' as const,
-      origen: 'audio' as const,
-      transcripcion,
+      origen,
+      transcripcion: contenido,
       revisar_cliente: revisarCliente,
     }
 
     const { data: gestion, error } = await supabase.from('gestiones').insert(payload).select('id').single()
     if (error || !gestion) {
-      console.error('Error insertando gestión desde audio', error)
+      console.error('Error insertando gestión desde Telegram', error)
       await sendTelegramMessage(chatId, `⚠️ Error al guardar la gestión: ${error?.message ?? 'sin dato'}`)
       return NextResponse.json({ ok: true })
     }
@@ -119,7 +130,9 @@ export async function POST(req: NextRequest) {
     await supabase.from('gestion_eventos').insert({
       gestion_id: gestion.id,
       user_id: process.env.JONATHAN_USER_ID!,
-      nota: '[Sistema] Gestión creada desde nota de voz de Telegram',
+      nota: origen === 'audio'
+        ? '[Sistema] Gestión creada desde nota de voz de Telegram'
+        : '[Sistema] Gestión creada desde mensaje de texto de Telegram',
     })
 
     const nombreTxt = clienteMatch ? clienteMatch.nombre : `${parsed.titular_sugerido || 'sin identificar'} ⚠️ revisar cliente`
@@ -127,9 +140,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true })
   } catch (err) {
-    console.error('Error procesando audio de Telegram', err)
+    console.error('Error procesando mensaje de Telegram', err)
     const detail = err instanceof Error ? err.message : String(err)
-    await sendTelegramMessage(chatId, `⚠️ Error procesando el audio: ${detail}`)
+    await sendTelegramMessage(chatId, `⚠️ Error procesando el mensaje: ${detail}`)
     return NextResponse.json({ ok: true })
   }
 }

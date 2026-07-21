@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, CheckCircle2, Loader2, X, Save, ClipboardList, Send, History, Mic, AlertTriangle } from 'lucide-react'
+import { Plus, CheckCircle2, Loader2, X, Save, ClipboardList, Send, History, Mic, MessageSquare, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -302,6 +302,7 @@ export default function GestionesPage() {
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           {g.origen === 'audio' && <Mic className="w-3.5 h-3.5 text-[#6B7280] shrink-0" />}
+                          {g.origen === 'texto' && <MessageSquare className="w-3.5 h-3.5 text-[#6B7280] shrink-0" />}
                           {g.cliente_id ? (
                             <Link href={`/dashboard/clientes/${g.cliente_id}`} onClick={e => e.stopPropagation()}
                               className="text-white font-medium hover:text-[#00E676] transition-colors">
@@ -383,7 +384,9 @@ export default function GestionesPage() {
                 {editing?.transcripcion && (
                   <div className="bg-[#0F0F0F] border border-[#2A2A2A] rounded-lg p-3">
                     <p className="text-[#6B7280] text-[11px] uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                      <Mic className="w-3 h-3" />Transcripción del audio
+                      {editing.origen === 'texto'
+                        ? <><MessageSquare className="w-3 h-3" />Mensaje de texto recibido</>
+                        : <><Mic className="w-3 h-3" />Transcripción del audio</>}
                     </p>
                     <p className="text-[#D1D5DB] text-xs whitespace-pre-wrap">{editing.transcripcion}</p>
                   </div>

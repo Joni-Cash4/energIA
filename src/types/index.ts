@@ -324,7 +324,7 @@ export interface Accion {
 export type GestionTipoVal   = 'solicitamos' | 'nos_solicitan'
 export type GestionEstadoVal = 'pendiente' | 'en_curso' | 'resuelto'
 export type GestionViaVal    = 'email' | 'telefono' | 'portal' | 'carta' | 'otro'
-export type GestionOrigenVal = 'manual' | 'audio'
+export type GestionOrigenVal = 'manual' | 'audio' | 'texto'
 
 export interface Gestion {
   id: string
