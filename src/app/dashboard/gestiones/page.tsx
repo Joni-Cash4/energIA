@@ -1,14 +1,16 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, CheckCircle2, Loader2, X, Save, ClipboardList, Send, History, Mic, MessageSquare, AlertTriangle } from 'lucide-react'
+import { Plus, CheckCircle2, Loader2, X, Save, ClipboardList, Send, History, Mic, MessageSquare, AlertTriangle, ChevronsUpDown, Check } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { getSupabaseClient } from '@/lib/supabase'
-import { formatDate } from '@/lib/utils'
+import { formatDate, cn } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
 import type { Gestion, GestionEvento, Cliente, GestionTipoVal, GestionEstadoVal, GestionViaVal } from '@/types'
 
@@ -55,6 +57,7 @@ export default function GestionesPage() {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [editing, setEditing] = useState<Gestion | null>(null)
+  const [clienteOpen, setClienteOpen] = useState(false)
   const [form, setForm] = useState({ ...EMPTY })
   const [saving, setSaving] = useState(false)
   // Historial de la gestión en edición
@@ -394,19 +397,44 @@ export default function GestionesPage() {
 
                 <div>
                   <label className="block text-xs text-[#9CA3AF] mb-1.5">Cliente</label>
-                  <Select value={form.cliente_id || undefined} onValueChange={v => {
-                    const cl = clientes.find(c => c.id === v)
-                    setForm(p => ({ ...p, cliente_id: v, cups: p.cups || cl?.cups || '' }))
-                  }}>
-                    <SelectTrigger><SelectValue placeholder="Seleccionar cliente..." /></SelectTrigger>
-                    <SelectContent>
-                      {clientes.map(c => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.nombre}{c.empresa ? ` — ${c.empresa}` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={clienteOpen} onOpenChange={setClienteOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" aria-expanded={clienteOpen}
+                        className="h-9 w-full justify-between text-sm font-normal bg-transparent border-[#2A2A2A] hover:bg-[#1F1F1F] text-left">
+                        <span className="truncate">
+                          {form.cliente_id
+                            ? (() => {
+                                const cl = clientes.find(c => c.id === form.cliente_id)
+                                return cl ? `${cl.nombre}${cl.empresa ? ` — ${cl.empresa}` : ''}` : 'Seleccionar cliente...'
+                              })()
+                            : 'Seleccionar cliente...'}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="p-0">
+                      <Command>
+                        <CommandInput placeholder="Buscar cliente..." />
+                        <CommandList>
+                          <CommandEmpty>No se encontró ningún cliente.</CommandEmpty>
+                          <CommandGroup>
+                            {clientes.map(c => {
+                              const label = `${c.nombre}${c.empresa ? ` — ${c.empresa}` : ''}`
+                              return (
+                                <CommandItem key={c.id} value={label} onSelect={() => {
+                                  setForm(p => ({ ...p, cliente_id: c.id, cups: p.cups || c.cups || '' }))
+                                  setClienteOpen(false)
+                                }}>
+                                  <Check className={cn('mr-2 h-4 w-4', form.cliente_id === c.id ? 'opacity-100' : 'opacity-0')} />
+                                  {label}
+                                </CommandItem>
+                              )
+                            })}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
                 {!form.cliente_id && (
