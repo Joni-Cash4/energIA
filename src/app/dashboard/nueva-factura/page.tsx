@@ -433,6 +433,7 @@ export default function NuevaFacturaPage() {
   const [clienteOpen, setClienteOpen] = useState(false)
   const [facturaSaved, setFacturaSaved] = useState(false)
   const [clienteAutoDetectado, setClienteAutoDetectado] = useState(false)
+  const [attachmentsSaved, setAttachmentsSaved] = useState(false)
 
   useEffect(() => {
     getSupabaseClient().from('clientes').select('id,nombre,empresa,cups').order('nombre')
@@ -576,18 +577,64 @@ export default function NuevaFacturaPage() {
       a.download = `EnergIA_${data.cups || 'informe'}.pdf`
       a.click()
       URL.revokeObjectURL(url)
-      // Auto-guardar factura si hay cliente vinculado
-      if (selectedClienteId && !facturaSaved) {
-        const err = await saveFactura(selectedClienteId, feeEnergia, data)
-        if (err) console.error('[saveFactura]', err)
-        toast({
-          title: err ? 'PDF descargado (error al guardar factura)' : 'PDF descargado y factura guardada',
-          description: err?.message,
-          variant: err ? 'destructive' : undefined,
-        })
-      } else {
+
+      if (!selectedClienteId) {
         toast({ title: 'PDF descargado correctamente' })
+        setSavingPdf(false)
+        return
       }
+
+      // Cliente vinculado: guardar la factura (datos) + dejar los PDFs archivados
+      // en su ficha — factura original en "Facturas del contrato", comparativa
+      // generada en "Ofertas y capturas guardadas".
+      const avisos: string[] = []
+
+      if (!facturaSaved) {
+        const err = await saveFactura(selectedClienteId, feeEnergia, data)
+        if (err) { console.error('[saveFactura]', err); avisos.push(`factura: ${err.message}`) }
+      }
+
+      if (!attachmentsSaved) {
+        try {
+          const comparativaFile = new File([blob], `Comparativa_${data.cups || 'cliente'}.pdf`, { type: 'application/pdf' })
+          const formComp = new FormData()
+          formComp.append('file', comparativaFile)
+          formComp.append('clienteId', selectedClienteId)
+          formComp.append('nombre', `Comparativa ${data.fecha_fin ?? ''}`.trim())
+          const resComp = await fetch('/api/cliente-adjuntos/upload', { method: 'POST', body: formComp })
+          if (!resComp.ok) {
+            const j = await resComp.json().catch(() => ({}))
+            avisos.push(`comparativa: ${j.error ?? resComp.statusText}`)
+          }
+        } catch (e) {
+          avisos.push(`comparativa: ${String(e)}`)
+        }
+
+        // Factura original solo si es un unico PDF (el endpoint no admite
+        // imagenes ni varios archivos sueltos).
+        if (pendingFiles.length === 1 && pendingFiles[0].type === 'application/pdf') {
+          try {
+            const formFactura = new FormData()
+            formFactura.append('pdf', pendingFiles[0])
+            formFactura.append('clienteId', selectedClienteId)
+            const resFactura = await fetch('/api/facturas-contrato/upload', { method: 'POST', body: formFactura })
+            if (!resFactura.ok) {
+              const j = await resFactura.json().catch(() => ({}))
+              avisos.push(`factura original: ${j.error ?? resFactura.statusText}`)
+            }
+          } catch (e) {
+            avisos.push(`factura original: ${String(e)}`)
+          }
+        }
+
+        setAttachmentsSaved(true)
+      }
+
+      toast({
+        title: avisos.length ? 'PDF descargado (algo no se guardo en el cliente)' : 'PDF descargado y guardado en el cliente',
+        description: avisos.length ? avisos.join(' · ') : undefined,
+        variant: avisos.length ? 'destructive' : undefined,
+      })
     } catch (e) {
       console.error(e)
       toast({ title: 'Error al generar PDF', variant: 'destructive' })
@@ -1066,14 +1113,14 @@ export default function NuevaFacturaPage() {
                         <CommandList>
                           <CommandEmpty>No se encontró ningún cliente.</CommandEmpty>
                           <CommandGroup>
-                            <CommandItem value="none" onSelect={() => { setSelectedClienteId(''); setFacturaSaved(false); setClienteAutoDetectado(false); setClienteOpen(false) }}>
+                            <CommandItem value="none" onSelect={() => { setSelectedClienteId(''); setFacturaSaved(false); setClienteAutoDetectado(false); setAttachmentsSaved(false); setClienteOpen(false) }}>
                               <Check className={cn('mr-2 h-4 w-4', !selectedClienteId ? 'opacity-100' : 'opacity-0')} />
                               Sin vincular
                             </CommandItem>
                             {clientes.map(c => {
                               const label = `${c.nombre}${c.empresa ? ` — ${c.empresa}` : ''}`
                               return (
-                                <CommandItem key={c.id} value={label} onSelect={() => { setSelectedClienteId(c.id); setFacturaSaved(false); setClienteAutoDetectado(false); setClienteOpen(false) }}>
+                                <CommandItem key={c.id} value={label} onSelect={() => { setSelectedClienteId(c.id); setFacturaSaved(false); setClienteAutoDetectado(false); setAttachmentsSaved(false); setClienteOpen(false) }}>
                                   <Check className={cn('mr-2 h-4 w-4', selectedClienteId === c.id ? 'opacity-100' : 'opacity-0')} />
                                   {label}
                                 </CommandItem>
@@ -1090,6 +1137,9 @@ export default function NuevaFacturaPage() {
                 )}
                 {facturaSaved && (
                   <span className="text-xs text-[#00E676] font-medium">✓ Factura guardada</span>
+                )}
+                {attachmentsSaved && (
+                  <span className="text-xs text-[#00E676] font-medium">✓ PDFs archivados en el cliente</span>
                 )}
               </div>
               <div className="flex flex-wrap gap-3">
