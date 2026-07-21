@@ -428,22 +428,51 @@ export default function NuevaFacturaPage() {
   const [savingPdf, setSavingPdf]       = useState(false)
   const [savingCliente, setSavingCliente] = useState(false)
   const [error, setError]               = useState<string | null>(null)
-  const [clientes, setClientes]         = useState<Pick<Cliente, 'id' | 'nombre' | 'empresa'>[]>([])
+  const [clientes, setClientes]         = useState<Pick<Cliente, 'id' | 'nombre' | 'empresa' | 'cups'>[]>([])
   const [selectedClienteId, setSelectedClienteId] = useState<string>('')
   const [clienteOpen, setClienteOpen] = useState(false)
   const [facturaSaved, setFacturaSaved] = useState(false)
+  const [clienteAutoDetectado, setClienteAutoDetectado] = useState(false)
 
   useEffect(() => {
-    getSupabaseClient().from('clientes').select('id,nombre,empresa').order('nombre')
+    getSupabaseClient().from('clientes').select('id,nombre,empresa,cups').order('nombre')
       .then(({ data: cl }) => setClientes(cl ?? []))
   }, [])
+
+  // Auto-detectar cliente por CUPS: primero contra clientes.cups (suministro
+  // principal), y si no hay match, contra el historico de facturas.cups —
+  // asi un cliente con varios suministros (ej. un local con varios CUPS)
+  // se detecta aunque el CUPS de esta factura no sea el que tiene guardado
+  // en su ficha, siempre que ya le hayamos guardado antes una factura con ese CUPS.
+  useEffect(() => {
+    const cups = data?.cups
+    if (!cups || selectedClienteId) return
+    const supabase = getSupabaseClient()
+    const porCliente = clientes.find((c) => c.cups && c.cups === cups)
+    if (porCliente) {
+      setSelectedClienteId(porCliente.id)
+      setClienteAutoDetectado(true)
+      return
+    }
+    supabase.from('facturas').select('cliente_id').eq('cups', cups)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+      .then(({ data: f }) => {
+        if (f?.cliente_id) {
+          setSelectedClienteId(f.cliente_id)
+          setClienteAutoDetectado(true)
+        }
+      })
+  }, [data?.cups, clientes, selectedClienteId])
 
   const saveFactura = useCallback(async (clienteId: string, fee: number, analysis: InvoiceAnalysis) => {
     const precioMedio = analysis.kwh_total > 0
       ? analysis.total_factura / analysis.kwh_total
       : null
-    const { error: err } = await getSupabaseClient().from('facturas').insert({
+    const supabase = getSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const { error: err } = await supabase.from('facturas').insert({
       cliente_id:                clienteId,
+      user_id:                   user?.id,
       fecha_inicio:              analysis.fecha_inicio || null,
       fecha_fin:                 analysis.fecha_fin    || null,
       fecha_factura:             analysis.fecha_fin    || null,
@@ -550,7 +579,12 @@ export default function NuevaFacturaPage() {
       // Auto-guardar factura si hay cliente vinculado
       if (selectedClienteId && !facturaSaved) {
         const err = await saveFactura(selectedClienteId, feeEnergia, data)
-        toast({ title: err ? 'PDF descargado (error al guardar factura)' : 'PDF descargado y factura guardada' })
+        if (err) console.error('[saveFactura]', err)
+        toast({
+          title: err ? 'PDF descargado (error al guardar factura)' : 'PDF descargado y factura guardada',
+          description: err?.message,
+          variant: err ? 'destructive' : undefined,
+        })
       } else {
         toast({ title: 'PDF descargado correctamente' })
       }
@@ -1032,14 +1066,14 @@ export default function NuevaFacturaPage() {
                         <CommandList>
                           <CommandEmpty>No se encontró ningún cliente.</CommandEmpty>
                           <CommandGroup>
-                            <CommandItem value="none" onSelect={() => { setSelectedClienteId(''); setFacturaSaved(false); setClienteOpen(false) }}>
+                            <CommandItem value="none" onSelect={() => { setSelectedClienteId(''); setFacturaSaved(false); setClienteAutoDetectado(false); setClienteOpen(false) }}>
                               <Check className={cn('mr-2 h-4 w-4', !selectedClienteId ? 'opacity-100' : 'opacity-0')} />
                               Sin vincular
                             </CommandItem>
                             {clientes.map(c => {
                               const label = `${c.nombre}${c.empresa ? ` — ${c.empresa}` : ''}`
                               return (
-                                <CommandItem key={c.id} value={label} onSelect={() => { setSelectedClienteId(c.id); setFacturaSaved(false); setClienteOpen(false) }}>
+                                <CommandItem key={c.id} value={label} onSelect={() => { setSelectedClienteId(c.id); setFacturaSaved(false); setClienteAutoDetectado(false); setClienteOpen(false) }}>
                                   <Check className={cn('mr-2 h-4 w-4', selectedClienteId === c.id ? 'opacity-100' : 'opacity-0')} />
                                   {label}
                                 </CommandItem>
@@ -1051,6 +1085,9 @@ export default function NuevaFacturaPage() {
                     </PopoverContent>
                   </Popover>
                 </div>
+                {clienteAutoDetectado && (
+                  <span className="text-xs text-[#00E676] font-medium">✓ Cliente detectado por CUPS</span>
+                )}
                 {facturaSaved && (
                   <span className="text-xs text-[#00E676] font-medium">✓ Factura guardada</span>
                 )}
