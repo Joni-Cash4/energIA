@@ -359,6 +359,21 @@ export interface GestionEvento {
   created_at: string
 }
 
+export type ClienteAdjuntoTipo = 'imagen' | 'pdf' | 'otro'
+
+export interface ClienteAdjunto {
+  id: string
+  user_id: string
+  cliente_id: string
+  contrato_id?: string
+  nombre?: string
+  tipo: ClienteAdjuntoTipo
+  url: string
+  storage_path: string
+  notas?: string
+  created_at: string
+}
+
 export interface FacturaContrato {
   id: string
   cliente_id: string

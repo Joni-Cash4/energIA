@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck, Clock, CheckCircle2, Phone, Mail, Users, MapPin, MessageSquare, Send, RefreshCw, Zap, Upload, FileText, ClipboardList } from 'lucide-react'
+import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck, Clock, CheckCircle2, Phone, Mail, Users, MapPin, MessageSquare, Send, RefreshCw, Zap, Upload, FileText, ClipboardList, Paperclip, Image as ImageIcon, Trash2 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import type { Cliente, Factura, Contrato, ClienteEstado, Accion, AccionTipoVal, AccionResultadoVal, ConsumoDatadis, PotenciaDatadis, FacturaContrato, Gestion } from '@/types'
+import type { Cliente, Factura, Contrato, ClienteEstado, Accion, AccionTipoVal, AccionResultadoVal, ConsumoDatadis, PotenciaDatadis, FacturaContrato, Gestion, ClienteAdjunto } from '@/types'
 
 const TIPO_ICONS: Record<AccionTipoVal, typeof Phone> = {
   llamada: Phone, email: Mail, reunion: Users, visita: MapPin, otro: MessageSquare,
@@ -73,6 +73,10 @@ export default function ClienteDetailPage() {
   const [facturasContrato, setFacturasContrato] = useState<FacturaContrato[]>([])
   const [uploadingFactura, setUploadingFactura] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [adjuntos, setAdjuntos] = useState<ClienteAdjunto[]>([])
+  const [uploadingAdjunto, setUploadingAdjunto] = useState(false)
+  const adjuntoInputRef = useRef<HTMLInputElement>(null)
+  const [deletingAdjuntoId, setDeletingAdjuntoId] = useState<string | null>(null)
 
   // Contact fields
   const [nombre,    setNombre]    = useState('')
@@ -109,7 +113,8 @@ export default function ClienteDetailPage() {
       supabase.from('facturas_contrato').select('*').eq('cliente_id', id).order('periodo_fin', { ascending: false }),
       supabase.from('potencia_datadis').select('*').eq('cliente_id', id).order('year_month', { ascending: false }),
       supabase.from('gestiones').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
-    ]).then(([{ data: c }, { data: f }, { data: ct }, { data: ac }, { data: cd }, { data: fc }, { data: pd }, { data: ge }]) => {
+      supabase.from('cliente_adjuntos').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
+    ]).then(([{ data: c }, { data: f }, { data: ct }, { data: ac }, { data: cd }, { data: fc }, { data: pd }, { data: ge }, { data: adj }]) => {
       if (!c) { router.replace('/dashboard/clientes'); return }
       setCliente(c)
       setNombre(c.nombre ?? '')
@@ -141,6 +146,7 @@ export default function ClienteDetailPage() {
       setFacturasContrato((fc ?? []) as FacturaContrato[])
       setPotenciaDatadis((pd ?? []) as PotenciaDatadis[])
       setGestiones((ge ?? []) as Gestion[])
+      setAdjuntos((adj ?? []) as ClienteAdjunto[])
       setLoading(false)
     })
   }, [id, router])
@@ -226,6 +232,38 @@ export default function ClienteDetailPage() {
       toast({ title: 'Error al subir factura', description: String(err), variant: 'destructive' })
     }
     setUploadingFactura(false)
+  }
+
+  const handleUploadAdjunto = async (file: File) => {
+    setUploadingAdjunto(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('clienteId', id)
+      const res = await fetch('/api/cliente-adjuntos/upload', { method: 'POST', body: form })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error desconocido')
+      setAdjuntos(prev => [data.adjunto as ClienteAdjunto, ...prev])
+      toast({ title: 'Adjunto guardado' })
+    } catch (err) {
+      toast({ title: 'Error al subir adjunto', description: String(err), variant: 'destructive' })
+    }
+    setUploadingAdjunto(false)
+  }
+
+  const handleDeleteAdjunto = async (adjuntoId: string) => {
+    if (!window.confirm('¿Eliminar este adjunto? No se puede deshacer.')) return
+    setDeletingAdjuntoId(adjuntoId)
+    try {
+      const res = await fetch(`/api/cliente-adjuntos/${adjuntoId}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error desconocido')
+      setAdjuntos(prev => prev.filter(a => a.id !== adjuntoId))
+      toast({ title: 'Adjunto eliminado' })
+    } catch (err) {
+      toast({ title: 'Error al eliminar adjunto', description: String(err), variant: 'destructive' })
+    }
+    setDeletingAdjuntoId(null)
   }
 
   const handleSyncDatadis = async () => {
@@ -554,6 +592,85 @@ export default function ClienteDetailPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+
+          {/* Ofertas / capturas guardadas */}
+          <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#1F1F1F] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Paperclip className="w-4 h-4 text-[#00E676]" />
+                <h2 className="text-white font-semibold">Ofertas y capturas guardadas</h2>
+              </div>
+              <div>
+                <input
+                  ref={adjuntoInputRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0]
+                    if (file) handleUploadAdjunto(file)
+                    e.target.value = ''
+                  }}
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => adjuntoInputRef.current?.click()}
+                  disabled={uploadingAdjunto}
+                >
+                  {uploadingAdjunto
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Upload className="w-3.5 h-3.5" />}
+                  {uploadingAdjunto ? 'Subiendo…' : 'Adjuntar'}
+                </Button>
+              </div>
+            </div>
+
+            {adjuntos.length === 0 ? (
+              <div className="py-10 text-center text-[#6B7280] text-sm">
+                Guarda aquí capturas de ofertas o comparativas (ej. la calculadora de comisiones antes de renovar) para poder revisarlas más tarde.
+              </div>
+            ) : (
+              <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {adjuntos.map(a => (
+                  <div
+                    key={a.id}
+                    className="group relative rounded-xl border border-[#1F1F1F] overflow-hidden hover:border-[#00E676]/40 transition-colors"
+                  >
+                    <a href={a.url} target="_blank" rel="noopener noreferrer" className="block">
+                      {a.tipo === 'imagen' ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={a.url} alt={a.nombre ?? 'adjunto'} className="w-full h-28 object-cover bg-[#0F0F0F]" />
+                      ) : (
+                        <div className="w-full h-28 flex items-center justify-center bg-[#0F0F0F]">
+                          <FileText className="w-8 h-8 text-[#4B5563]" />
+                        </div>
+                      )}
+                      <div className="px-2.5 py-2 bg-[#0F0F0F]">
+                        <p className="text-white text-xs truncate">{a.nombre ?? 'Adjunto'}</p>
+                        <p className="text-[#6B7280] text-[10px] mt-0.5">{formatDate(a.created_at)}</p>
+                      </div>
+                      <div className="absolute top-2 right-9 w-6 h-6 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        {a.tipo === 'imagen' ? <ImageIcon className="w-3.5 h-3.5 text-white" /> : <Download className="w-3.5 h-3.5 text-white" />}
+                      </div>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteAdjunto(a.id)}
+                      disabled={deletingAdjuntoId === a.id}
+                      className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/70"
+                      aria-label="Eliminar adjunto"
+                    >
+                      {deletingAdjuntoId === a.id
+                        ? <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                        : <Trash2 className="w-3.5 h-3.5 text-white" />}
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </div>
