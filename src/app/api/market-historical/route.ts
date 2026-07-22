@@ -1,16 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { normalizaTarifa, type Periodo } from '@/lib/market-rates'
 import { getPeriodo, type Zona } from '@/lib/periodos'
+import { getSupabaseServerClient } from '@/lib/supabase-server'
 
 // Devuelve el PMD (precio marginal diario OMIE) promedio por periodo tarifario
 // para el RANGO EXACTO de fechas de una factura.
 //
-// Fuente: OMIE MARGINALPDBC (público, sin token) — mismo método que el sistema Python.
-// Fichero por día: https://www.omie.es/es/file-download?parents=marginalpdbc&filename=marginalpdbc_YYYYMMDD.1
+// Fuente principal: tabla Supabase mercado_pmd_diario, sincronizada a diario desde
+// el sistema Python local de Jonathan (ver sync_pmd_diario.py en
+// C:\MonitorizacionEnergetica\sistema\) — Vercel llamando a OMIE en directo fallaba
+// a veces porque OMIE bloquea/rate-limita IPs de datacenter, lo que disparaba el
+// aviso de "estimación". Solo se llama a OMIE en directo (fetchOmieDia) como red de
+// seguridad para días que aún no estén en Supabase (ej. factura de ayer mismo, antes
+// de que corra la sincronización diaria).
+//
+// Fichero OMIE por día: https://www.omie.es/es/file-download?parents=marginalpdbc&filename=marginalpdbc_YYYYMMDD.1
 // CSV formato: Año;Mes;Dia;Hora(1-24);Precio(€/MWh);PrecioUnidad
 //
 // GET /api/market-historical?start=2026-03-01&end=2026-03-31&tarifa=3.0TD[&zona=CANARIAS]
 
+
+function fechaKey(fecha: Date): string {
+  const y = fecha.getFullYear()
+  const m = String(fecha.getMonth() + 1).padStart(2, '0')
+  const d = String(fecha.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
 
 async function fetchOmieDia(fecha: Date): Promise<{ hora: number; precio: number }[]> {
   const y = fecha.getFullYear()
@@ -74,7 +89,6 @@ export async function GET(req: NextRequest) {
   const fechaFin    = new Date(end   + 'T23:59:59')
   let diasOk = 0
 
-  // Descargar OMIE día a día en paralelo (máx. 31 peticiones)
   const fechas: Date[] = []
   const cur = new Date(fechaInicio)
   while (cur <= fechaFin) {
@@ -82,13 +96,34 @@ export async function GET(req: NextRequest) {
     cur.setDate(cur.getDate() + 1)
   }
 
-  const resultados = await Promise.all(fechas.map(f => fetchOmieDia(f)))
+  // Fuente principal: Supabase (sincronizado a diario desde OMIE por el sistema
+  // Python local — ver comentario arriba). Agrupamos por fecha para saber qué
+  // días faltan y solo pedir esos a OMIE en directo.
+  const porFecha = new Map<string, { hora: number; precio: number }[]>()
+  const supabase = getSupabaseServerClient()
+  if (supabase) {
+    const { data } = await supabase
+      .from('mercado_pmd_diario')
+      .select('fecha, hora, precio_mwh')
+      .gte('fecha', start)
+      .lte('fecha', end)
+    for (const row of data ?? []) {
+      const lista = porFecha.get(row.fecha) ?? []
+      lista.push({ hora: row.hora, precio: row.precio_mwh })
+      porFecha.set(row.fecha, lista)
+    }
+  }
 
-  for (let i = 0; i < fechas.length; i++) {
-    const datos = resultados[i]
-    if (datos.length === 0) continue
+  const fechasFaltantes = fechas.filter(f => !porFecha.has(fechaKey(f)))
+  const resultadosOmie = await Promise.all(fechasFaltantes.map(f => fetchOmieDia(f)))
+  fechasFaltantes.forEach((f, i) => {
+    if (resultadosOmie[i].length > 0) porFecha.set(fechaKey(f), resultadosOmie[i])
+  })
+
+  for (const fecha of fechas) {
+    const datos = porFecha.get(fechaKey(fecha))
+    if (!datos || datos.length === 0) continue
     diasOk++
-    const fecha = fechas[i]
     for (const { hora, precio } of datos) {
       const p = getPeriodo(fecha, hora, tarifa, zona)
       if (!porPeriodo[p]) porPeriodo[p] = []
