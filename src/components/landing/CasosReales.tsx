@@ -13,6 +13,7 @@ interface Testimonio {
   ahorroPct?: number
   ahorroTxt?: string
   foto?: string
+  fotoNegocio?: string
 }
 
 interface CasoDestacado {
@@ -46,6 +47,14 @@ const testimonios: Testimonio[] = [
     negocio: 'Gerente · Makailo Etxarri',
     ahorroTxt: '80-90 € de ahorro al mes',
     foto: '/casos/makailo-etxarri.jpg',
+  },
+  // CASO REAL — Masus, gerenta de Zuberoa Janaridenda SL (supermercado)
+  {
+    cita: 'Tengo un supermercado y pagaba 3.000 € de luz. Jonathan me revisó la factura y empecé a pagar 1.700 €. Y el servicio es inmejorable, porque si hay alguna mejora en el precio, se preocupa él de cambiártelo.',
+    nombre: 'Masus',
+    negocio: 'Gerenta · Zuberoa Janaridenda',
+    ahorroTxt: 'De 3.000 € a 1.700 € al mes',
+    fotoNegocio: '/casos/zuberoa-janaridenda.webp',
   },
 ]
 
@@ -153,24 +162,33 @@ export function CasosReales() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.1 }}
-              className="card p-6 flex flex-col"
+              className="card overflow-hidden flex flex-col"
             >
-              <blockquote className="text-[#D1D5DB] leading-relaxed mb-6 flex-1">
-                &ldquo;{t.cita}&rdquo;
-              </blockquote>
-              <div className="flex items-center gap-3 mb-4">
-                <Avatar nombre={t.nombre} foto={t.foto} />
-                <div>
-                  <p className="text-white text-sm font-medium">{t.nombre}</p>
-                  <p className="text-[#6B7280] text-xs">{t.negocio}</p>
-                </div>
-              </div>
-              {(t.ahorroPct || t.ahorroTxt) && (
-                <div className="inline-flex items-center gap-1.5 self-start bg-[#00E676]/10 text-[#00E676] text-xs font-semibold px-3 py-1.5 rounded-full">
-                  <TrendingDown className="w-3.5 h-3.5" />
-                  {t.ahorroTxt ?? `−${t.ahorroPct}% en su factura`}
-                </div>
+              {t.fotoNegocio && (
+                <img
+                  src={t.fotoNegocio}
+                  alt={t.negocio}
+                  className="w-full h-36 object-cover"
+                />
               )}
+              <div className="p-6 flex flex-col flex-1">
+                <blockquote className="text-[#D1D5DB] leading-relaxed mb-6 flex-1">
+                  &ldquo;{t.cita}&rdquo;
+                </blockquote>
+                <div className="flex items-center gap-3 mb-4">
+                  <Avatar nombre={t.nombre} foto={t.foto} />
+                  <div>
+                    <p className="text-white text-sm font-medium">{t.nombre}</p>
+                    <p className="text-[#6B7280] text-xs">{t.negocio}</p>
+                  </div>
+                </div>
+                {(t.ahorroPct || t.ahorroTxt) && (
+                  <div className="inline-flex items-center gap-1.5 self-start bg-[#00E676]/10 text-[#00E676] text-xs font-semibold px-3 py-1.5 rounded-full">
+                    <TrendingDown className="w-3.5 h-3.5" />
+                    {t.ahorroTxt ?? `−${t.ahorroPct}% en su factura`}
+                  </div>
+                )}
+              </div>
             </motion.div>
           ))}
         </div>
