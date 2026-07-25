@@ -265,6 +265,9 @@ export interface Contrato {
   ref_comercializadora?: string
   renovacion_verificada: boolean
   a_cobrar?: number
+  // CO / margen del agente pactado en ESTE contrato (€/MWh sobre la energía).
+  // Si está a null se usa el valor por defecto del producto en formulas_indexadas.
+  co_energia_mwh?: number
   notas?: string
   created_at: string
   updated_at: string
@@ -391,6 +394,10 @@ export interface FormulaIndexada {
   firma_hasta: string
   di: Partial<Record<string, number>>
   cmfi: Partial<Record<string, number>>   // €/kWh
+  // CO / margen del agente que la comercializadora suma al precio de energía.
+  // Va aparte de Di y CMFi porque se negocia por contrato: este es el valor por
+  // defecto del producto, y contratos.co_energia_mwh lo pisa si está relleno.
+  co_eur_mwh: number
   activo: boolean
   notas?: string
 }

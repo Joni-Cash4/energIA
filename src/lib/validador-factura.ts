@@ -40,7 +40,7 @@ export function validarFactura(
   data: InvoiceAnalysis,
   simIdx: SimTarifa,
   simsFijas: SimTarifa[],
-  contrato: Pick<Contrato, 'comercializadora' | 'producto'> | null,
+  contrato: Pick<Contrato, 'comercializadora' | 'producto' | 'co_energia_mwh'> | null,
   formula: FormulaIndexada | null = null,
 ): ValidacionFactura {
   const tarifa = normalizaTarifa(data.tarifa)
@@ -146,7 +146,10 @@ export function validarFactura(
       detalle: `${formula.etiqueta}: no hay precio OMIE del periodo facturado para aplicar la fórmula.`,
     })
   } else if (formula) {
-    // precio_kWh = OMIE_periodo × Di + CMFi + ATRe  (ATRe = peajes + cargos BOE)
+    // precio_kWh = OMIE_periodo × Di + CMFi + ATRe + CO
+    // (ATRe = peajes + cargos BOE; CO = margen del agente, del contrato si está
+    // pactado ahí y si no el valor por defecto del producto)
+    const coKwh = (contrato?.co_energia_mwh ?? formula.co_eur_mwh ?? 0) / 1000
     let esperado = 0
     const sinCoef: string[] = []
     for (const p of periodosConKwh) {
@@ -157,7 +160,7 @@ export function validarFactura(
       if (di == null || cmfi == null) { sinCoef.push(periodo); continue }
       const omie = (pmdPeriodos[periodo] ?? 0) / 1000 // €/MWh → €/kWh
       const atre = (PEAJES_ENERGIA_2026[tarifa][periodo] ?? 0) + (CARGOS_ENERGIA_2026[tarifa][periodo] ?? 0)
-      esperado += kwh * (omie * di + cmfi + atre)
+      esperado += kwh * (omie * di + cmfi + atre + coKwh)
     }
     esperado = r2(esperado)
     const diff = r2(realEnergiaTotal - esperado)
@@ -169,6 +172,9 @@ export function validarFactura(
     const estado: ConceptoValidacion['estado'] = anomala ? 'revisar' : estadoPorDiferencia(diff, esperado)
     const notas = [
       formula.etiqueta,
+      coKwh > 0
+        ? `CO aplicado: ${(coKwh * 1000).toFixed(2)} €/MWh${contrato?.co_energia_mwh != null ? ' (del contrato)' : ' (por defecto del producto)'}.`
+        : 'Sin CO: si este contrato lleva margen de agente, apúntalo o la desviación saldrá falsa.',
       sinCoef.length > 0 ? `Sin coeficientes para ${sinCoef.join(', ')} — excluido(s).` : null,
       anomala
         ? 'Desviación anómala: revisa los coeficientes Di/CMFi del anexo (ojo a €/kWh vs c€/kWh) antes de darla por buena.'
