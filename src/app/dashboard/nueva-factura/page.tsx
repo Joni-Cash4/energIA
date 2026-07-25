@@ -13,7 +13,8 @@ import { getSupabaseClient } from '@/lib/supabase'
 import { formatCurrency, formatNumber, cn } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
 import { validarFactura } from '@/lib/validador-factura'
-import type { InvoiceAnalysis, SimTarifa, Cliente, Contrato } from '@/types'
+import { normalizaTarifa } from '@/lib/market-rates'
+import type { InvoiceAnalysis, SimTarifa, Cliente, Contrato, FormulaIndexada } from '@/types'
 
 // El fee de Jonathan se suma siempre encima del precio de tarifa (indexada o fija).
 // El tipo IEE se deriva de la factura real y se aplica sobre la nueva base con fee,
@@ -435,7 +436,8 @@ export default function NuevaFacturaPage() {
   const [facturaSaved, setFacturaSaved] = useState(false)
   const [clienteAutoDetectado, setClienteAutoDetectado] = useState(false)
   const [attachmentsSaved, setAttachmentsSaved] = useState(false)
-  const [contrato, setContrato] = useState<Pick<Contrato, 'comercializadora' | 'producto'> | null>(null)
+  const [contrato, setContrato] = useState<Pick<Contrato, 'comercializadora' | 'producto' | 'fecha_firma' | 'fecha_alta'> | null>(null)
+  const [formula, setFormula] = useState<FormulaIndexada | null>(null)
   const [creatingGestion, setCreatingGestion] = useState(false)
   const [gestionCreada, setGestionCreada] = useState(false)
 
@@ -449,11 +451,35 @@ export default function NuevaFacturaPage() {
   useEffect(() => {
     setGestionCreada(false)
     if (!selectedClienteId) { setContrato(null); return }
-    getSupabaseClient().from('contratos').select('comercializadora,producto')
+    getSupabaseClient().from('contratos').select('comercializadora,producto,fecha_firma,fecha_alta')
       .eq('cliente_id', selectedClienteId).eq('estado', 'activo')
       .order('fecha_alta', { ascending: false }).limit(1).maybeSingle()
       .then(({ data: c }) => setContrato(c ?? null))
   }, [selectedClienteId])
+
+  // Fórmula de la tarifa indexada contratada. Los coeficientes se congelan al
+  // firmar, así que el anexo que manda es el vigente en la fecha de firma (o de
+  // alta, si la de firma no está registrada). Si la búsqueda deja más de un
+  // candidato no se elige ninguno: mejor "no verificable" que aplicar la
+  // fórmula equivocada.
+  useEffect(() => {
+    const tarifa = data?.tarifa
+    if (!contrato?.comercializadora || !tarifa) { setFormula(null); return }
+    const fecha = contrato.fecha_firma ?? contrato.fecha_alta
+    if (!fecha) { setFormula(null); return }
+    getSupabaseClient().from('formulas_indexadas').select('*')
+      .eq('activo', true).eq('tarifa_acceso', normalizaTarifa(tarifa))
+      .lte('firma_desde', fecha).gte('firma_hasta', fecha)
+      .then(({ data: filas }) => {
+        const com = contrato.comercializadora!.toLowerCase()
+        const prod = (contrato.producto ?? '').toLowerCase()
+        const cand = ((filas ?? []) as FormulaIndexada[]).filter(
+          (f) => com.includes(f.match_comercializadora) &&
+                 (prod ? prod.includes(f.match_producto) : true)
+        )
+        setFormula(cand.length === 1 ? cand[0] : null)
+      })
+  }, [contrato, data?.tarifa])
 
   // Auto-detectar cliente por CUPS: primero contra clientes.cups (suministro
   // principal), y si no hay match, contra el historico de facturas.cups —
@@ -583,8 +609,8 @@ export default function NuevaFacturaPage() {
 
   const validacion = useMemo(() => {
     if (!data || !simIdx || !contrato) return null
-    return validarFactura(data, simIdx, simsFijas, contrato)
-  }, [data, simIdx, simsFijas, contrato])
+    return validarFactura(data, simIdx, simsFijas, contrato, formula)
+  }, [data, simIdx, simsFijas, contrato, formula])
 
   const handleCrearGestion = useCallback(async () => {
     if (!validacion || !data || !selectedClienteId) return

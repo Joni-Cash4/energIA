@@ -70,6 +70,8 @@ export interface InvoiceAnalysis {
   tipo_iva_detectado?: number
   mercado_historico_ok?: boolean
   mercado_real_fuente?: 'supabase' | 'hardcoded' | 'fallback'
+  // PMD OMIE real por periodo (€/MWh) — base de las formulas indexadas
+  pmd_periodos?: Partial<Record<string, number>>
   potencias_desglosadas?: boolean
   atulado_recomendado?: 'BOE' | 'WEB'
   // v2.0 — simulaciones reales (PERD×(PMD+SC+CAP), BOE 2026, fijas del maestro)
@@ -375,6 +377,23 @@ export interface ClienteAdjunto {
 }
 
 // ─── Validador de facturas ─────────────────────────────────────────────────────
+
+// Fórmula de una tarifa indexada: precio_kWh = OMIE_periodo × Di + CMFi + ATRe.
+// Los coeficientes se congelan al firmar, por eso el catálogo se busca por la
+// ventana de firma del anexo y no por la fecha de la factura.
+export interface FormulaIndexada {
+  id: string
+  etiqueta: string
+  match_comercializadora: string
+  match_producto: string
+  tarifa_acceso: string
+  firma_desde: string
+  firma_hasta: string
+  di: Partial<Record<string, number>>
+  cmfi: Partial<Record<string, number>>   // €/kWh
+  activo: boolean
+  notas?: string
+}
 
 export type EstadoConcepto = 'ok' | 'error' | 'revisar' | 'no_verificable'
 

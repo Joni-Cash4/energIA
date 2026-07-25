@@ -458,6 +458,10 @@ export async function POST(req: NextRequest) {
       kwh_anuales_sips: Math.round((parsed.kwh_total ?? 0) / dias * 365),
       mercado_actual_mwh: Math.round(pmdMedia * 10) / 10,
       mercado_historico_ok: histOk,
+      // PMD OMIE real por periodo (€/MWh) del periodo facturado. Lo necesita el
+      // validador para aplicar la formula de una tarifa indexada, que se calcula
+      // sobre el OMIE desnudo (sin PERD/SC/CAP, que ya van dentro de sus Di/CMFi).
+      pmd_periodos: pmdHistorico,
       mercado_real_fuente: mercadoReal.fuente,
       potencias_desglosadas: potenciasDesglosadas,
       potencia_total: r2(parsed.potencia_total ?? 0),

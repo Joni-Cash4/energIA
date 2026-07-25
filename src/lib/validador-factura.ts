@@ -12,7 +12,7 @@
 //   maestro de tarifas ni son Próxima — se marca "no_verificable".
 
 import { PEAJES_ENERGIA_2026, CARGOS_ENERGIA_2026, normalizaTarifa, type Periodo } from '@/lib/market-rates'
-import type { InvoiceAnalysis, SimTarifa, Contrato, ConceptoValidacion, ValidacionFactura } from '@/types'
+import type { InvoiceAnalysis, SimTarifa, Contrato, ConceptoValidacion, ValidacionFactura, FormulaIndexada } from '@/types'
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 
@@ -41,6 +41,7 @@ export function validarFactura(
   simIdx: SimTarifa,
   simsFijas: SimTarifa[],
   contrato: Pick<Contrato, 'comercializadora' | 'producto'> | null,
+  formula: FormulaIndexada | null = null,
 ): ValidacionFactura {
   const tarifa = normalizaTarifa(data.tarifa)
   const conceptos: ConceptoValidacion[] = []
@@ -133,7 +134,57 @@ export function validarFactura(
   // 3. Precio de la energía según la tarifa contratada — solo si se conoce la
   // fórmula exacta (match en el maestro de tarifas o Próxima indexado).
   const realEnergiaTotal = r2(periodos.reduce((s, p) => s + (p.importe ?? 0), 0))
-  if (simContratada) {
+  const pmdPeriodos = data.pmd_periodos ?? {}
+  const hayPmd = periodosConKwh.some((p) => (pmdPeriodos[p.periodo] ?? 0) > 0)
+
+  if (formula && !hayPmd) {
+    // Con fórmula pero sin OMIE del periodo facturado no se puede calcular nada:
+    // el precio indexado es OMIE dependiente por definición.
+    conceptos.push({
+      concepto: 'Precio de la energía (tarifa contratada)', esperado: null, real: realEnergiaTotal,
+      diferencia_eur: null, estado: 'no_verificable',
+      detalle: `${formula.etiqueta}: no hay precio OMIE del periodo facturado para aplicar la fórmula.`,
+    })
+  } else if (formula) {
+    // precio_kWh = OMIE_periodo × Di + CMFi + ATRe  (ATRe = peajes + cargos BOE)
+    let esperado = 0
+    const sinCoef: string[] = []
+    for (const p of periodosConKwh) {
+      const periodo = p.periodo as Periodo
+      const kwh = p.kwh ?? 0
+      const di = formula.di[periodo]
+      const cmfi = formula.cmfi[periodo]
+      if (di == null || cmfi == null) { sinCoef.push(periodo); continue }
+      const omie = (pmdPeriodos[periodo] ?? 0) / 1000 // €/MWh → €/kWh
+      const atre = (PEAJES_ENERGIA_2026[tarifa][periodo] ?? 0) + (CARGOS_ENERGIA_2026[tarifa][periodo] ?? 0)
+      esperado += kwh * (omie * di + cmfi + atre)
+    }
+    esperado = r2(esperado)
+    const diff = r2(realEnergiaTotal - esperado)
+    // Guarda anti-disparate: una desviación enorme casi nunca es un error de
+    // facturación, es que los coeficientes del anexo están mal cargados (el
+    // CMFi se publica unas veces en €/kWh y otras en c€/kWh). Antes de acusar a
+    // la comercializadora, mandar a revisar el anexo.
+    const anomala = esperado > 0 && Math.abs(diff) > esperado * 0.30
+    const estado: ConceptoValidacion['estado'] = anomala ? 'revisar' : estadoPorDiferencia(diff, esperado)
+    const notas = [
+      formula.etiqueta,
+      sinCoef.length > 0 ? `Sin coeficientes para ${sinCoef.join(', ')} — excluido(s).` : null,
+      anomala
+        ? 'Desviación anómala: revisa los coeficientes Di/CMFi del anexo (ojo a €/kWh vs c€/kWh) antes de darla por buena.'
+        : null,
+      !anomala && estado === 'revisar' ? NOTA_INFRACOBRO : null,
+      // Dos aproximaciones conocidas: (1) sin curva horaria del cliente usamos la
+      // media aritmética del periodo en vez de ponderar por consumo; (2) el anexo
+      // trunca a cero las horas de OMIE negativo y la media no. En meses de mucho
+      // excedente solar esto tira el esperado hacia abajo.
+      'OMIE tomado como media del periodo, sin ponderar por consumo ni truncar las horas de precio negativo: pequeño margen de error.',
+    ].filter(Boolean)
+    conceptos.push({
+      concepto: 'Precio de la energía (tarifa contratada)', esperado, real: realEnergiaTotal,
+      diferencia_eur: diff, estado, detalle: notas.join(' '),
+    })
+  } else if (simContratada) {
     // energia + cargo_gestion = precio final que ve el cliente, igual criterio
     // que la fila "Energia activa" del PDF comparativo. El cargo_gestion sale
     // del deslizador de honorarios: si el fee real de este cliente es otro,
