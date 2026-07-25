@@ -56,6 +56,10 @@ Verificado en `dashboard/contratos/page.tsx` y `api/cron/renewal-alerts/route.ts
 - El botón "Verificar renovación" pone `renovacion_verificada = true` en la misma fila e inserta una fila en `comisiones_generadas` (tipo `renovacion`). **No modifica `fecha_vencimiento`.**
 - Tanto la lista "próximos a vencer" del dashboard como el email diario del cron filtran por `renovacion_verificada = false`. **Hallazgo:** una vez verificada una renovación, ese contrato deja de generar avisos para siempre — nada avanza la fecha ni resetea el flag para el siguiente ciclo. Ver [ADR-0002](adr/0002-ciclo-vida-contrato.md) para las reglas correctas acordadas.
 
+## Modelo de dominio
+
+Ver [domain-model.md](domain-model.md) — entidades del negocio, sin SQL ni implementación.
+
 ## Índice de ADRs
 
 - [0001 — CUPS como entidad de referencia](adr/0001-cups-como-entidad.md)
