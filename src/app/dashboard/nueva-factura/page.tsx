@@ -853,14 +853,17 @@ export default function NuevaFacturaPage() {
                 </div>
                 <div className="space-y-2 mb-4">
                   {validacion.conceptos.map((c) => (
-                    <div key={c.concepto} className="flex items-center justify-between text-sm border-b border-white/5 pb-2 last:border-0">
-                      <div className="flex items-center gap-2">
-                        <span>{c.estado === 'ok' ? '✓' : c.estado === 'error' ? '✗' : c.estado === 'revisar' ? '⚠' : '·'}</span>
-                        <span className="text-[#D1D5DB]">{c.concepto}</span>
+                    <div key={c.concepto} className="flex items-start justify-between gap-4 text-sm border-b border-white/5 pb-2 last:border-0">
+                      <div className="flex items-start gap-2 min-w-0">
+                        <span className="leading-5">{c.estado === 'ok' ? '✓' : c.estado === 'error' ? '✗' : c.estado === 'revisar' ? '⚠' : '·'}</span>
+                        <div className="min-w-0">
+                          <span className="text-[#D1D5DB]">{c.concepto}</span>
+                          {c.detalle && <p className="text-[#6B7280] text-xs mt-0.5">{c.detalle}</p>}
+                        </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right shrink-0">
                         {c.estado === 'no_verificable' ? (
-                          <span className="text-[#6B7280] text-xs">{c.detalle ?? 'No verificable'}</span>
+                          <span className="text-[#6B7280] text-xs">No verificable</span>
                         ) : (
                           <span className={cn(
                             'font-medium',

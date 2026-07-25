@@ -18,10 +18,19 @@ const r2 = (n: number) => Math.round(n * 100) / 100
 
 // Umbral para no marcar como error el ruido de redondeo/estimación: el mayor
 // entre un importe fijo en € y un % sobre el importe esperado.
+//
+// Solo cuenta como "error" reclamable lo que te cobran DE MÁS. Una desviación a
+// la baja no se reclama nunca (reclamar que te cobren de menos solo provoca una
+// rectificativa al alza), pero si es grande se deja en "revisar" por si esconde
+// una regularización pendiente que llegará en facturas posteriores.
 function estadoPorDiferencia(diff: number, base: number, minAbs = 3, pctRel = 0.02): ConceptoValidacion['estado'] {
   const umbral = Math.max(minAbs, Math.abs(base) * pctRel)
-  return Math.abs(diff) <= umbral ? 'ok' : 'error'
+  if (diff > umbral) return 'error'
+  if (diff < -umbral) return 'revisar'
+  return 'ok'
 }
+
+const NOTA_INFRACOBRO = 'Facturado por debajo de lo esperado: no es reclamable, pero puede indicar una regularización pendiente.'
 
 function nombreProducto(comercializadora?: string, producto?: string): string {
   return `${(comercializadora ?? '').trim()} — ${(producto ?? '').trim()}`.toLowerCase()
@@ -64,13 +73,15 @@ export function validarFactura(
     }
     esperado = r2(esperado); real = r2(real)
     const diff = r2(real - esperado)
+    const estado = estadoPorDiferencia(diff, esperado)
     const excluidos = periodosConKwh.length - conMercado.length
+    const notas = [
+      excluidos > 0 ? `${excluidos} periodo(s) sin componente de mercado detectado — excluido(s) del cálculo.` : null,
+      estado === 'revisar' ? NOTA_INFRACOBRO : null,
+    ].filter(Boolean)
     conceptos.push({
-      concepto: 'Peajes y cargos de energía', esperado, real, diferencia_eur: diff,
-      estado: estadoPorDiferencia(diff, esperado),
-      detalle: excluidos > 0
-        ? `${excluidos} periodo(s) sin componente de mercado detectado — excluido(s) del cálculo.`
-        : undefined,
+      concepto: 'Peajes y cargos de energía', esperado, real, diferencia_eur: diff, estado,
+      detalle: notas.length > 0 ? notas.join(' ') : undefined,
     })
   }
 
@@ -129,10 +140,15 @@ export function validarFactura(
     // ajústalo arriba antes de dar por buena la desviación.
     const esperado = r2(simContratada.energia + simContratada.cargo_gestion)
     const diff = r2(realEnergiaTotal - esperado)
+    const estado = estadoPorDiferencia(diff, esperado)
+    const notas = [
+      simContratada.cargo_gestion > 0 ? 'Incluye tu fee del deslizador de honorarios.' : null,
+      estado === 'revisar' ? NOTA_INFRACOBRO : null,
+    ].filter(Boolean)
     conceptos.push({
       concepto: 'Precio de la energía (tarifa contratada)', esperado, real: realEnergiaTotal,
-      diferencia_eur: diff, estado: estadoPorDiferencia(diff, esperado),
-      detalle: simContratada.cargo_gestion > 0 ? 'Incluye tu fee del deslizador de honorarios.' : undefined,
+      diferencia_eur: diff, estado,
+      detalle: notas.length > 0 ? notas.join(' ') : undefined,
     })
   } else {
     conceptos.push({
