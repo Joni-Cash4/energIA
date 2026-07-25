@@ -61,3 +61,4 @@ Verificado en `dashboard/contratos/page.tsx` y `api/cron/renewal-alerts/route.ts
 - [0001 — CUPS como entidad de referencia](adr/0001-cups-como-entidad.md)
 - [0002 — Ciclo de vida del contrato](adr/0002-ciclo-vida-contrato.md)
 - [0003 — Modelo de comisiones](adr/0003-modelo-comisiones.md)
+- [0004 — Gestiones enlazadas a contrato](adr/0004-gestiones-y-contrato.md)
