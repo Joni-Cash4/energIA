@@ -60,6 +60,10 @@ Verificado en `dashboard/contratos/page.tsx` y `api/cron/renewal-alerts/route.ts
 
 Ver [domain-model.md](domain-model.md) — entidades del negocio, sin SQL ni implementación.
 
+## Principios de producto
+
+Ver [product-principles.md](product-principles.md) — cómo se toman las decisiones de producto, no cómo funciona el software.
+
 ## Índice de ADRs
 
 - [0001 — CUPS como entidad de referencia](adr/0001-cups-como-entidad.md)

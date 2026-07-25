@@ -32,12 +32,19 @@ Sin SQL ni implementación. Describe el negocio: qué representa cada entidad, q
 - **Eventos que genera:** Alta, Renovación, Cambio de producto, Baja (con motivo). Cada uno puede generar una Comisión.
 - **Depende de:** CUPS, Cliente, Comercializadora.
 
-### Oferta / Comparativa
-- **Qué representa:** el resultado de comparar una factura real contra tarifas alternativas (indexada, fijas) — lo que ve un Lead o un Cliente al subir su factura. No es un módulo ("el comparador"), es el resultado que ese módulo produce.
+### Comparativa
+- **Qué representa:** el resultado objetivo de ejecutar el motor de cálculo sobre una factura — tarifa actual vs. indexada vs. fijas (BOE/WEB). No es un módulo ("el comparador"), es el resultado que ese módulo produce.
 - **Quién la crea:** el sistema (comparador público o `nueva-factura` del dashboard), a partir de una factura subida.
 - **Quién la modifica:** nadie — es un resultado de cálculo en un momento dado, no algo que se edite.
-- **Eventos que genera:** puede derivar en un Contrato si el visitante decide contratar.
+- **Eventos que genera:** puede derivar en una Oferta.
 - **Depende de:** una factura de entrada, y de las Tarifas/Fórmulas del dominio Mercado vigentes en ese momento.
+
+### Oferta
+- **Qué representa:** la opción que realmente se le propone y negocia con el cliente. Normalmente coincide con la mejor opción de la Comparativa, pero no siempre — un cliente puede preferir precio fijo aunque la indexada salga más barata en el cálculo (ej. por no fiarse de la variabilidad del indexado). Es la decisión comercial, no el resultado matemático.
+- **Quién la crea:** Jonathan, a partir de una Comparativa.
+- **Quién la modifica:** Jonathan, mientras se negocia con el cliente.
+- **Eventos que genera:** si se acepta, da lugar a un Contrato.
+- **Depende de:** una Comparativa.
 
 ### Comisión — [ADR-0003](adr/0003-modelo-comisiones.md)
 - **Qué representa:** no es una entidad estática — es una secuencia de eventos de liquidación (alta / renovación / corrección) ligados a un Contrato, con un importe calculado a partir de un fee (€/MWh) y el consumo real del cliente.
