@@ -12,7 +12,8 @@ import { processInvoice } from '@/lib/api'
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatCurrency, formatNumber, cn } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import type { InvoiceAnalysis, SimTarifa, Cliente } from '@/types'
+import { validarFactura } from '@/lib/validador-factura'
+import type { InvoiceAnalysis, SimTarifa, Cliente, Contrato } from '@/types'
 
 // El fee de Jonathan se suma siempre encima del precio de tarifa (indexada o fija).
 // El tipo IEE se deriva de la factura real y se aplica sobre la nueva base con fee,
@@ -434,11 +435,25 @@ export default function NuevaFacturaPage() {
   const [facturaSaved, setFacturaSaved] = useState(false)
   const [clienteAutoDetectado, setClienteAutoDetectado] = useState(false)
   const [attachmentsSaved, setAttachmentsSaved] = useState(false)
+  const [contrato, setContrato] = useState<Pick<Contrato, 'comercializadora' | 'producto'> | null>(null)
+  const [creatingGestion, setCreatingGestion] = useState(false)
+  const [gestionCreada, setGestionCreada] = useState(false)
 
   useEffect(() => {
     getSupabaseClient().from('clientes').select('id,nombre,empresa,cups').order('nombre')
       .then(({ data: cl }) => setClientes(cl ?? []))
   }, [])
+
+  // Validador de facturas: solo tiene sentido si la factura está vinculada a
+  // un cliente CON contrato activo (si no, es prospección, no seguimiento).
+  useEffect(() => {
+    setGestionCreada(false)
+    if (!selectedClienteId) { setContrato(null); return }
+    getSupabaseClient().from('contratos').select('comercializadora,producto')
+      .eq('cliente_id', selectedClienteId).eq('estado', 'activo')
+      .order('fecha_alta', { ascending: false }).limit(1).maybeSingle()
+      .then(({ data: c }) => setContrato(c ?? null))
+  }, [selectedClienteId])
 
   // Auto-detectar cliente por CUPS: primero contra clientes.cups (suministro
   // principal), y si no hay match, contra el historico de facturas.cups —
@@ -565,6 +580,58 @@ export default function NuevaFacturaPage() {
       return { ...p, precio_kwh_nuevo, importe_nuevo: Math.round(precio_kwh_nuevo * (p.kwh ?? 0) * 100) / 100 }
     })
   }, [data, feeKwh])
+
+  const validacion = useMemo(() => {
+    if (!data || !simIdx || !contrato) return null
+    return validarFactura(data, simIdx, simsFijas, contrato)
+  }, [data, simIdx, simsFijas, contrato])
+
+  const handleCrearGestion = useCallback(async () => {
+    if (!validacion || !data || !selectedClienteId) return
+    setCreatingGestion(true)
+    const supabase = getSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const compania = contrato?.comercializadora || data.comercializadora || ''
+    const resumen = validacion.conceptos
+      .filter((c) => c.estado === 'error')
+      .map((c) => `${c.concepto}: esperado ${formatCurrency(c.esperado ?? 0)}, facturado ${formatCurrency(c.real ?? 0)} (${(c.diferencia_eur ?? 0) >= 0 ? '+' : ''}${formatCurrency(c.diferencia_eur ?? 0)})`)
+      .join('\n')
+    const asunto = `Revisión factura ${data.fecha_inicio ?? '?'} a ${data.fecha_fin ?? '?'}: ${formatCurrency(validacion.desviacion_total_eur)} facturados de más según el validador.`
+    const { data: gestion, error: err } = await supabase.from('gestiones').insert({
+      user_id: user?.id,
+      cliente_id: selectedClienteId,
+      cups: data.cups || null,
+      compania,
+      tipo: 'solicitamos',
+      asunto,
+      via: 'email',
+      estado: 'en_curso',
+      notas: resumen,
+      origen: 'validador',
+    }).select('id').single()
+    if (err || !gestion) {
+      toast({ title: `Error al crear la gestión: ${err?.message ?? ''}`, variant: 'destructive' })
+      setCreatingGestion(false)
+      return
+    }
+    await supabase.from('gestion_eventos').insert({
+      gestion_id: gestion.id,
+      user_id: user?.id,
+      nota: `[Sistema] Gestión abierta por el validador de facturas (${formatCurrency(validacion.desviacion_total_eur)} detectados)`,
+    })
+    await supabase.from('factura_validaciones').insert({
+      user_id: user?.id,
+      cliente_id: selectedClienteId,
+      cups: data.cups || null,
+      fecha_factura: data.fecha_fin || null,
+      desviacion_total_eur: validacion.desviacion_total_eur,
+      detalle: validacion.conceptos,
+      gestion_id: gestion.id,
+    })
+    setGestionCreada(true)
+    toast({ title: 'Gestión de reclamación creada' })
+    setCreatingGestion(false)
+  }, [validacion, data, selectedClienteId, contrato, toast])
 
   const handleDownloadPdf = async () => {
     if (!data || !simIdx || !simBoe || !simWeb) return
@@ -763,6 +830,61 @@ export default function NuevaFacturaPage() {
             {data.potencias_desglosadas === false && (
               <div className="text-xs text-yellow-500 mb-4 bg-yellow-500/5 border border-yellow-500/20 rounded-xl px-4 py-3">
                 ⚠ La IA no pudo leer la potencia contratada por periodo — se asumió {data.potencia_contratada} kW en todos los periodos. Si varía (típico en 3.0TD), el cálculo de potencia puede tener error. Revisar manualmente.
+              </div>
+            )}
+
+            {validacion && (
+              <div className={cn(
+                'rounded-2xl border p-6 mb-6',
+                validacion.tiene_errores ? 'bg-red-500/5 border-red-500/30' : 'bg-[#00E676]/5 border-[#00E676]/30'
+              )}>
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                  <div>
+                    <h2 className="text-white font-semibold">Validador de factura</h2>
+                    <p className="text-[#6B7280] text-xs mt-0.5">
+                      Comprobada contra el contrato de {clientes.find((c) => c.id === selectedClienteId)?.nombre}
+                    </p>
+                  </div>
+                  {validacion.tiene_errores ? (
+                    <span className="text-red-400 font-bold text-lg">{formatCurrency(validacion.desviacion_total_eur)} facturados de más</span>
+                  ) : (
+                    <span className="text-[#00E676] font-semibold text-sm">✓ Sin errores confirmados</span>
+                  )}
+                </div>
+                <div className="space-y-2 mb-4">
+                  {validacion.conceptos.map((c) => (
+                    <div key={c.concepto} className="flex items-center justify-between text-sm border-b border-white/5 pb-2 last:border-0">
+                      <div className="flex items-center gap-2">
+                        <span>{c.estado === 'ok' ? '✓' : c.estado === 'error' ? '✗' : c.estado === 'revisar' ? '⚠' : '·'}</span>
+                        <span className="text-[#D1D5DB]">{c.concepto}</span>
+                      </div>
+                      <div className="text-right">
+                        {c.estado === 'no_verificable' ? (
+                          <span className="text-[#6B7280] text-xs">{c.detalle ?? 'No verificable'}</span>
+                        ) : (
+                          <span className={cn(
+                            'font-medium',
+                            c.estado === 'error' ? 'text-red-400' : c.estado === 'revisar' ? 'text-yellow-400' : 'text-[#9CA3AF]'
+                          )}>
+                            {c.diferencia_eur != null && Math.abs(c.diferencia_eur) > 0.01
+                              ? `${c.diferencia_eur > 0 ? '+' : ''}${formatCurrency(c.diferencia_eur)}`
+                              : 'OK'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {validacion.tiene_errores && (
+                  gestionCreada ? (
+                    <span className="text-xs text-[#00E676] font-medium">✓ Gestión de reclamación creada</span>
+                  ) : (
+                    <Button onClick={handleCrearGestion} disabled={creatingGestion} variant="secondary" size="sm" className="gap-2">
+                      {creatingGestion ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                      Crear gestión de reclamación
+                    </Button>
+                  )
+                )}
               </div>
             )}
 

@@ -324,7 +324,7 @@ export interface Accion {
 export type GestionTipoVal   = 'solicitamos' | 'nos_solicitan'
 export type GestionEstadoVal = 'pendiente' | 'en_curso' | 'resuelto'
 export type GestionViaVal    = 'email' | 'telefono' | 'portal' | 'carta' | 'otro'
-export type GestionOrigenVal = 'manual' | 'audio' | 'texto'
+export type GestionOrigenVal = 'manual' | 'audio' | 'texto' | 'validador'
 
 export interface Gestion {
   id: string
@@ -371,6 +371,37 @@ export interface ClienteAdjunto {
   url: string
   storage_path: string
   notas?: string
+  created_at: string
+}
+
+// ─── Validador de facturas ─────────────────────────────────────────────────────
+
+export type EstadoConcepto = 'ok' | 'error' | 'revisar' | 'no_verificable'
+
+export interface ConceptoValidacion {
+  concepto: string
+  esperado: number | null
+  real: number | null
+  diferencia_eur: number | null
+  estado: EstadoConcepto
+  detalle?: string
+}
+
+export interface ValidacionFactura {
+  conceptos: ConceptoValidacion[]
+  desviacion_total_eur: number
+  tiene_errores: boolean
+}
+
+export interface FacturaValidacion {
+  id: string
+  user_id: string
+  cliente_id?: string
+  cups?: string
+  fecha_factura?: string
+  desviacion_total_eur: number
+  detalle: ConceptoValidacion[]
+  gestion_id?: string
   created_at: string
 }
 
