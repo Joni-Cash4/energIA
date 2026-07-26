@@ -163,6 +163,7 @@ export interface Cliente {
   id: string
   nombre: string
   cups?: string
+  cups_id?: string  // referencia a cups (ADR-0001) — cups sigue siendo el texto libre histórico
   comercializadora?: string
   tarifa?: string
   email?: string
@@ -251,11 +252,26 @@ export type EstadoFirma = 'pendiente_firma' | 'firmado' | 'rechazado'
 // Motivo real de baja (ADR-0002) — solo tiene sentido cuando estado === 'baja'.
 export type ContratoMotivoBaja = 'cambio_gestor' | 'cambio_comercializadora' | 'cierre_negocio' | 'cups_baja'
 
+// Punto de suministro como entidad de referencia (ADR-0001). No cambia
+// aunque cambie el titular — por eso vive aparte de Cliente/Contrato.
+export interface Cups {
+  id: string
+  codigo: string
+  direccion?: string
+  cp?: string
+  poblacion?: string
+  provincia?: string
+  tarifa_acceso?: string
+  notas?: string
+  created_at: string
+}
+
 export interface Contrato {
   id: string
   user_id: string
   cliente_id?: string
   cups?: string
+  cups_id?: string  // referencia a cups (ADR-0001) — cups sigue siendo el texto libre histórico
   comercializadora?: string
   tarifa?: string
   producto?: string

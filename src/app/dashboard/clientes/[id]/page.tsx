@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck, Clock, CheckCircle2, Phone, Mail, Users, MapPin, MessageSquare, Send, RefreshCw, Zap, Upload, FileText, ClipboardList, Paperclip, Image as ImageIcon, Trash2 } from 'lucide-react'
+import { ArrowLeft, Download, Save, Loader2, Plus, FileCheck, Clock, CheckCircle2, Phone, Mail, Users, MapPin, MessageSquare, Send, RefreshCw, Zap, Upload, FileText, ClipboardList, Paperclip, Image as ImageIcon, Trash2, History } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -56,6 +56,11 @@ export default function ClienteDetailPage() {
   const [cliente, setCliente] = useState<Cliente | null>(null)
   const [facturas, setFacturas] = useState<Factura[]>([])
   const [contratos, setContratos] = useState<Contrato[]>([])
+  // Histórico del CUPS con OTROS titulares (ADR-0001) — mismo punto de
+  // suministro, dueño distinto en el pasado.
+  const [historicoCups, setHistoricoCups] = useState<(Pick<Contrato,
+    'id' | 'comercializadora' | 'producto' | 'fecha_alta' | 'fecha_vencimiento' | 'estado' | 'motivo_baja'
+  > & { cliente: Pick<Cliente, 'id' | 'nombre' | 'empresa'> | null })[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dismissing, setDismissing] = useState(false)
@@ -150,6 +155,21 @@ export default function ClienteDetailPage() {
       setLoading(false)
     })
   }, [id, router])
+
+  // Histórico del CUPS con otros titulares — solo tiene sentido si el cliente
+  // ya tiene cups_id (rellenado por la migración de la Fase 1, ADR-0001).
+  useEffect(() => {
+    if (!cliente?.cups_id) { setHistoricoCups([]); return }
+    let cancelado = false
+    getSupabaseClient()
+      .from('contratos')
+      .select('id,comercializadora,producto,fecha_alta,fecha_vencimiento,estado,motivo_baja,cliente:clientes(id,nombre,empresa)')
+      .eq('cups_id', cliente.cups_id)
+      .neq('cliente_id', id)
+      .order('fecha_alta', { ascending: false })
+      .then(({ data }) => { if (!cancelado) setHistoricoCups((data ?? []) as unknown as typeof historicoCups) })
+    return () => { cancelado = true }
+  }, [cliente?.cups_id, id])
 
   const handleDismissRevision = async () => {
     setDismissing(true)
@@ -394,6 +414,43 @@ export default function ClienteDetailPage() {
               ))}
             </div>
           </div>
+
+          {/* Histórico del CUPS con otros titulares (ADR-0001) — solo si hay */}
+          {historicoCups.length > 0 && (
+            <div className="bg-[#141414] border border-yellow-500/20 rounded-2xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-[#1F1F1F] flex items-center gap-2">
+                <History className="w-4 h-4 text-yellow-400" />
+                <h2 className="text-white font-semibold">Histórico de este punto de suministro</h2>
+              </div>
+              <div className="px-6 py-4">
+                <p className="text-[#6B7280] text-xs mb-3">
+                  Este CUPS ha tenido {historicoCups.length + 1} titular{historicoCups.length > 0 ? 'es' : ''} —
+                  aquí los demás, aparte de {cliente.nombre}:
+                </p>
+                <div className="space-y-2">
+                  {historicoCups.map(h => (
+                    <div key={h.id} className="flex items-center justify-between gap-3 bg-[#0F0F0F] border border-[#1F1F1F] rounded-lg px-3 py-2 text-xs">
+                      <div className="min-w-0">
+                        {h.cliente ? (
+                          <Link href={`/dashboard/clientes/${h.cliente.id}`} className="text-white font-medium hover:text-[#00E676] transition-colors">
+                            {h.cliente.nombre}{h.cliente.empresa ? ` — ${h.cliente.empresa}` : ''}
+                          </Link>
+                        ) : <span className="text-white font-medium">Titular desconocido</span>}
+                        <p className="text-[#6B7280] mt-0.5">
+                          {[h.comercializadora, h.producto].filter(Boolean).join(' · ') || '—'}
+                          {h.fecha_alta && ` · desde ${formatDate(h.fecha_alta)}`}
+                          {h.fecha_vencimiento && ` hasta ${formatDate(h.fecha_vencimiento)}`}
+                        </p>
+                      </div>
+                      <Badge variant={h.estado === 'activo' ? 'default' : 'secondary'} className="shrink-0">
+                        {h.estado === 'baja' && h.motivo_baja ? `Baja · ${h.motivo_baja.replace(/_/g, ' ')}` : h.estado}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Contratos */}
           <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl overflow-hidden">

@@ -1,6 +1,6 @@
 # ADR-0001 — CUPS como entidad de referencia propia
 
-**Estado:** Aceptado (2026-07-25). Fase 1 implementada 2026-07-26 (tabla `cups` + `cups_id` opcional, 100% aditiva). Fase 2 (usar `cups_id` en el código, migrar `facturas` a `contrato_id`) pendiente.
+**Estado:** Aceptado (2026-07-25). Fase 1 implementada 2026-07-26 (tabla `cups` + `cups_id` opcional, 100% aditiva). Fase 2 parcialmente implementada el mismo día: panel "Histórico de este punto de suministro" en la ficha del cliente. Pendiente: migrar `facturas` a `contrato_id`.
 
 ## Contexto
 
@@ -30,7 +30,7 @@ Un cambio de titular **no modifica el contrato existente**: se abre un contrato 
 
 **Trabajo pendiente:**
 - Cambiar `facturas` para que apunte a `contrato_id` en vez de a `cliente_id` directo.
-- Fase 2: hacer que el código use `cups_id` de verdad (ej. histórico de un CUPS en la ficha del cliente), en vez de solo tenerlo poblado en la base de datos sin usar todavía.
+- ~~Fase 2: hacer que el código use `cups_id` de verdad~~ Hecho 2026-07-26 en parte: `dashboard/clientes/[id]/page.tsx` muestra un panel "Histórico de este punto de suministro" con los demás titulares que ha tenido el mismo CUPS (`contratos.cups_id`), solo si hay alguno — no añade ruido en el caso normal de un CUPS con un único titular.
 - ~~Crear la tabla `cups`.~~ ~~Migrar los valores de texto libre existentes a referencias (`cups_id`).~~ Hecho 2026-07-26, Fase 1 (migración `cups_entidad_fase1.sql`), 100% aditiva — no cambia el comportamiento de la web todavía, solo deja `cups_id` poblado y listo.
 
 **Hallazgos de la auditoría real (2026-07-26, 346 clientes / 174 contratos) antes de migrar:**
