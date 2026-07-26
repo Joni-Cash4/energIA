@@ -40,7 +40,7 @@ export function validarFactura(
   data: InvoiceAnalysis,
   simIdx: SimTarifa,
   simsFijas: SimTarifa[],
-  contrato: Pick<Contrato, 'comercializadora' | 'producto' | 'co_energia_mwh'> | null,
+  contrato: Pick<Contrato, 'comercializadora' | 'producto' | 'fee_energia_mwh'> | null,
   formula: FormulaIndexada | null = null,
 ): ValidacionFactura {
   const tarifa = normalizaTarifa(data.tarifa)
@@ -149,7 +149,7 @@ export function validarFactura(
     // precio_kWh = OMIE_periodo × Di + CMFi + ATRe + CO
     // (ATRe = peajes + cargos BOE; CO = margen del agente, del contrato si está
     // pactado ahí y si no el valor por defecto del producto)
-    const coKwh = (contrato?.co_energia_mwh ?? formula.co_eur_mwh ?? 0) / 1000
+    const coKwh = (contrato?.fee_energia_mwh ?? formula.co_eur_mwh ?? 0) / 1000
     let esperado = 0
     const sinCoef: string[] = []
     for (const p of periodosConKwh) {
@@ -173,7 +173,7 @@ export function validarFactura(
     const notas = [
       formula.etiqueta,
       coKwh > 0
-        ? `CO aplicado: ${(coKwh * 1000).toFixed(2)} €/MWh${contrato?.co_energia_mwh != null ? ' (del contrato)' : ' (por defecto del producto)'}.`
+        ? `CO aplicado: ${(coKwh * 1000).toFixed(2)} €/MWh${contrato?.fee_energia_mwh != null ? ' (del contrato)' : ' (por defecto del producto)'}.`
         : 'Sin CO: si este contrato lleva margen de agente, apúntalo o la desviación saldrá falsa.',
       sinCoef.length > 0 ? `Sin coeficientes para ${sinCoef.join(', ')} — excluido(s).` : null,
       anomala

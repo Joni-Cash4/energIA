@@ -1,6 +1,6 @@
 # ADR-0003 — Modelo de comisiones
 
-**Estado:** Aceptado (2026-07-25). Parcialmente implementado 2026-07-26: el popover de "Verificar renovación" calcula el importe automáticamente. Pendiente: consolidar columnas y el flujo de foto + IA.
+**Estado:** Aceptado (2026-07-25). Implementado 2026-07-26: importe automático al renovar, y columna de comisión consolidada. Pendiente: el flujo de foto + IA.
 
 ## Contexto
 
@@ -40,6 +40,6 @@ Flujo objetivo: al tramitar alta o renovación, se sube la foto/captura de la co
 - Reutiliza un patrón ya construido y probado (`process-invoice`) en vez de inventar uno nuevo para las comisiones.
 
 **Trabajo pendiente que esto implica:**
-- Decidir y consolidar el nombre/columna única para esta comisión (hoy dividida entre `co_energia_mwh` y `fee_energia_mwh`/`kwh_base_comision`).
 - Construir el flujo de subida de foto + extracción por IA de la comisión (análogo a `process-invoice`).
+- ~~Decidir y consolidar el nombre/columna única para esta comisión.~~ Hecho 2026-07-26, con datos reales delante (174 contratos): `co_energia_mwh` no se usaba nunca (0 rellenos) — retirada. `fee_energia_mwh` tenía un valor por defecto (5) que 173 de 174 contratos arrastraban sin haberlo tocado nunca — se quitó el default y se limpiaron esos 173 a `null` (migración `consolidar_comision_contrato.sql`). El validador (`validador-factura.ts`) pasa a leer `fee_energia_mwh` como override por contrato en vez de `co_energia_mwh`. **Ojo:** 4 de los 5 contratos con Próxima tramitados en julio 2026 quedaron con `fee_energia_mwh = null` tras la limpieza (nunca tuvieron un valor real, solo el placeholder) — pendiente de que Jonathan los rellene con el fee real: `CDAD PROP GARAJES Y TRASTEROS...ERANDIO`, `BAR RESTAURANTE LOS PICUDOS SL` (3 contratos). El quinto (Antonio Canales García, 18 €/MWh) ya estaba bien y no se tocó.
 - ~~Cambiar el popover de "Verificar renovación" para calcular el importe automáticamente en vez de pedirlo escrito.~~ Hecho 2026-07-26: `calcularImporteComision()` en `dashboard/contratos/page.tsx` — `importe = kwh_base_comision × fee_energia_mwh / 1000 × reparto_energia`, misma fórmula ya validada en `/dashboard/comisiones` (columna "reclamable"). Descubrimiento al implementar: la fórmula real también depende de `reparto_energia` (1.00 Próxima, 0.95 Atulado), un factor que no estaba recogido en la decisión original de este ADR. Si el contrato no tiene `kwh_base_comision`/`fee_energia_mwh` rellenos, el campo sigue siendo editable a mano (fallback a `a_cobrar`) — no se fuerza a rellenar esos datos antes de poder renovar.

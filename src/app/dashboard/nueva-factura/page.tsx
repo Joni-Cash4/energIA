@@ -436,7 +436,7 @@ export default function NuevaFacturaPage() {
   const [facturaSaved, setFacturaSaved] = useState(false)
   const [clienteAutoDetectado, setClienteAutoDetectado] = useState(false)
   const [attachmentsSaved, setAttachmentsSaved] = useState(false)
-  const [contrato, setContrato] = useState<Pick<Contrato, 'comercializadora' | 'producto' | 'fecha_firma' | 'fecha_alta' | 'co_energia_mwh'> | null>(null)
+  const [contrato, setContrato] = useState<Pick<Contrato, 'comercializadora' | 'producto' | 'fecha_firma' | 'fecha_alta' | 'fee_energia_mwh'> | null>(null)
   const [formula, setFormula] = useState<FormulaIndexada | null>(null)
   const [creatingGestion, setCreatingGestion] = useState(false)
   const [gestionCreada, setGestionCreada] = useState(false)
@@ -451,7 +451,7 @@ export default function NuevaFacturaPage() {
   useEffect(() => {
     setGestionCreada(false)
     if (!selectedClienteId) { setContrato(null); return }
-    getSupabaseClient().from('contratos').select('comercializadora,producto,fecha_firma,fecha_alta,co_energia_mwh')
+    getSupabaseClient().from('contratos').select('comercializadora,producto,fecha_firma,fecha_alta,fee_energia_mwh')
       .eq('cliente_id', selectedClienteId).eq('estado', 'activo')
       .order('fecha_alta', { ascending: false }).limit(1).maybeSingle()
       .then(({ data: c }) => setContrato(c ?? null))

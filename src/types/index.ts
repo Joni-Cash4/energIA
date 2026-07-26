@@ -269,9 +269,6 @@ export interface Contrato {
   ref_comercializadora?: string
   renovacion_verificada: boolean
   a_cobrar?: number
-  // CO / margen del agente pactado en ESTE contrato (€/MWh sobre la energía).
-  // Si está a null se usa el valor por defecto del producto en formulas_indexadas.
-  co_energia_mwh?: number
   // Seguimiento de comisión (ver /dashboard/comisiones y ADR-0003): kWh anuales
   // que la comercializadora reportó al calcular la comisión inicial, fee €/MWh
   // pactado, y reparto (1.00=Próxima, 0.95=Atulado). importe = kwh_base_comision
@@ -408,7 +405,8 @@ export interface FormulaIndexada {
   cmfi: Partial<Record<string, number>>   // €/kWh
   // CO / margen del agente que la comercializadora suma al precio de energía.
   // Va aparte de Di y CMFi porque se negocia por contrato: este es el valor por
-  // defecto del producto, y contratos.co_energia_mwh lo pisa si está relleno.
+  // defecto del producto, y contratos.fee_energia_mwh lo pisa si está relleno
+  // (ADR-0003: columna única de comisión, consolidada 2026-07-26).
   co_eur_mwh: number
   activo: boolean
   notas?: string
