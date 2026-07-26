@@ -21,3 +21,11 @@ El contenido propio (boletín de mercado, análisis, etc.) usa solo datos públi
 ## 4. Solo lo real, nunca lo inventado
 
 Los testimonios y casos reales de la web son siempre clientes reales verificados. Nunca ejemplos ficticios, nunca fotos de stock o de prensa — solo fotos propias del cliente, con consentimiento.
+
+## 5. Copiloto, no CRM
+
+Un CRM almacena información. El objetivo de IAenergía es que el sistema **trabaje para el asesor**: revisar continuamente la cartera, detectar oportunidades y riesgos antes de que el asesor los busque, y decirle cada mañana dónde centrar el tiempo — no ser un sitio donde ir a buscar datos.
+
+En la práctica, esto significa **unificar en una sola vista priorizada** las señales que ya calculan los módulos existentes (renovaciones próximas, comisiones pendientes de revisar/reclamar, facturas con anomalías del validador, oportunidades de ahorro nuevas) en vez de construir un "motor de IA" nuevo y separado. El objetivo final: que un asesor pueda gestionar una cartera grande casi solo, porque el sistema reduce al mínimo el trabajo manual de buscar qué merece atención.
+
+Cualquier automatización nueva se mide contra esto: **¿hace que el asesor tenga que pensar menos, tarde menos, o aporte más valor al cliente?** Y contra el principio 2 (desarrollo aditivo) y el 1 (nunca actuar sin certeza): "trabajar de forma continua" no significa sin límite ni criterio — el coste y la frecuencia de cualquier proceso automático (llamadas a IA, a APIs externas) se diseñan con la misma disciplina de uso responsable que ya aplicamos a ESIOS (ver [ADR-0005](adr/0005-datos-mercado-desde-esios.md)).
