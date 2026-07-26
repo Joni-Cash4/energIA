@@ -11,7 +11,7 @@ import { getSupabaseClient } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
 import { resolverEmpresaPago } from '@/lib/comisiones'
-import type { Contrato, Cliente, ContratoEstado, EstadoFirma, EmpresaPago } from '@/types'
+import type { Contrato, Cliente, ContratoEstado, EstadoFirma, ContratoMotivoBaja, EmpresaPago } from '@/types'
 
 function diasRestantes(fecha: string): number {
   return Math.ceil((new Date(fecha).getTime() - Date.now()) / 86400000)
@@ -45,11 +45,20 @@ const EMPTY: {
   cliente_id: string; cups: string; comercializadora: string; tarifa: string
   producto: string; fecha_firma: string; fecha_alta: string; fecha_vencimiento: string
   duracion_meses: string; estado: ContratoEstado; estado_firma: EstadoFirma
+  motivo_baja: ContratoMotivoBaja | ''
   ref_comercializadora: string; a_cobrar: string; notas: string
 } = {
   cliente_id: '', cups: '', comercializadora: '', tarifa: '', producto: '',
   fecha_firma: '', fecha_alta: '', fecha_vencimiento: '', duracion_meses: '12',
-  estado: 'activo', estado_firma: 'pendiente_firma', ref_comercializadora: '', a_cobrar: '', notas: '',
+  estado: 'activo', estado_firma: 'pendiente_firma', motivo_baja: '',
+  ref_comercializadora: '', a_cobrar: '', notas: '',
+}
+
+const MOTIVO_BAJA_LABELS: Record<ContratoMotivoBaja, string> = {
+  cambio_gestor: 'Cambio de gestor',
+  cambio_comercializadora: 'Cambio de comercializadora',
+  cierre_negocio: 'Cierre del negocio',
+  cups_baja: 'CUPS dado de baja',
 }
 
 export default function ContratosPage() {
@@ -204,6 +213,7 @@ export default function ContratosPage() {
       duracion_meses:       form.duracion_meses ? Number(form.duracion_meses) : 12,
       estado:               form.estado,
       estado_firma:         form.estado_firma,
+      motivo_baja:          form.estado === 'baja' ? (form.motivo_baja || null) : null,
       ref_comercializadora: form.ref_comercializadora || null,
       a_cobrar:             form.a_cobrar ? Number(form.a_cobrar) : null,
       notas:                form.notas || null,
@@ -283,6 +293,7 @@ export default function ContratosPage() {
       duracion_meses:    String(c.duracion_meses ?? 12),
       estado:               c.estado,
       estado_firma:         c.estado_firma ?? 'pendiente_firma',
+      motivo_baja:          c.motivo_baja ?? '',
       ref_comercializadora: c.ref_comercializadora ?? '',
       a_cobrar:             c.a_cobrar != null ? String(c.a_cobrar) : '',
       notas:                c.notas ?? '',
@@ -592,6 +603,20 @@ export default function ContratosPage() {
                       onChange={e => setForm(p => ({ ...p, a_cobrar: e.target.value }))} />
                   </div>
                 </div>
+
+                {form.estado === 'baja' && (
+                  <div>
+                    <label className="block text-xs text-[#9CA3AF] mb-1.5">Motivo de la baja</label>
+                    <Select value={form.motivo_baja} onValueChange={v => setForm(p => ({ ...p, motivo_baja: v as ContratoMotivoBaja }))}>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar motivo..." /></SelectTrigger>
+                      <SelectContent>
+                        {(Object.entries(MOTIVO_BAJA_LABELS) as [ContratoMotivoBaja, string][]).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>

@@ -248,6 +248,9 @@ export type ContratoEstado  = 'activo' | 'baja' | 'pendiente'
 
 export type EstadoFirma = 'pendiente_firma' | 'firmado' | 'rechazado'
 
+// Motivo real de baja (ADR-0002) — solo tiene sentido cuando estado === 'baja'.
+export type ContratoMotivoBaja = 'cambio_gestor' | 'cambio_comercializadora' | 'cierre_negocio' | 'cups_baja'
+
 export interface Contrato {
   id: string
   user_id: string
@@ -262,6 +265,7 @@ export interface Contrato {
   duracion_meses?: number
   estado: ContratoEstado
   estado_firma: EstadoFirma
+  motivo_baja?: ContratoMotivoBaja
   ref_comercializadora?: string
   renovacion_verificada: boolean
   a_cobrar?: number
@@ -335,6 +339,7 @@ export interface Gestion {
   id: string
   user_id: string
   cliente_id?: string
+  contrato_id?: string       // opcional (ADR-0004) — solo cuando cliente y contrato son conocidos
   titular?: string           // fallback si la gestión no está ligada a un cliente del CRM
   cups?: string
   compania: string

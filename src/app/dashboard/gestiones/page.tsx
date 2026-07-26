@@ -12,7 +12,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatDate, cn } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import type { Gestion, GestionEvento, Cliente, GestionTipoVal, GestionEstadoVal, GestionViaVal } from '@/types'
+import type { Gestion, GestionEvento, Cliente, Contrato, GestionTipoVal, GestionEstadoVal, GestionViaVal } from '@/types'
 
 function diasRestantes(fecha: string): number {
   return Math.ceil((new Date(fecha).getTime() - Date.now()) / 86400000)
@@ -40,11 +40,11 @@ const ESTADO_LABELS: Record<GestionEstadoVal, string> = {
 }
 
 const EMPTY: {
-  cliente_id: string; titular: string; cups: string; compania: string
+  cliente_id: string; contrato_id: string; titular: string; cups: string; compania: string
   tipo: GestionTipoVal; asunto: string; via: GestionViaVal
   proximo_seguimiento: string; estado: GestionEstadoVal; resolucion: string; notas: string
 } = {
-  cliente_id: '', titular: '', cups: '', compania: '', tipo: 'solicitamos',
+  cliente_id: '', contrato_id: '', titular: '', cups: '', compania: '', tipo: 'solicitamos',
   asunto: '', via: 'email', proximo_seguimiento: '', estado: 'en_curso', resolucion: '', notas: '',
 }
 
@@ -60,6 +60,8 @@ export default function GestionesPage() {
   const [clienteOpen, setClienteOpen] = useState(false)
   const [form, setForm] = useState({ ...EMPTY })
   const [saving, setSaving] = useState(false)
+  // Contratos del cliente seleccionado, para poder ligar la gestión a uno concreto (ADR-0004)
+  const [contratosCliente, setContratosCliente] = useState<Pick<Contrato, 'id' | 'cups' | 'comercializadora'>[]>([])
   // Historial de la gestión en edición
   const [eventos, setEventos] = useState<GestionEvento[]>([])
   const [nuevoEvento, setNuevoEvento] = useState('')
@@ -89,6 +91,19 @@ export default function GestionesPage() {
       setShowForm(true)
     }
   }, [])
+
+  // Contratos del cliente seleccionado en el formulario (para el selector opcional de contrato)
+  useEffect(() => {
+    if (!form.cliente_id) { setContratosCliente([]); return }
+    let cancelado = false
+    getSupabaseClient()
+      .from('contratos')
+      .select('id,cups,comercializadora')
+      .eq('cliente_id', form.cliente_id)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { if (!cancelado) setContratosCliente(data ?? []) })
+    return () => { cancelado = true }
+  }, [form.cliente_id])
 
   const abiertas = gestiones.filter(g => g.estado !== 'resuelto')
   const hoy = new Date().toISOString().split('T')[0]
@@ -145,7 +160,8 @@ export default function GestionesPage() {
     const resuelto = form.estado === 'resuelto'
     const payload = {
       user_id:             user!.id,
-      cliente_id:          form.cliente_id || null,
+      cliente_id:          form.cliente_id  || null,
+      contrato_id:         form.contrato_id || null,
       titular:             form.titular    || null,
       cups:                form.cups       || null,
       compania:            form.compania.trim(),
@@ -195,6 +211,7 @@ export default function GestionesPage() {
   function openEdit(g: Gestion) {
     setForm({
       cliente_id:          g.cliente_id          ?? '',
+      contrato_id:         g.contrato_id         ?? '',
       titular:             g.titular             ?? '',
       cups:                g.cups                ?? '',
       compania:            g.compania,
@@ -422,7 +439,10 @@ export default function GestionesPage() {
                               const label = `${c.nombre}${c.empresa ? ` — ${c.empresa}` : ''}`
                               return (
                                 <CommandItem key={c.id} value={label} onSelect={() => {
-                                  setForm(p => ({ ...p, cliente_id: c.id, cups: p.cups || c.cups || '' }))
+                                  setForm(p => ({
+                                    ...p, cliente_id: c.id, cups: p.cups || c.cups || '',
+                                    contrato_id: p.cliente_id === c.id ? p.contrato_id : '',
+                                  }))
                                   setClienteOpen(false)
                                 }}>
                                   <Check className={cn('mr-2 h-4 w-4', form.cliente_id === c.id ? 'opacity-100' : 'opacity-0')} />
@@ -442,6 +462,24 @@ export default function GestionesPage() {
                     <label className="block text-xs text-[#9CA3AF] mb-1.5">Titular (si no está en clientes)</label>
                     <Input placeholder="Nombre del titular" value={form.titular}
                       onChange={e => setForm(p => ({ ...p, titular: e.target.value }))} />
+                  </div>
+                )}
+
+                {form.cliente_id && contratosCliente.length > 0 && (
+                  <div>
+                    <label className="block text-xs text-[#9CA3AF] mb-1.5">Contrato (opcional)</label>
+                    <Select value={form.contrato_id || '__ninguno__'}
+                      onValueChange={v => setForm(p => ({ ...p, contrato_id: v === '__ninguno__' ? '' : v }))}>
+                      <SelectTrigger><SelectValue placeholder="Sin contrato concreto" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__ninguno__">Sin contrato concreto</SelectItem>
+                        {contratosCliente.map(c => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {[c.cups, c.comercializadora].filter(Boolean).join(' — ') || c.id}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
 

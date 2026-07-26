@@ -1,6 +1,6 @@
 # ADR-0004 — Gestiones enlazadas a contrato
 
-**Estado:** Aceptado (2026-07-25). Decisión de diseño — no implementado todavía en código ni base de datos.
+**Estado:** Aceptado e implementado (2026-07-25, implementado 2026-07-26).
 
 ## Contexto
 
@@ -24,6 +24,4 @@ No se cambia nada del ciclo de resolución: `estado`, `proximo_seguimiento`, `re
 - Una gestión sobre un cliente con varios CUPS/contratos deja de depender de que el texto libre de `cups`/`compañía` esté bien escrito para saber de cuál se trata.
 - No se fuerza estructura donde no la hay: el caso de un futuro cliente sigue funcionando exactamente igual que hoy.
 
-**Trabajo pendiente que esto implica (no hecho todavía):**
-- Añadir columna `contrato_id` a `gestiones`.
-- Rellenarla cuando se dé de alta una gestión con cliente y contrato conocidos (a mano o, si en el futuro se automatiza, mediante el mismo matching que ya hace el bot de Telegram para `cliente_id`).
+**Implementado 2026-07-26:** migración `contrato_motivo_baja_y_gestion_contrato.sql` (columna `contrato_id` + índice), y en `dashboard/gestiones/page.tsx` un selector opcional que aparece cuando hay cliente seleccionado y ese cliente tiene contratos (lista `cups — comercializadora`). Rellenado a mano por ahora — el matching automático vía Telegram (igual que ya hace con `cliente_id`) queda pendiente si se decide en el futuro.
