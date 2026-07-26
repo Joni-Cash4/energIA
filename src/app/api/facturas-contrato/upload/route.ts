@@ -71,19 +71,42 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabase()
 
-    // ── Auto-detect clienteId from CUPS if not provided ────────────────────────
-    if (!clienteId && ex.cups) {
-      const { data: cliente } = await supabase
-        .from('clientes')
-        .select('id')
+    // ── Resolver contrato (y de ahí el cliente) por CUPS + período ─────────────
+    // El contrato es la pieza central del dominio (ADR-0001/0002): resolver por
+    // "cliente más reciente" sería un error en un cambio de titular — el
+    // contrato compatible con la FECHA de la factura es lo único inequívoco.
+    // Solo se asigna si hay exactamente un contrato candidato; si no, no se
+    // adivina (principio de producto #1 y #6).
+    let contratoId: string | null = null
+    if (ex.cups) {
+      const { data: candidatos } = await supabase
+        .from('contratos')
+        .select('id,cliente_id,fecha_alta,fecha_firma,fecha_vencimiento')
         .eq('cups', ex.cups)
-        .single()
-      if (cliente) clienteId = cliente.id
+        .then(r => ({ data: (r.data ?? []).filter(c => !clienteId || c.cliente_id === clienteId) }))
+
+      let compatibles = candidatos
+      if (ex.periodo_inicio) {
+        compatibles = candidatos.filter(c => {
+          const desde = c.fecha_alta ?? c.fecha_firma
+          if (!desde || desde > ex.periodo_inicio!) return false
+          if (c.fecha_vencimiento && c.fecha_vencimiento < (ex.periodo_fin ?? ex.periodo_inicio!)) return false
+          return true
+        })
+      }
+
+      if (compatibles.length === 1) {
+        contratoId = compatibles[0].id
+        if (!clienteId) clienteId = compatibles[0].cliente_id
+      }
     }
 
     if (!clienteId) {
       return NextResponse.json(
-        { error: `Cliente no encontrado para CUPS ${ex.cups ?? '(no detectado)'}`, cups: ex.cups },
+        {
+          error: `No se pudo determinar el cliente/contrato de forma inequívoca para CUPS ${ex.cups ?? '(no detectado)'} — sube la factura indicando el cliente a mano.`,
+          cups: ex.cups,
+        },
         { status: 404 },
       )
     }
@@ -122,6 +145,7 @@ export async function POST(req: NextRequest) {
       .from('facturas_contrato')
       .insert({
         cliente_id: clienteId,
+        contrato_id: contratoId,
         cups: ex.cups ?? null,
         comercializadora: ex.comercializadora ?? null,
         numero_factura: ex.numero_factura ?? null,

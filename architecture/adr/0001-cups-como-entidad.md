@@ -28,10 +28,8 @@ Un cambio de titular **no modifica el contrato existente**: se abre un contrato 
 - Se elimina el riesgo de que un error de tecleo o una diferencia de formato rompa silenciosamente una búsqueda histórica.
 - Las comisiones y facturas ya pueden colgar del contrato/CUPS correcto de forma consistente en todo el sistema.
 
-**Trabajo pendiente:**
-- Decidir si conviene que futuras subidas de factura en `api/facturas-contrato/upload` rellenen `contrato_id` automáticamente cuando hay un único contrato candidato sin ambigüedad (hoy queda a `null`, sin decidir todavía si automatizarlo).
-
 **Hecho:**
+- ~~Decidir si conviene que futuras subidas de factura rellenen `contrato_id` automáticamente.~~ 2026-07-26: sí, pero solo el caso inequívoco. `api/facturas-contrato/upload` ahora resuelve primero el **contrato** (CUPS + que el período de la factura caiga dentro de su vigencia) y de ahí saca el cliente — no al revés. Decisión explícita de Jonathan: no usar "el cliente más reciente" como heurística de desempate, porque en un cambio de titular podría ser el titular equivocado para esa fecha concreta; si hay 0 o varios contratos candidatos, no se adivina, la subida falla con un mensaje claro pidiendo indicar el cliente a mano. De paso corrige un bug real: la resolución anterior (`clientes.cups = ... .single()`) fallaba con error si había más de un cliente con el mismo CUPS — ya sabíamos que pasa 37+ veces.
 - ~~Fase 2: hacer que el código use `cups_id` de verdad~~ 2026-07-26: `dashboard/clientes/[id]/page.tsx` muestra un panel "Histórico de este punto de suministro" con los demás titulares que ha tenido el mismo CUPS (`contratos.cups_id`), solo si hay alguno.
 - ~~Cambiar `facturas` para que apunte a `contrato_id` en vez de a `cliente_id` directo.~~ 2026-07-26, con una corrección importante encontrada al implementar: la tabla que de verdad importa es **`facturas_contrato`** (7 filas reales, PDF + datos extraídos), no `facturas` (tabla de `init.sql`, casi sin uso — 1 fila, más un registro de comparativa que una factura archivada). `facturas` se deja tal cual.
 
