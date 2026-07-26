@@ -1,6 +1,6 @@
 # ADR-0002 — Ciclo de vida del contrato
 
-**Estado:** Aceptado (2026-07-25). Parcialmente implementado: `motivo_baja` en `contratos` + UI, hecho el 2026-07-26. El resto (avance automático de vencimiento, cambio de comercializadora como cierre+apertura) sigue pendiente.
+**Estado:** Aceptado (2026-07-25). Parcialmente implementado 2026-07-26: `motivo_baja` en `contratos` + UI, y avance automático de `fecha_vencimiento` al verificar una renovación. Pendiente: el flujo de cambio de comercializadora como cierre+apertura.
 
 ## Contexto
 
@@ -38,7 +38,6 @@ Se añade un campo `motivo_baja` a `contratos` para registrar cuál de los 4 mot
 - Reporting futuro por motivo de baja (cuántas son por cambio de gestor vs. cierre de negocio, etc.) queda disponible sin tener que reconstruirlo a mano.
 
 **Trabajo pendiente que esto implica:**
-- Automatizar el avance de `fecha_vencimiento` al verificar una renovación (hoy es manual).
-- Automatizar el resetear `renovacion_verificada` a `false` en el nuevo ciclo.
 - Implementar el flujo de "cambio de comercializadora" como cierre de contrato + apertura de uno nuevo + retrocomisión, en vez de editar el contrato existente.
 - ~~Añadir columna `motivo_baja` a `contratos`.~~ Hecho 2026-07-26 (migración `contrato_motivo_baja_y_gestion_contrato.sql` + selector en el formulario de contratos, visible solo cuando estado = baja).
+- ~~Automatizar el avance de `fecha_vencimiento` y resetear `renovacion_verificada` al verificar una renovación.~~ Hecho 2026-07-26 en `confirmRenovacion` (`dashboard/contratos/page.tsx`): el nuevo vencimiento se cuenta desde la fecha real de renovación (no la antigua) + `duracion_meses`, y `renovacion_verificada` vuelve a `false` para que los avisos funcionen en el siguiente ciclo.

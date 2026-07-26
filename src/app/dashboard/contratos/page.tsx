@@ -136,8 +136,17 @@ export default function ContratosPage() {
     const supabase = getSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
 
+    // ADR-0002: el nuevo vencimiento se cuenta desde la fecha REAL de
+    // renovación (no desde el vencimiento antiguo) — si el contrato caduca
+    // el 28 pero se renueva el 30, el año nuevo empieza el 30. Y se
+    // resetea renovacion_verificada: el flag es sobre el vencimiento
+    // vigente, y acabamos de fijar uno nuevo (futuro) que aún no está
+    // verificado — así los avisos de renovación vuelven a funcionar en el
+    // siguiente ciclo en vez de dejar de avisar para siempre.
+    const nuevaFechaVencimiento = addMonths(renovarFecha, c.duracion_meses ?? 12)
+
     const { error } = await supabase.from('contratos')
-      .update({ renovacion_verificada: true }).eq('id', c.id)
+      .update({ fecha_vencimiento: nuevaFechaVencimiento, renovacion_verificada: false }).eq('id', c.id)
     if (error) {
       toast({ title: 'Error al registrar la renovación', variant: 'destructive' })
       setRenovarSaving(false)
@@ -161,8 +170,10 @@ export default function ContratosPage() {
       toast({ title: 'Renovación guardada, pero no se pudo asignar empresa de facturación', variant: 'destructive' })
     }
 
-    setContratos(p => p.map(x => x.id === c.id ? { ...x, renovacion_verificada: true } : x))
-    toast({ title: 'Renovación registrada' })
+    setContratos(p => p.map(x => x.id === c.id
+      ? { ...x, fecha_vencimiento: nuevaFechaVencimiento, renovacion_verificada: false }
+      : x))
+    toast({ title: 'Renovación registrada', description: `Nuevo vencimiento: ${formatDate(nuevaFechaVencimiento)}` })
     setRenovarPopoverId(null)
     setRenovarSaving(false)
   }
