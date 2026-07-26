@@ -460,6 +460,7 @@ export interface FacturaValidacion {
 export interface FacturaContrato {
   id: string
   cliente_id: string
+  contrato_id?: string  // referencia al contrato concreto (ADR-0001, Fase 2)
   cups: string
   comercializadora: string
   numero_factura?: string
@@ -473,6 +474,7 @@ export interface FacturaContrato {
   ahorro_vs_anterior?: number
   pdf_url?: string
   datos_extraidos?: Record<string, unknown>
+  notas?: string
   created_at: string
 }
 

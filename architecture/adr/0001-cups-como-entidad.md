@@ -1,6 +1,6 @@
 # ADR-0001 — CUPS como entidad de referencia propia
 
-**Estado:** Aceptado (2026-07-25). Fase 1 implementada 2026-07-26 (tabla `cups` + `cups_id` opcional, 100% aditiva). Fase 2 parcialmente implementada el mismo día: panel "Histórico de este punto de suministro" en la ficha del cliente. Pendiente: migrar `facturas` a `contrato_id`.
+**Estado:** Aceptado (2026-07-25) e implementado 2026-07-26.
 
 ## Contexto
 
@@ -29,8 +29,13 @@ Un cambio de titular **no modifica el contrato existente**: se abre un contrato 
 - Las comisiones y facturas ya pueden colgar del contrato/CUPS correcto de forma consistente en todo el sistema.
 
 **Trabajo pendiente:**
-- Cambiar `facturas` para que apunte a `contrato_id` en vez de a `cliente_id` directo.
-- ~~Fase 2: hacer que el código use `cups_id` de verdad~~ Hecho 2026-07-26 en parte: `dashboard/clientes/[id]/page.tsx` muestra un panel "Histórico de este punto de suministro" con los demás titulares que ha tenido el mismo CUPS (`contratos.cups_id`), solo si hay alguno — no añade ruido en el caso normal de un CUPS con un único titular.
+- Decidir si conviene que futuras subidas de factura en `api/facturas-contrato/upload` rellenen `contrato_id` automáticamente cuando hay un único contrato candidato sin ambigüedad (hoy queda a `null`, sin decidir todavía si automatizarlo).
+
+**Hecho:**
+- ~~Fase 2: hacer que el código use `cups_id` de verdad~~ 2026-07-26: `dashboard/clientes/[id]/page.tsx` muestra un panel "Histórico de este punto de suministro" con los demás titulares que ha tenido el mismo CUPS (`contratos.cups_id`), solo si hay alguno.
+- ~~Cambiar `facturas` para que apunte a `contrato_id` en vez de a `cliente_id` directo.~~ 2026-07-26, con una corrección importante encontrada al implementar: la tabla que de verdad importa es **`facturas_contrato`** (7 filas reales, PDF + datos extraídos), no `facturas` (tabla de `init.sql`, casi sin uso — 1 fila, más un registro de comparativa que una factura archivada). `facturas` se deja tal cual.
+
+  Con solo 7 filas y tratándose de datos históricos del negocio, Jonathan pidió priorizar exactitud sobre automatización: la asignación se propuso cruzando cliente + CUPS + fechas, pero se verificó y confirmó **a mano**, fila por fila (migración `facturas_contrato_contrato_id.sql`). Se añadió también una columna `notas` en `facturas_contrato` para dejar constancia explícita del único caso especial: una factura cuyo período empieza unos días antes de la fecha de alta registrada del contrato — aceptado como inconsistencia histórica de datos, no como error de modelado, y documentado en la fila misma para que quede trazable en el futuro. Principio aplicado: las migraciones sobre datos históricos del negocio deben ser trazables y revisables, no solo automáticas.
 - ~~Crear la tabla `cups`.~~ ~~Migrar los valores de texto libre existentes a referencias (`cups_id`).~~ Hecho 2026-07-26, Fase 1 (migración `cups_entidad_fase1.sql`), 100% aditiva — no cambia el comportamiento de la web todavía, solo deja `cups_id` poblado y listo.
 
 **Hallazgos de la auditoría real (2026-07-26, 346 clientes / 174 contratos) antes de migrar:**
