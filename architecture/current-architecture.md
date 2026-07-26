@@ -28,7 +28,7 @@ Comercial: `contacto`, `send-report`, `datadis/sync`, `cliente-adjuntos` (+ `upl
 Boletín: `boletin/suscribir`, `boletin/baja`
 Otros: `asesor-foto/upload`, `news`, `telegram/webhook`
 
-**Crons Vercel** (`vercel.json`): `renewal-alerts` (8:00 diario), `client-followup` (9:00 diario), `invoice-collect-reminder` (día 20 del mes), `datadis-sync` (3:00 diario), `boletin-semanal` (lunes 6:00)
+**Crons Vercel** (`vercel.json`): `renewal-alerts` (8:00 diario), `client-followup` (9:00 diario), `invoice-collect-reminder` (día 20 del mes), `datadis-sync` (3:00 diario), `boletin-semanal` (lunes 6:00), `mercado-pmd-sync` (5:30 diario, ver [ADR-0005](adr/0005-datos-mercado-desde-esios.md))
 
 ## Tablas (Postgres/Supabase)
 
@@ -70,3 +70,4 @@ Ver [product-principles.md](product-principles.md) — cómo se toman las decisi
 - [0002 — Ciclo de vida del contrato](adr/0002-ciclo-vida-contrato.md)
 - [0003 — Modelo de comisiones](adr/0003-modelo-comisiones.md)
 - [0004 — Gestiones enlazadas a contrato](adr/0004-gestiones-y-contrato.md)
+- [0005 — Datos de mercado desde ESIOS en vez del PC local](adr/0005-datos-mercado-desde-esios.md)
