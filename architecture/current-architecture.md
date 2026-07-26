@@ -72,3 +72,4 @@ Ver [product-principles.md](product-principles.md) — cómo se toman las decisi
 - [0004 — Gestiones enlazadas a contrato](adr/0004-gestiones-y-contrato.md)
 - [0005 — Datos de mercado desde ESIOS en vez del PC local](adr/0005-datos-mercado-desde-esios.md)
 - [0006 — mercado_perd desde ESIOS (archivo 70, rango de fechas)](adr/0006-mercado-perd-desde-esios.md)
+- [0007 — tarifas_fijas se queda en Excel local (por ahora)](adr/0007-tarifas-fijas-se-queda-en-excel.md)
