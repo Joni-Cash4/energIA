@@ -272,6 +272,13 @@ export interface Contrato {
   // CO / margen del agente pactado en ESTE contrato (€/MWh sobre la energía).
   // Si está a null se usa el valor por defecto del producto en formulas_indexadas.
   co_energia_mwh?: number
+  // Seguimiento de comisión (ver /dashboard/comisiones y ADR-0003): kWh anuales
+  // que la comercializadora reportó al calcular la comisión inicial, fee €/MWh
+  // pactado, y reparto (1.00=Próxima, 0.95=Atulado). importe = kwh_base_comision
+  // × fee_energia_mwh / 1000 × reparto_energia.
+  kwh_base_comision?: number
+  fee_energia_mwh?: number
+  reparto_energia?: number
   notas?: string
   created_at: string
   updated_at: string
