@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, CheckCircle2, Loader2, X, Save, FileCheck, Search } from 'lucide-react'
+import { Plus, CheckCircle2, Loader2, X, Save, FileCheck, Search, ArrowLeftRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -88,6 +88,15 @@ export default function ContratosPage() {
   const [renovarImporte, setRenovarImporte] = useState('')
   const [renovarImporteCalculado, setRenovarImporteCalculado] = useState(false)
   const [renovarSaving, setRenovarSaving] = useState(false)
+
+  // Cambio de comercializadora (ADR-0002): cierra el contrato viejo + abre uno
+  // nuevo + retrocomisión, en vez de editar el campo comercializadora in situ.
+  const [cambioPopoverId, setCambioPopoverId] = useState<string | null>(null)
+  const [cambioComercializadora, setCambioComercializadora] = useState('')
+  const [cambioFecha, setCambioFecha] = useState('')
+  const [cambioRetrocomision, setCambioRetrocomision] = useState('')
+  const [cambioImporteAlta, setCambioImporteAlta] = useState('')
+  const [cambioSaving, setCambioSaving] = useState(false)
 
   const load = useCallback(async () => {
     const supabase = getSupabaseClient()
@@ -188,6 +197,107 @@ export default function ContratosPage() {
     toast({ title: 'Renovación registrada', description: `Nuevo vencimiento: ${formatDate(nuevaFechaVencimiento)}` })
     setRenovarPopoverId(null)
     setRenovarSaving(false)
+  }
+
+  function openCambioPopover(c: Contrato) {
+    setCambioComercializadora('')
+    setCambioFecha(new Date().toISOString().split('T')[0])
+    setCambioRetrocomision('0')
+    setCambioImporteAlta('')
+    setCambioPopoverId(c.id)
+  }
+
+  // ADR-0002: un cambio de comercializadora NUNCA edita el contrato existente
+  // in situ (corrompería el histórico de comisiones/gestiones/facturas ya
+  // ligadas a ese contrato_id). Se cierra el viejo (baja + retrocomisión) y
+  // se abre uno nuevo con el contador reiniciado a 12 meses. Lo estructural
+  // (fechas, estado, motivo_baja) es determinista y se hace solo; los
+  // importes (retrocomisión, comisión de alta) NUNCA se adivinan — los pide
+  // el formulario.
+  async function confirmCambioComercializadora(c: Contrato) {
+    if (!cambioComercializadora.trim() || !cambioFecha || !cambioImporteAlta) return
+    setCambioSaving(true)
+    const supabase = getSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    // 1. Cerrar el contrato viejo.
+    const { error: errBaja } = await supabase.from('contratos')
+      .update({ estado: 'baja', motivo_baja: 'cambio_comercializadora' })
+      .eq('id', c.id)
+    if (errBaja) {
+      toast({ title: 'Error al cerrar el contrato anterior', variant: 'destructive' })
+      setCambioSaving(false)
+      return
+    }
+
+    // 2. Retrocomisión sobre el contrato viejo, solo si el importe es > 0.
+    const retro = Number(cambioRetrocomision || 0)
+    if (retro > 0) {
+      const empresaVieja = resolverEmpresaPago(c.comercializadora, empresasPago)
+      if (empresaVieja) {
+        await supabase.from('comisiones_generadas').insert({
+          user_id: user!.id,
+          contrato_id: c.id,
+          cliente_id: c.cliente_id ?? null,
+          cups: c.cups ?? null,
+          comercializadora: c.comercializadora ?? null,
+          empresa_pago_id: empresaVieja.id,
+          tipo: 'correccion',
+          importe: -retro,
+          fecha: cambioFecha,
+          notas: `Retrocomisión por cambio a ${cambioComercializadora.trim()}`,
+        })
+      } else {
+        toast({ title: 'No se pudo asignar empresa de facturación para la retrocomisión — apúntala a mano', variant: 'destructive' })
+      }
+    }
+
+    // 3. Abrir el contrato nuevo — contador reiniciado a 12 meses desde la
+    // fecha real del cambio (mismo criterio que una renovación normal).
+    const nuevaFechaVencimiento = addMonths(cambioFecha, 12)
+    const { data: nuevo, error: errAlta } = await supabase.from('contratos').insert({
+      user_id: user!.id,
+      cliente_id: c.cliente_id ?? null,
+      cups: c.cups ?? null,
+      cups_id: c.cups_id ?? null,
+      comercializadora: cambioComercializadora.trim(),
+      fecha_alta: cambioFecha,
+      fecha_vencimiento: nuevaFechaVencimiento,
+      duracion_meses: 12,
+      estado: 'activo',
+      estado_firma: 'firmado',
+      a_cobrar: Number(cambioImporteAlta),
+    }).select('id').single()
+
+    if (errAlta || !nuevo) {
+      toast({ title: 'El contrato anterior se cerró, pero el nuevo no se pudo crear — créalo a mano', variant: 'destructive' })
+      setCambioSaving(false)
+      load()
+      return
+    }
+
+    // 4. Comisión de alta sobre el contrato nuevo.
+    const empresaNueva = resolverEmpresaPago(cambioComercializadora, empresasPago)
+    if (empresaNueva) {
+      await supabase.from('comisiones_generadas').insert({
+        user_id: user!.id,
+        contrato_id: nuevo.id,
+        cliente_id: c.cliente_id ?? null,
+        cups: c.cups ?? null,
+        comercializadora: cambioComercializadora.trim(),
+        empresa_pago_id: empresaNueva.id,
+        tipo: 'alta',
+        importe: Number(cambioImporteAlta),
+        fecha: cambioFecha,
+      })
+    } else {
+      toast({ title: 'Contrato nuevo creado, pero no se pudo asignar empresa de facturación para la comisión de alta', variant: 'destructive' })
+    }
+
+    toast({ title: 'Cambio de comercializadora registrado', description: `Nuevo contrato con ${cambioComercializadora.trim()}` })
+    setCambioPopoverId(null)
+    setCambioSaving(false)
+    load()
   }
 
   async function handleToggle(id: string, current: boolean) {
@@ -500,6 +610,52 @@ export default function ContratosPage() {
                               </PopoverContent>
                             </Popover>
                           )}
+                          {c.estado === 'activo' && (
+                            <Popover open={cambioPopoverId === c.id} onOpenChange={open => { if (!open) setCambioPopoverId(null) }}>
+                              <PopoverTrigger asChild>
+                                <button
+                                  onClick={() => openCambioPopover(c)}
+                                  title="Cambiar de comercializadora"
+                                  className="ml-1.5 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors bg-[#1A1A1A] border-[#2A2A2A] text-[#6B7280] hover:border-[#3A3A3A] hover:text-white">
+                                  <ArrowLeftRight className="w-3 h-3" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-72 p-4" onClick={e => e.stopPropagation()}>
+                                <p className="text-white text-xs font-medium mb-1">Cambiar de comercializadora</p>
+                                <p className="text-[#6B7280] text-[11px] mb-3">
+                                  Cierra este contrato ({c.comercializadora ?? '—'}) y abre uno nuevo. No edites el campo comercializadora a mano — se pierde el histórico.
+                                </p>
+                                <div className="space-y-3">
+                                  <div>
+                                    <label className="block text-[10px] text-[#9CA3AF] mb-1">Nueva comercializadora</label>
+                                    <Input value={cambioComercializadora}
+                                      onChange={e => setCambioComercializadora(e.target.value)} className="h-8 text-xs" />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] text-[#9CA3AF] mb-1">Fecha del cambio</label>
+                                    <Input type="date" value={cambioFecha}
+                                      onChange={e => setCambioFecha(e.target.value)} className="h-8 text-xs" />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] text-[#9CA3AF] mb-1">Retrocomisión (€, 0 si no aplica)</label>
+                                    <Input type="number" step="0.01" value={cambioRetrocomision}
+                                      onChange={e => setCambioRetrocomision(e.target.value)} className="h-8 text-xs" />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] text-[#9CA3AF] mb-1">Comisión de alta del contrato nuevo (€)</label>
+                                    <Input type="number" step="0.01" value={cambioImporteAlta}
+                                      onChange={e => setCambioImporteAlta(e.target.value)} className="h-8 text-xs" />
+                                  </div>
+                                  <Button onClick={() => confirmCambioComercializadora(c)}
+                                    disabled={cambioSaving || !cambioComercializadora.trim() || !cambioFecha || !cambioImporteAlta}
+                                    className="w-full h-8 text-xs gap-1.5">
+                                    {cambioSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                                    Confirmar cambio
+                                  </Button>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          )}
                         </td>
                       </motion.tr>
                     )
@@ -548,10 +704,9 @@ export default function ContratosPage() {
                 </div>
 
                 {([
-                  { label: 'CUPS',             key: 'cups',             placeholder: 'ES0021...' },
-                  { label: 'Comercializadora', key: 'comercializadora', placeholder: '' },
-                  { label: 'Tarifa',           key: 'tarifa',           placeholder: '2.0TD / 3.0TD' },
-                  { label: 'Producto',         key: 'producto',         placeholder: '' },
+                  { label: 'CUPS',     key: 'cups',     placeholder: 'ES0021...' },
+                  { label: 'Tarifa',   key: 'tarifa',   placeholder: '2.0TD / 3.0TD' },
+                  { label: 'Producto', key: 'producto', placeholder: '' },
                 ] as const).map(({ label, key, placeholder }) => (
                   <div key={key}>
                     <label className="block text-xs text-[#9CA3AF] mb-1.5">{label}</label>
@@ -559,6 +714,16 @@ export default function ContratosPage() {
                       onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))} />
                   </div>
                 ))}
+
+                <div>
+                  <label className="block text-xs text-[#9CA3AF] mb-1.5">
+                    Comercializadora
+                    {editId && <span className="text-[#4B5563] normal-case"> · usa &quot;Cambiar de comercializadora&quot; para modificarla</span>}
+                  </label>
+                  <Input value={form.comercializadora} disabled={!!editId}
+                    className={editId ? 'opacity-50 cursor-not-allowed' : ''}
+                    onChange={e => setForm(p => ({ ...p, comercializadora: e.target.value }))} />
+                </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>

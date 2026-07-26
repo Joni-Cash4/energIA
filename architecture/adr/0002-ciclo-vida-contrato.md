@@ -1,6 +1,6 @@
 # ADR-0002 — Ciclo de vida del contrato
 
-**Estado:** Aceptado (2026-07-25). Parcialmente implementado 2026-07-26: `motivo_baja` en `contratos` + UI, y avance automático de `fecha_vencimiento` al verificar una renovación. Pendiente: el flujo de cambio de comercializadora como cierre+apertura.
+**Estado:** Aceptado (2026-07-25) e implementado 2026-07-26.
 
 ## Contexto
 
@@ -37,7 +37,15 @@ Se añade un campo `motivo_baja` a `contratos` para registrar cuál de los 4 mot
 - Los avisos de renovación pueden seguir funcionando de forma indefinida, ciclo tras ciclo, sin que un contrato "desaparezca" del radar tras la primera renovación verificada.
 - Reporting futuro por motivo de baja (cuántas son por cambio de gestor vs. cierre de negocio, etc.) queda disponible sin tener que reconstruirlo a mano.
 
-**Trabajo pendiente que esto implica:**
-- Implementar el flujo de "cambio de comercializadora" como cierre de contrato + apertura de uno nuevo + retrocomisión, en vez de editar el contrato existente.
-- ~~Añadir columna `motivo_baja` a `contratos`.~~ Hecho 2026-07-26 (migración `contrato_motivo_baja_y_gestion_contrato.sql` + selector en el formulario de contratos, visible solo cuando estado = baja).
-- ~~Automatizar el avance de `fecha_vencimiento` y resetear `renovacion_verificada` al verificar una renovación.~~ Hecho 2026-07-26 en `confirmRenovacion` (`dashboard/contratos/page.tsx`): el nuevo vencimiento se cuenta desde la fecha real de renovación (no la antigua) + `duracion_meses`, y `renovacion_verificada` vuelve a `false` para que los avisos funcionen en el siguiente ciclo.
+**Hecho:**
+- ~~Añadir columna `motivo_baja` a `contratos`.~~ 2026-07-26 (migración `contrato_motivo_baja_y_gestion_contrato.sql` + selector en el formulario de contratos, visible solo cuando estado = baja).
+- ~~Automatizar el avance de `fecha_vencimiento` y resetear `renovacion_verificada` al verificar una renovación.~~ 2026-07-26 en `confirmRenovacion` (`dashboard/contratos/page.tsx`): el nuevo vencimiento se cuenta desde la fecha real de renovación (no la antigua) + `duracion_meses`, y `renovacion_verificada` vuelve a `false` para que los avisos funcionen en el siguiente ciclo.
+- ~~Implementar el flujo de "cambio de comercializadora" como cierre de contrato + apertura de uno nuevo + retrocomisión.~~ 2026-07-26.
+
+  **Verificación del comportamiento real, antes de implementar:** el formulario de edición permitía cambiar `comercializadora` de un contrato existente como un campo de texto cualquiera — sin aviso, sin acción asociada. Cualquier `comisiones_generadas`, `gestiones` o `facturas_contrato` ya ligada a ese `contrato_id` habría quedado silenciosamente atribuida a la comercializadora nueva, aunque ocurriera bajo la vieja. No había ningún caso real en producción todavía (0 filas `correccion` en `comisiones_generadas`, los 2 contratos con `estado=baja` existentes son de antes de tener `motivo_baja`) — la verificación fue de código, no de datos históricos.
+
+  **Corrección del dominio:** `comercializadora` pasa a ser de solo lectura al editar un contrato existente (`dashboard/contratos/page.tsx`) — solo editable al crear uno nuevo. Cualquier cambio real tiene que pasar por la acción explícita "Cambiar de comercializadora" (icono ⇄ junto a "Verificar", solo en contratos activos).
+
+  **Qué se automatiza (determinista) y qué no (requiere el dato real):** al confirmar, se automatiza sin pedir nada: cerrar el contrato viejo (`estado=baja`, `motivo_baja=cambio_comercializadora`), abrir uno nuevo (mismo cliente/CUPS, contador reiniciado a 12 meses desde la fecha real del cambio). Lo que SÍ pide el formulario, porque no se puede adivinar: el importe de la retrocomisión (0 si no aplica) y el importe de la comisión de alta del contrato nuevo — se registran como `comisiones_generadas` (`correccion` en negativo sobre el contrato viejo, `alta` sobre el nuevo).
+
+  De paso, verificando esto se encontró y arregló un bug de permisos real: `comisiones_generadas` no tenía el grant de `service_role` (mismo patrón que `facturas_grants.sql`) — migración `comisiones_generadas_grants.sql`.
