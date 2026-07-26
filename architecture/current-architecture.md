@@ -36,7 +36,7 @@ Otros: `asesor-foto/upload`, `news`, `telegram/webhook`
 
 | Dominio | Tablas |
 |---|---|
-| Comercial | `leads`, `clientes`, `contratos`, `acciones` |
+| Comercial | `leads`, `clientes`, `contratos`, `acciones`, `cups` (ver [ADR-0001](adr/0001-cups-como-entidad.md)) |
 | Facturas | `facturas`, `consumos_datadis`, `potencia_datadis`, `factura_validaciones` |
 | Comisiones | `empresas_pago`, `comisiones_generadas` |
 | Gestiones | `gestiones`, `gestion_eventos` |

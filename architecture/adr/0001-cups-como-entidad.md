@@ -1,6 +1,6 @@
 # ADR-0001 — CUPS como entidad de referencia propia
 
-**Estado:** Aceptado (2026-07-25). Decisión de diseño — no implementado todavía en código ni base de datos.
+**Estado:** Aceptado (2026-07-25). Fase 1 implementada 2026-07-26 (tabla `cups` + `cups_id` opcional, 100% aditiva). Fase 2 (usar `cups_id` en el código, migrar `facturas` a `contrato_id`) pendiente.
 
 ## Contexto
 
@@ -28,7 +28,13 @@ Un cambio de titular **no modifica el contrato existente**: se abre un contrato 
 - Se elimina el riesgo de que un error de tecleo o una diferencia de formato rompa silenciosamente una búsqueda histórica.
 - Las comisiones y facturas ya pueden colgar del contrato/CUPS correcto de forma consistente en todo el sistema.
 
-**Trabajo pendiente que esto implica (no hecho todavía):**
-- Crear la tabla `cups`.
-- Migrar los valores de texto libre existentes a referencias (`cups_id`) en las tablas que hoy usan texto.
+**Trabajo pendiente:**
 - Cambiar `facturas` para que apunte a `contrato_id` en vez de a `cliente_id` directo.
+- Fase 2: hacer que el código use `cups_id` de verdad (ej. histórico de un CUPS en la ficha del cliente), en vez de solo tenerlo poblado en la base de datos sin usar todavía.
+- ~~Crear la tabla `cups`.~~ ~~Migrar los valores de texto libre existentes a referencias (`cups_id`).~~ Hecho 2026-07-26, Fase 1 (migración `cups_entidad_fase1.sql`), 100% aditiva — no cambia el comportamiento de la web todavía, solo deja `cups_id` poblado y listo.
+
+**Hallazgos de la auditoría real (2026-07-26, 346 clientes / 174 contratos) antes de migrar:**
+- 37 CUPS en `clientes` compartidos por 2+ titulares distintos, todos con contrato "firmado" — confirma que el problema es real y con volumen, no un caso raro de hostelería. Ejemplo real: un CUPS con 4 titulares distintos a lo largo del tiempo.
+- Sin problemas de mayúsculas/espacios en los datos — simplificó la migración.
+- Un código (`ES002100003285478HV`) tiene 19 caracteres en vez de los 20 habituales — probable error de tecleo, importado tal cual sin adivinar el valor correcto. Pendiente de que Jonathan lo corrija a mano en la tabla `cups` cuando sepa el código real.
+- Un CUPS (`...822029MZ`) aparece en dos fichas de cliente: una es el caso real de "Casos reales" (Mariano Gómez Pérez), la otra es un registro cuyo *nombre* es literalmente ese CUPS, estado "prospecto" — parece un duplicado huérfano del comparador público, no un caso real de cambio de titular. No se ha tocado, pendiente de revisión/limpieza por Jonathan.
