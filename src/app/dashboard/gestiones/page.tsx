@@ -71,7 +71,7 @@ export default function GestionesPage() {
     const supabase = getSupabaseClient()
     const [{ data: g }, { data: cl }] = await Promise.all([
       supabase.from('gestiones')
-        .select('*')
+        .select('*, contrato:contratos(id,cups,comercializadora)')
         .order('proximo_seguimiento', { ascending: true, nullsFirst: false }),
       supabase.from('clientes').select('id,nombre,empresa,cups').order('nombre'),
     ])
@@ -306,7 +306,7 @@ export default function GestionesPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[#1F1F1F]">
-                    {['Seguimiento', 'Cliente', 'Compañía', 'Tipo', 'Asunto', 'Próx. fecha', 'Estado'].map(h => (
+                    {['Seguimiento', 'Cliente', 'Contrato', 'Compañía', 'Tipo', 'Asunto', 'Próx. fecha', 'Estado'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs text-[#6B7280] uppercase tracking-wide font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -333,6 +333,11 @@ export default function GestionesPage() {
                           )}
                           {g.revisar_cliente && <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 shrink-0" />}
                         </div>
+                      </td>
+                      <td className="px-4 py-3 text-[#9CA3AF] text-xs whitespace-nowrap">
+                        {g.contrato
+                          ? [g.contrato.cups, g.contrato.comercializadora].filter(Boolean).join(' — ') || '—'
+                          : '—'}
                       </td>
                       <td className="px-4 py-3 text-[#9CA3AF] whitespace-nowrap">{g.compania}</td>
                       <td className="px-4 py-3">

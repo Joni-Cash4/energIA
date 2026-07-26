@@ -115,7 +115,7 @@ export default function ClienteDetailPage() {
       supabase.from('consumos_datadis').select('*').eq('cliente_id', id).order('year_month', { ascending: false }),
       supabase.from('facturas_contrato').select('*').eq('cliente_id', id).order('periodo_fin', { ascending: false }),
       supabase.from('potencia_datadis').select('*').eq('cliente_id', id).order('year_month', { ascending: false }),
-      supabase.from('gestiones').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
+      supabase.from('gestiones').select('*, contrato:contratos(id,cups,comercializadora)').eq('cliente_id', id).order('created_at', { ascending: false }),
       supabase.from('cliente_adjuntos').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
     ]).then(([{ data: c }, { data: f }, { data: ct }, { data: ac }, { data: cd }, { data: fc }, { data: pd }, { data: ge }, { data: adj }]) => {
       if (!c) { router.replace('/dashboard/clientes'); return }
@@ -839,6 +839,11 @@ export default function ClienteDetailPage() {
                           {formatDate(g.fecha_alta)}{g.fecha_resolucion ? ` → ${formatDate(g.fecha_resolucion)}` : ''}
                         </span>
                       </div>
+                      {g.contrato && (
+                        <p className="text-[#6B7280] text-xs mt-0.5">
+                          {[g.contrato.cups, g.contrato.comercializadora].filter(Boolean).join(' — ')}
+                        </p>
+                      )}
                       <p className="text-[#9CA3AF] text-sm mt-0.5 line-clamp-2">{g.asunto}</p>
                       {g.resolucion && (
                         <p className="text-[#00E676]/80 text-xs mt-0.5 line-clamp-2">✓ {g.resolucion}</p>

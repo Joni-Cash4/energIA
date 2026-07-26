@@ -382,6 +382,7 @@ export interface Gestion {
   created_at: string
   updated_at: string
   cliente?: Pick<Cliente, 'id' | 'nombre' | 'empresa'>
+  contrato?: Pick<Contrato, 'id' | 'cups' | 'comercializadora'>
 }
 
 export interface GestionEvento {

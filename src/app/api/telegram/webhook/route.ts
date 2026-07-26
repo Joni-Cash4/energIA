@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 import { sendTelegramMessage, downloadTelegramFile } from '@/lib/telegram'
 import { transcribeAudio } from '@/lib/groq'
+import { resolverContratoGestion } from '@/lib/gestiones'
 
 const EXTRACT_SYSTEM_PROMPT = `Eres un asistente que convierte transcripciones de notas de voz de un asesor energético en una gestión estructurada para su CRM. Tu única función es devolver un JSON válido. NUNCA expliques tu razonamiento, NUNCA escribas texto fuera del JSON, NUNCA uses markdown. Solo JSON.`
 
@@ -25,6 +26,7 @@ Extrae y devuelve ÚNICAMENTE este JSON:
   "cliente_id": "string|null - el id EXACTO de la lista de arriba del cliente que mejor coincide con el nombre mencionado en el audio, null si no hay ningún candidato razonable",
   "confianza": "alta|media|baja - alta solo si el nombre mencionado coincide claramente con un único cliente de la lista, sin ambigüedad",
   "titular_sugerido": "string|null - el nombre tal cual se mencionó en el audio, para mostrar si no hay match seguro",
+  "cups_mencionado": "string|null - código CUPS si se menciona explícitamente (empieza por ES, 20-22 caracteres), null si no se menciona. Es solo un dato extraído, no decidas tú a qué contrato corresponde.",
   "proximo_seguimiento": "YYYY-MM-DD|null - solo si se menciona una fecha o plazo concreto, si no null"
 }
 
@@ -37,6 +39,7 @@ interface ExtractResult {
   cliente_id: string | null
   confianza: 'alta' | 'media' | 'baja'
   titular_sugerido: string | null
+  cups_mencionado: string | null
   proximo_seguimiento: string | null
 }
 
@@ -105,10 +108,28 @@ export async function POST(req: NextRequest) {
       : undefined
     const revisarCliente = !clienteMatch
 
+    // Resolución determinista del contrato (ADR-0004): la IA solo aporta
+    // evidencias (CUPS/comercializadora mencionados), nunca decide ella el
+    // contrato — eso lo hace resolverContratoGestion comparando contra los
+    // contratos reales del cliente, y solo enlaza si hay un único candidato.
+    let contratoId: string | null = null
+    if (clienteMatch) {
+      const { data: contratosCliente } = await supabase
+        .from('contratos')
+        .select('id,cups,comercializadora')
+        .eq('cliente_id', clienteMatch.id)
+      contratoId = resolverContratoGestion(contratosCliente ?? [], {
+        cups: parsed.cups_mencionado,
+        comercializadora: parsed.compania,
+      })
+    }
+
     const payload = {
       user_id: process.env.JONATHAN_USER_ID!,
       cliente_id: clienteMatch?.id ?? null,
+      contrato_id: contratoId,
       titular: clienteMatch ? null : (parsed.titular_sugerido || null),
+      cups: parsed.cups_mencionado || null,
       compania: parsed.compania || clienteMatch?.comercializadora || 'Por confirmar',
       tipo: 'solicitamos' as const,
       asunto: parsed.asunto || contenido.slice(0, 200),
