@@ -18,6 +18,8 @@ type ContratoRaw = {
   fecha_vencimiento: string | null
   kwh_base_comision: number | null
   fee_energia_mwh: number | null
+  kw_base_comision: number | null
+  fee_potencia_mwh: number | null
   reparto_energia: number | null
   a_cobrar: number | null
   clientes: { nombre: string; empresa: string | null } | null
@@ -129,7 +131,7 @@ export default function ComisionesPage() {
     const [{ data: rawContratos }, { data: rawFacturas }] = await Promise.all([
       supabase
         .from('contratos')
-        .select('id,cliente_id,comercializadora,tarifa,fecha_alta,fecha_vencimiento,kwh_base_comision,fee_energia_mwh,reparto_energia,a_cobrar,clientes(nombre,empresa)')
+        .select('id,cliente_id,comercializadora,tarifa,fecha_alta,fecha_vencimiento,kwh_base_comision,fee_energia_mwh,kw_base_comision,fee_potencia_mwh,reparto_energia,a_cobrar,clientes(nombre,empresa)')
         .eq('estado', 'activo')
         .not('fecha_alta', 'is', null)
         .order('fecha_alta', { ascending: false }),
@@ -255,7 +257,7 @@ export default function ComisionesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1F1F1F]">
-                {['Cliente','Comerc.','Alta','Meses','Base comisión','kWh real acum.','Proyección anual','Desviación','Fee','Estado','Reclamable'].map(h => (
+                {['Cliente','Comerc.','Alta','Meses','Base comisión','kWh real acum.','Proyección anual','Desviación','Fee','Potencia (opcional)','Estado','Reclamable'].map(h => (
                   <th key={h} className="px-3 py-3 text-left text-xs text-[#6B7280] uppercase tracking-wide font-medium whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -348,6 +350,24 @@ export default function ComisionesPage() {
                         step={0.5}
                         onSave={v => updateContrato(c.id, { fee_energia_mwh: v })}
                       />
+                    </td>
+
+                    {/* Potencia — opcional, normalmente no se pacta */}
+                    <td className="px-3 py-3">
+                      <div className="flex flex-col gap-1">
+                        <InlineEdit
+                          value={c.kw_base_comision}
+                          suffix="kW"
+                          step={0.5}
+                          onSave={v => updateContrato(c.id, { kw_base_comision: v })}
+                        />
+                        <InlineEdit
+                          value={c.fee_potencia_mwh}
+                          suffix="€/kW"
+                          step={0.1}
+                          onSave={v => updateContrato(c.id, { fee_potencia_mwh: v })}
+                        />
+                      </div>
                     </td>
 
                     {/* Estado */}

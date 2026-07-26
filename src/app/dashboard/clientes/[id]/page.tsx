@@ -100,8 +100,6 @@ export default function ClienteDetailPage() {
   // Management fields
   const [estado,               setEstado]               = useState<ClienteEstado>('prospecto')
   const [notas,                setNotas]                = useState('')
-  const [feeEnergia,           setFeeEnergia]           = useState('')
-  const [feePotencia,          setFeePotencia]          = useState('')
   const [kwhAnuales,           setKwhAnuales]           = useState('')
   const [kwContratados,        setKwContratados]        = useState('')
   const [proximoContacto,      setProximoContacto]      = useState('')
@@ -136,8 +134,6 @@ export default function ClienteDetailPage() {
       setProvincia(c.provincia ?? '')
       setEstado(c.estado)
       setNotas(c.notas ?? '')
-      setFeeEnergia(String(c.fee_energia ?? ''))
-      setFeePotencia(String(c.fee_potencia ?? ''))
       setKwhAnuales(String(c.kwh_anuales ?? ''))
       setKwContratados(String(c.kw_contratados ?? ''))
       setProximoContacto(c.proximo_contacto ?? '')
@@ -220,8 +216,6 @@ export default function ClienteDetailPage() {
       provincia:             provincia || null,
       estado,
       notas,
-      fee_energia:           feeEnergia ? Number(feeEnergia) : null,
-      fee_potencia:          feePotencia ? Number(feePotencia) : null,
       kwh_anuales:           kwhAnuales ? Number(kwhAnuales) : null,
       kw_contratados:        kwContratados ? Number(kwContratados) : null,
       proximo_contacto:       proximoContacto || null,
@@ -1075,8 +1069,6 @@ export default function ClienteDetailPage() {
             <h2 className="text-white font-semibold mb-4">Datos de cartera</h2>
             <div className="space-y-3">
               {([
-                { label: 'Fee energía (€/MWh)',     value: feeEnergia,          set: setFeeEnergia,          step: '0.5' },
-                { label: 'Fee potencia (€/kW·año)', value: feePotencia,         set: setFeePotencia,         step: '0.1' },
                 { label: 'kWh anuales',             value: kwhAnuales,          set: setKwhAnuales,          step: '1000' },
                 { label: 'kW contratados',          value: kwContratados,       set: setKwContratados,       step: '0.5' },
               ] as const).map(({ label, value, set, step }) => (

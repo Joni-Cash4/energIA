@@ -1,6 +1,6 @@
 # ADR-0003 — Modelo de comisiones
 
-**Estado:** Aceptado (2026-07-25). Implementado 2026-07-26: importe automático al renovar, y columna de comisión consolidada. Pendiente: el flujo de foto + IA.
+**Estado:** Aceptado (2026-07-25) e implementado 2026-07-26.
 
 ## Contexto
 
@@ -39,7 +39,18 @@ Flujo objetivo: al tramitar alta o renovación, se sube la foto/captura de la co
 - El importe a facturar deja de depender de que alguien lo escriba bien a mano — se deriva de fee × consumo.
 - Reutiliza un patrón ya construido y probado (`process-invoice`) en vez de inventar uno nuevo para las comisiones.
 
-**Trabajo pendiente que esto implica:**
-- Construir el flujo de subida de foto + extracción por IA de la comisión (análogo a `process-invoice`).
-- ~~Decidir y consolidar el nombre/columna única para esta comisión.~~ Hecho 2026-07-26, con datos reales delante (174 contratos): `co_energia_mwh` no se usaba nunca (0 rellenos) — retirada. `fee_energia_mwh` tenía un valor por defecto (5) que 173 de 174 contratos arrastraban sin haberlo tocado nunca — se quitó el default y se limpiaron esos 173 a `null` (migración `consolidar_comision_contrato.sql`). El validador (`validador-factura.ts`) pasa a leer `fee_energia_mwh` como override por contrato en vez de `co_energia_mwh`. **Ojo:** 4 de los 5 contratos con Próxima tramitados en julio 2026 quedaron con `fee_energia_mwh = null` tras la limpieza (nunca tuvieron un valor real, solo el placeholder) — pendiente de que Jonathan los rellene con el fee real: `CDAD PROP GARAJES Y TRASTEROS...ERANDIO`, `BAR RESTAURANTE LOS PICUDOS SL` (3 contratos). El quinto (Antonio Canales García, 18 €/MWh) ya estaba bien y no se tocó.
-- ~~Cambiar el popover de "Verificar renovación" para calcular el importe automáticamente en vez de pedirlo escrito.~~ Hecho 2026-07-26: `calcularImporteComision()` en `dashboard/contratos/page.tsx` — `importe = kwh_base_comision × fee_energia_mwh / 1000 × reparto_energia`, misma fórmula ya validada en `/dashboard/comisiones` (columna "reclamable"). Descubrimiento al implementar: la fórmula real también depende de `reparto_energia` (1.00 Próxima, 0.95 Atulado), un factor que no estaba recogido en la decisión original de este ADR. Si el contrato no tiene `kwh_base_comision`/`fee_energia_mwh` rellenos, el campo sigue siendo editable a mano (fallback a `a_cobrar`) — no se fuerza a rellenar esos datos antes de poder renovar.
+**Trabajo pendiente:**
+- Construir el flujo de subida de foto + extracción por IA de la comisión (análogo a `process-invoice`) — sigue sin hacer, es la única pieza grande que queda de este ADR.
+- 2 de los 5 contratos de Próxima tramitados en julio 2026 siguen con `fee_energia_mwh = null` (nunca tuvieron un valor real): `CDAD PROP GARAJES Y TRASTEROS DE ENEKURIBIDEA EN ERANDIO`, `BAR RESTAURANTE LOS PICUDOS SL` (2 contratos, mismo cliente). Los otros 3 ya están bien.
+
+**Hecho:**
+- ~~Decidir y consolidar el nombre/columna única para esta comisión.~~ 2026-07-26, con datos reales delante (174 contratos): `co_energia_mwh` no se usaba nunca (0 rellenos) — retirada. `fee_energia_mwh` tenía un valor por defecto (5) que 173 de 174 contratos arrastraban sin haberlo tocado nunca — se quitó el default y se limpiaron esos 173 a `null` (migración `consolidar_comision_contrato.sql`). El validador (`validador-factura.ts`) pasa a leer `fee_energia_mwh` como override por contrato en vez de `co_energia_mwh`.
+- ~~Cambiar el popover de "Verificar renovación" para calcular el importe automáticamente.~~ 2026-07-26: `importe = kwh_base_comision × fee_energia_mwh / 1000 × reparto_energia`, misma fórmula ya validada en `/dashboard/comisiones` (columna "reclamable"). Descubrimiento al implementar: la fórmula real también depende de `reparto_energia` (1.00 Próxima, 0.95 Atulado), un factor que no estaba recogido en la decisión original de este ADR.
+
+**Cierre del ADR — auditoría de duplicidad, 2026-07-26** (a petición explícita de Jonathan: "entender la comisión como un evento del contrato, verificar que el modelo actual refleja esa realidad y eliminar cualquier duplicidad o cálculo manual innecesario"):
+
+- **Hallazgo:** `/dashboard/cartera` calculaba la comisión con un modelo totalmente distinto y casi vacío (`clientes.fee_energia`/`fee_potencia`/`kw_contratados`, 346 clientes: 1/0/0 rellenos) en vez de usar `contratos` — mostraba "Comisión mensual/anual total" cerca de 0 € para toda la cartera, un KPI visible y engañoso.
+- **Decisión de dominio:** la comisión por potencia es real (confirmado por Jonathan: "normalmente no la introducimos, pero la opción está") — se mueve al nivel correcto, `contratos` (`kw_base_comision` + `fee_potencia_mwh`, mismo patrón que `kwh_base_comision`/`fee_energia_mwh`), no se elimina el concepto. `clientes.kw_contratados` NO se toca — tiene un uso real distinto (potencia contratada vs. demanda medida por Datadis), no es un campo de comisión.
+- **Eliminada la duplicidad de código**, no solo de datos: se creó `calcularComisionContrato()` en `lib/comisiones.ts` (energía + potencia opcional × reparto) y la usan ahora `dashboard/contratos` (importe al renovar) y `dashboard/cartera` (proyección de cartera) — antes cada sitio tenía su propia fórmula.
+- **Migración `comision_potencia_y_limpieza_clientes.sql`**: añade `kw_base_comision`/`fee_potencia_mwh` a `contratos`; traslada el único valor real de `clientes.fee_energia` (20 €/MWh, confirmado correcto por Jonathan) al contrato nuevo de Próxima de `CDAD PROP DE GARAJES Y TRASTEROS 3-4-5-6 DE ENEKURIBIDEA EN ERANDIO`; retira `clientes.fee_energia`/`fee_potencia` (sin uso real, duplicaban el modelo de contrato).
+- De paso, verificando esto se encontró y arregló otro bug de permisos real (mismo patrón recurrente): `comisiones_generadas` no tenía el grant de `service_role` — migración `comisiones_generadas_grants.sql`.

@@ -178,9 +178,10 @@ export interface Cliente {
   estado: ClienteEstado
   notas?: string
   revision_pendiente?: boolean
-  // cartera fields
-  fee_energia?: number
-  fee_potencia?: number
+  // kwh_anuales: tamaño de cartera (kWh bajo gestión). kw_contratados: potencia
+  // contratada, usada para comparar contra la demanda real medida (Datadis) —
+  // ninguno de los dos es un dato de comisión (eso vive en Contrato, ver
+  // ADR-0003 y lib/comisiones.ts).
   kwh_anuales?: number
   kw_contratados?: number
   proximo_contacto?: string
@@ -285,12 +286,15 @@ export interface Contrato {
   ref_comercializadora?: string
   renovacion_verificada: boolean
   a_cobrar?: number
-  // Seguimiento de comisión (ver /dashboard/comisiones y ADR-0003): kWh anuales
-  // que la comercializadora reportó al calcular la comisión inicial, fee €/MWh
-  // pactado, y reparto (1.00=Próxima, 0.95=Atulado). importe = kwh_base_comision
-  // × fee_energia_mwh / 1000 × reparto_energia.
+  // Seguimiento de comisión (ver /dashboard/comisiones, lib/comisiones.ts y
+  // ADR-0003): kWh anuales que la comercializadora reportó al calcular la
+  // comisión inicial, fee €/MWh pactado, y reparto (1.00=Próxima,
+  // 0.95=Atulado). Potencia es la misma idea pero en kW — casi nunca se
+  // pacta, pero la opción existe (calcularComisionContrato la suma si está).
   kwh_base_comision?: number
   fee_energia_mwh?: number
+  kw_base_comision?: number
+  fee_potencia_mwh?: number
   reparto_energia?: number
   notas?: string
   created_at: string

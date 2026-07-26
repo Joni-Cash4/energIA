@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import { resolverEmpresaPago } from '@/lib/comisiones'
+import { resolverEmpresaPago, calcularComisionContrato } from '@/lib/comisiones'
 import type { Contrato, Cliente, ContratoEstado, EstadoFirma, ContratoMotivoBaja, EmpresaPago } from '@/types'
 
 function diasRestantes(fecha: string): number {
@@ -23,15 +23,6 @@ function DiaBadge({ dias, verificado }: { dias: number; verificado: boolean }) {
   if (dias <= 7)  return <Badge variant="red">{dias}d</Badge>
   if (dias <= 30) return <Badge variant="yellow">{dias}d</Badge>
   return <Badge variant="default">{dias}d</Badge>
-}
-
-// ADR-0003: importe de comisión = kwh_base_comision × fee_energia_mwh / 1000 ×
-// reparto_energia — misma fórmula que ya usa /dashboard/comisiones (reclamable).
-// null si el contrato todavía no tiene los datos de seguimiento rellenos.
-function calcularImporteComision(c: Contrato): number | null {
-  if (c.kwh_base_comision == null || c.fee_energia_mwh == null) return null
-  const reparto = c.reparto_energia ?? 1
-  return Math.round(c.kwh_base_comision * c.fee_energia_mwh / 1000 * reparto * 100) / 100
 }
 
 function addMonths(dateStr: string, months: number): string {
@@ -145,7 +136,7 @@ export default function ContratosPage() {
 
   function openRenovarPopover(c: Contrato) {
     setRenovarFecha(new Date().toISOString().split('T')[0])
-    const calculado = calcularImporteComision(c)
+    const calculado = calcularComisionContrato(c)
     setRenovarImporte(calculado != null ? String(calculado) : (c.a_cobrar != null ? String(c.a_cobrar) : ''))
     setRenovarImporteCalculado(calculado != null)
     setRenovarPopoverId(c.id)
