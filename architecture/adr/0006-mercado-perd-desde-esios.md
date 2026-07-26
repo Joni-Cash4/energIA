@@ -1,6 +1,6 @@
 # ADR-0006 — mercado_perd desde ESIOS (archivo 70, rango de fechas)
 
-**Estado:** Aceptado e implementado (2026-07-26).
+**Estado:** Cerrado (2026-07-26). Verificado en producción — `mercado_sc_cap` (fuera de alcance de este ADR) se resolvió aparte en [ADR-0008](0008-bug-sc-cap-geo-peninsula.md), que además encontró un bug real de datos al investigarlo.
 
 ## Contexto
 
@@ -35,6 +35,6 @@ Implementado en `src/app/api/cron/mercado-perd-sync/route.ts`. Usa la misma `ESI
 - Reutiliza el mismo hallazgo de rango de fechas del archivo 70 — más simple que llamar a los 7+1 indicadores sueltos que usa el método actual.
 - Coincide exactamente con la fórmula ya validada del sistema local — no se reinterpreta nada.
 
-**Trabajo pendiente:**
-- Verificar en producción tras el primer día 2 del mes.
-- Resolver `mercado_sc_cap` en otro momento, contrastando los campos del archivo 70 contra los indicadores actuales antes de decidir si se puede unificar en la misma petición.
+**Cierre — verificación en producción, 2026-07-26:**
+- Confirmado con datos reales: `mercado_perd` tiene fila `mes=2026-06` (junio, mes cerrado anterior) con `updated_at=2026-07-02T06:00` — coincide exactamente con la primera ejecución del cron (día 2 a las 6:00). Corrió y sincronizó bien sin intervención.
+- `mercado_sc_cap` se investigó a continuación — ver [ADR-0008](0008-bug-sc-cap-geo-peninsula.md) para el resultado (un bug real, no solo una unificación de API).

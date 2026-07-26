@@ -1,6 +1,6 @@
 # ADR-0005 — Datos de mercado desde ESIOS en vez del PC local
 
-**Estado:** Aceptado e implementado (2026-07-26).
+**Estado:** Cerrado (2026-07-26). Verificado en producción y sync local desactivada el mismo día.
 
 ## Contexto
 
@@ -33,7 +33,8 @@ Implementado en `src/app/api/cron/mercado-pmd-sync/route.ts`. Requiere la variab
 - Coste cero — reutiliza el mismo token que ya existía, sin servicios de pago (proxy, etc.).
 - Autocorrectivo: si el cron falla un día, el siguiente día recupera automáticamente el día que faltaba (una petición extra, no en ráfaga).
 
-**Trabajo pendiente:**
-- Añadir `ESIOS_TOKEN` a las variables de entorno de Vercel (Jonathan, copiándolo de su config local — no se debe pegar el valor en el chat ni en el repositorio).
-- Verificar en producción que el cron corre bien unos días antes de considerar apagar la sincronización local de `mercado_pmd_diario`.
-- Valorar en otro momento si `mercado_perd` puede resolverse igual con otro indicador de ESIOS.
+**Cierre — verificación en producción, 2026-07-26:**
+- `ESIOS_TOKEN` ya estaba configurado en Vercel (Production) desde antes de escribir este ADR — el "trabajo pendiente" de añadirlo ya no aplicaba.
+- Confirmado con datos reales: la fila más reciente de `mercado_pmd_diario` (`fecha=2026-07-25`) tiene `updated_at=2026-07-26T06:40`, justo después de la hora programada del cron (5:30) — el cron corrió y sincronizó correctamente.
+- Sincronización local desactivada (decisión de Jonathan, confirmado el cron funcionando): tarea de Windows Task Scheduler `IAenergia_SyncPMD_OMIE` (ejecutaba `sync_pmd_diario.py` a diario 7:00) puesta en `Disabled` — no se eliminó, por si hay que reactivarla.
+- Valorar en otro momento si `mercado_perd` puede resolverse igual con otro indicador de ESIOS (resuelto aparte en [ADR-0006](0006-mercado-perd-desde-esios.md), que reutiliza el mismo archivo 70).
