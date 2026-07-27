@@ -14,7 +14,7 @@ const navItems = [
   { href: '/dashboard/nueva-factura',  label: 'Nueva Factura',   icon: FileText },
   { href: '/dashboard/simulador',      label: 'Simulador',       icon: Sliders },
   { href: '/dashboard/clientes',       label: 'Clientes',        icon: Users },
-  { href: '/dashboard/leads',          label: 'Leads',           icon: Inbox },
+  { href: '/dashboard/leads',          label: 'Leads',           icon: Inbox, badge: 'leads' },
   { href: '/dashboard/contratos',      label: 'Contratos',       icon: FileCheck, badge: 'contratos' },
   { href: '/dashboard/gestiones',      label: 'Gestiones',       icon: ClipboardList, badge: 'gestiones' },
   { href: '/dashboard/comisiones',     label: 'Comisiones',      icon: Receipt },
@@ -31,11 +31,14 @@ export function DashboardNav() {
   const [sinLeer, setSinLeer] = useState(0)
   const [proximosContratos, setProximosContratos] = useState(0)
   const [gestionesVencidas, setGestionesVencidas] = useState(0)
+  const [leadsNuevos, setLeadsNuevos] = useState(0)
 
   useEffect(() => {
     const supabase = getSupabaseClient()
     supabase.from('contactos').select('id', { count: 'exact' }).eq('leido', false)
       .then(({ count }) => setSinLeer(count ?? 0))
+    supabase.from('leads').select('id', { count: 'exact' }).eq('estado', 'nuevo')
+      .then(({ count }) => setLeadsNuevos(count ?? 0))
     const en30 = new Date(); en30.setDate(en30.getDate() + 30)
     supabase.from('contratos').select('id', { count: 'exact' })
       .lte('fecha_vencimiento', en30.toISOString().split('T')[0])
@@ -72,8 +75,8 @@ export function DashboardNav() {
       <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5 overflow-y-auto">
         {navItems.map(({ href, label, icon: Icon, badge }) => {
           const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
-          const showBadge = (badge === 'contactos' && sinLeer > 0) || (badge === 'contratos' && proximosContratos > 0) || (badge === 'gestiones' && gestionesVencidas > 0)
-          const badgeCount = badge === 'contactos' ? sinLeer : badge === 'gestiones' ? gestionesVencidas : proximosContratos
+          const showBadge = (badge === 'contactos' && sinLeer > 0) || (badge === 'contratos' && proximosContratos > 0) || (badge === 'gestiones' && gestionesVencidas > 0) || (badge === 'leads' && leadsNuevos > 0)
+          const badgeCount = badge === 'contactos' ? sinLeer : badge === 'gestiones' ? gestionesVencidas : badge === 'leads' ? leadsNuevos : proximosContratos
           return (
             <Link
               key={href}
