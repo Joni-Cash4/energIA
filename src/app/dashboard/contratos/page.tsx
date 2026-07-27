@@ -79,6 +79,17 @@ export default function ContratosPage() {
   const [renovarImporte, setRenovarImporte] = useState('')
   const [renovarImporteCalculado, setRenovarImporteCalculado] = useState(false)
   const [renovarSaving, setRenovarSaving] = useState(false)
+  const [comisionFotoUploading, setComisionFotoUploading] = useState<string | null>(null)
+  // Preview de la extracción de la foto de comisión (ADR-0003) — la IA
+  // propone, el asesor confirma antes de que se escriba en el contrato.
+  const [comisionPreview, setComisionPreview] = useState<{
+    contratoId: string
+    fee_energia_mwh: number
+    fee_potencia_mwh: number | null
+    producto: string | null
+    foto_url: string
+  } | null>(null)
+  const [comisionConfirming, setComisionConfirming] = useState<string | null>(null)
 
   // Cambio de comercializadora (ADR-0002): cierra el contrato viejo + abre uno
   // nuevo + retrocomisión, en vez de editar el campo comercializadora in situ.
@@ -140,6 +151,83 @@ export default function ContratosPage() {
     setRenovarImporte(calculado != null ? String(calculado) : (c.a_cobrar != null ? String(c.a_cobrar) : ''))
     setRenovarImporteCalculado(calculado != null)
     setRenovarPopoverId(c.id)
+  }
+
+  // ADR-0003: foto de la comisión que manda la comercializadora → IA extrae
+  // fee_energia_mwh (y potencia/producto si aplica). La IA propone, no
+  // persiste nada todavía — se muestra como preview y el asesor confirma o
+  // descarta (confirmComisionFoto/discardComisionPreview) antes de escribir
+  // en el contrato. Solo un preview vivo a la vez.
+  async function handleComisionFoto(c: Contrato, file: File) {
+    setComisionFotoUploading(c.id)
+    setComisionPreview(null)
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      body.append('contratoId', c.id)
+      const res = await fetch('/api/comision-foto/upload', { method: 'POST', body })
+      const json = await res.json()
+      if (!res.ok) {
+        toast({ title: json.error ?? 'Error al analizar la foto de la comisión', variant: 'destructive' })
+        return
+      }
+      setComisionPreview({
+        contratoId: c.id,
+        fee_energia_mwh: json.extraido.fee_energia_mwh,
+        fee_potencia_mwh: json.extraido.fee_potencia_mwh ?? null,
+        producto: json.extraido.producto ?? null,
+        foto_url: json.foto_url,
+      })
+    } catch {
+      toast({ title: 'Error al subir la foto', variant: 'destructive' })
+    } finally {
+      setComisionFotoUploading(null)
+    }
+  }
+
+  function comisionPreviewImporte(c: Contrato): number | null {
+    if (!comisionPreview || comisionPreview.contratoId !== c.id) return null
+    return calcularComisionContrato({
+      ...c,
+      fee_energia_mwh: comisionPreview.fee_energia_mwh,
+      fee_potencia_mwh: comisionPreview.fee_potencia_mwh ?? c.fee_potencia_mwh,
+    })
+  }
+
+  function discardComisionPreview() {
+    setComisionPreview(null)
+  }
+
+  async function confirmComisionFoto(c: Contrato) {
+    if (!comisionPreview || comisionPreview.contratoId !== c.id) return
+    setComisionConfirming(c.id)
+    const supabase = getSupabaseClient()
+    const payload: Record<string, unknown> = {
+      fee_energia_mwh: comisionPreview.fee_energia_mwh,
+      comision_foto_url: comisionPreview.foto_url,
+    }
+    if (comisionPreview.fee_potencia_mwh != null) payload.fee_potencia_mwh = comisionPreview.fee_potencia_mwh
+    // producto: no se pisa un dato ya puesto a mano con un OCR de menos precisión.
+    if (comisionPreview.producto && !c.producto) payload.producto = comisionPreview.producto
+
+    const { data: actualizado, error } = await supabase
+      .from('contratos').update(payload).eq('id', c.id).select().single()
+    if (error || !actualizado) {
+      toast({ title: 'Error al guardar la comisión', variant: 'destructive' })
+      setComisionConfirming(null)
+      return
+    }
+    setContratos(p => p.map(x => x.id === c.id ? { ...x, ...actualizado } : x))
+    if (renovarPopoverId === c.id) {
+      const calculado = calcularComisionContrato(actualizado)
+      if (calculado != null) {
+        setRenovarImporte(String(calculado))
+        setRenovarImporteCalculado(true)
+      }
+    }
+    toast({ title: 'Comisión guardada', description: `${actualizado.fee_energia_mwh} €/MWh` })
+    setComisionPreview(null)
+    setComisionConfirming(null)
   }
 
   async function confirmRenovacion(c: Contrato) {
@@ -592,6 +680,51 @@ export default function ContratosPage() {
                                       onChange={e => { setRenovarImporte(e.target.value); setRenovarImporteCalculado(false) }}
                                       className="h-8 text-xs" />
                                   </div>
+                                  <div>
+                                    <label className="block text-[10px] text-[#9CA3AF] mb-1">
+                                      Foto de la comisión
+                                      {c.fee_energia_mwh != null && (
+                                        <span className="text-[#4B5563] normal-case"> · actual {c.fee_energia_mwh} €/MWh</span>
+                                      )}
+                                    </label>
+                                    <input
+                                      type="file" accept="application/pdf,image/*" capture="environment"
+                                      disabled={comisionFotoUploading === c.id}
+                                      onChange={e => { const f = e.target.files?.[0]; if (f) handleComisionFoto(c, f); e.target.value = '' }}
+                                      className="block w-full text-[10px] text-[#9CA3AF] file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-[#1A1A1A] file:text-[#9CA3AF] file:text-[10px] hover:file:bg-[#2A2A2A]"
+                                    />
+                                    {comisionFotoUploading === c.id && (
+                                      <p className="text-[10px] text-[#6B7280] mt-1 flex items-center gap-1">
+                                        <Loader2 className="w-3 h-3 animate-spin" />Analizando comisión...
+                                      </p>
+                                    )}
+                                    {comisionPreview?.contratoId === c.id && (
+                                      <div className="mt-2 rounded-lg border border-[#00E676]/30 bg-[#00E676]/5 p-2 space-y-1">
+                                        <p className="text-[10px] text-[#9CA3AF]">Detectado — revisa antes de guardar:</p>
+                                        <p className="text-xs text-white">
+                                          {comisionPreview.fee_energia_mwh} €/MWh
+                                          {comisionPreview.fee_potencia_mwh != null && ` + ${comisionPreview.fee_potencia_mwh} €/kW`}
+                                          {comisionPreview.producto && ` · ${comisionPreview.producto}`}
+                                        </p>
+                                        {comisionPreviewImporte(c) != null && (
+                                          <p className="text-[10px] text-[#6B7280]">
+                                            Comisión resultante: {formatCurrency(comisionPreviewImporte(c)!)}
+                                          </p>
+                                        )}
+                                        <div className="flex gap-1.5 pt-1">
+                                          <Button onClick={() => confirmComisionFoto(c)} disabled={comisionConfirming === c.id}
+                                            className="flex-1 h-7 text-[10px] gap-1">
+                                            {comisionConfirming === c.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                                            Confirmar
+                                          </Button>
+                                          <Button onClick={discardComisionPreview} disabled={comisionConfirming === c.id}
+                                            variant="secondary" className="h-7 text-[10px] px-2">
+                                            Descartar
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
                                   <Button onClick={() => confirmRenovacion(c)} disabled={renovarSaving || !renovarFecha || !renovarImporte}
                                     className="w-full h-8 text-xs gap-1.5">
                                     {renovarSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
@@ -788,6 +921,70 @@ export default function ContratosPage() {
                       onChange={e => setForm(p => ({ ...p, a_cobrar: e.target.value }))} />
                   </div>
                 </div>
+
+                {editId && (() => {
+                  const editando = contratos.find(c => c.id === editId)
+                  if (!editando) return null
+                  return (
+                    <div className="rounded-lg border border-[#1F1F1F] bg-[#0F0F0F] p-3">
+                      <p className="text-xs text-[#9CA3AF] mb-2">
+                        Comisión pactada (€/MWh)
+                        {editando.fee_energia_mwh != null && (
+                          <span className="text-white font-medium"> · {editando.fee_energia_mwh} €/MWh</span>
+                        )}
+                        {editando.fee_potencia_mwh != null && (
+                          <span className="text-white font-medium"> + {editando.fee_potencia_mwh} €/kW</span>
+                        )}
+                      </p>
+                      <label className="block text-[10px] text-[#9CA3AF] mb-1">
+                        Subir foto de la comisión (la IA rellena fee_energia_mwh/fee_potencia_mwh/producto)
+                      </label>
+                      <input
+                        type="file" accept="application/pdf,image/*" capture="environment"
+                        disabled={comisionFotoUploading === editId}
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handleComisionFoto(editando, f); e.target.value = '' }}
+                        className="block w-full text-[10px] text-[#9CA3AF] file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-[#1A1A1A] file:text-[#9CA3AF] file:text-[10px] hover:file:bg-[#2A2A2A]"
+                      />
+                      {comisionFotoUploading === editId && (
+                        <p className="text-[10px] text-[#6B7280] mt-1 flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />Analizando comisión...
+                        </p>
+                      )}
+                      {comisionPreview?.contratoId === editId && (
+                        <div className="mt-2 rounded-lg border border-[#00E676]/30 bg-[#00E676]/5 p-2 space-y-1">
+                          <p className="text-[10px] text-[#9CA3AF]">Detectado — revisa antes de guardar:</p>
+                          <p className="text-xs text-white">
+                            {comisionPreview.fee_energia_mwh} €/MWh
+                            {comisionPreview.fee_potencia_mwh != null && ` + ${comisionPreview.fee_potencia_mwh} €/kW`}
+                            {comisionPreview.producto && ` · ${comisionPreview.producto}`}
+                          </p>
+                          {comisionPreviewImporte(editando) != null && (
+                            <p className="text-[10px] text-[#6B7280]">
+                              Comisión resultante: {formatCurrency(comisionPreviewImporte(editando)!)}
+                            </p>
+                          )}
+                          <div className="flex gap-1.5 pt-1">
+                            <Button onClick={() => confirmComisionFoto(editando)} disabled={comisionConfirming === editId}
+                              className="flex-1 h-7 text-[10px] gap-1">
+                              {comisionConfirming === editId ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                              Confirmar
+                            </Button>
+                            <Button onClick={discardComisionPreview} disabled={comisionConfirming === editId}
+                              variant="secondary" className="h-7 text-[10px] px-2">
+                              Descartar
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      {editando.comision_foto_url && (
+                        <a href={editando.comision_foto_url} target="_blank" rel="noopener noreferrer"
+                          className="text-[10px] text-[#6B7280] hover:text-[#00E676] mt-1 inline-block">
+                          Ver última foto subida
+                        </a>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {form.estado === 'baja' && (
                   <div>

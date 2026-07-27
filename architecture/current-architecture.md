@@ -64,6 +64,10 @@ Ver [domain-model.md](domain-model.md) — entidades del negocio, sin SQL ni imp
 
 Ver [product-principles.md](product-principles.md) — cómo se toman las decisiones de producto, no cómo funciona el software.
 
+## Backlog de arquitectura
+
+Ver [backlog.md](backlog.md) — ideas de patrón común identificadas pero deliberadamente no construidas todavía (esperan un segundo caso real).
+
 ## Índice de ADRs
 
 - [0001 — CUPS como entidad de referencia](adr/0001-cups-como-entidad.md)

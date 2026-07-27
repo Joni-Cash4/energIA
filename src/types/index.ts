@@ -296,6 +296,10 @@ export interface Contrato {
   kw_base_comision?: number
   fee_potencia_mwh?: number
   reparto_energia?: number
+  // Evidencia de la comisión pactada (ADR-0003): foto/captura que manda la
+  // comercializadora, de la que se extraen fee_energia_mwh/fee_potencia_mwh
+  // por IA (api/comision-foto/upload). Solo evidencia — no se edita a mano.
+  comision_foto_url?: string
   notas?: string
   created_at: string
   updated_at: string
