@@ -60,6 +60,10 @@ Verificado en `dashboard/contratos/page.tsx` y `api/cron/renewal-alerts/route.ts
 
 Ver [domain-model.md](domain-model.md) — entidades del negocio, sin SQL ni implementación.
 
+## Visión y modelo de decisión
+
+Ver [vision-y-estrategia.md](vision-y-estrategia.md) — qué es IAenergía de fondo, las cinco capas (Captación, Operación, Inteligencia, Estrategia, Decisión), y la primera versión explícita del criterio real de Jonathan para decidir sobre la cartera.
+
 ## Principios de producto
 
 Ver [product-principles.md](product-principles.md) — cómo se toman las decisiones de producto, no cómo funciona el software.

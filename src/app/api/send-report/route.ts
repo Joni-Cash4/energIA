@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
+import { getSupabaseServerClient } from '@/lib/supabase-server'
 import type { InvoiceAnalysis } from '@/types'
 
 const JONATHAN_EMAIL = 'contacto@iaenergia.es'
@@ -269,11 +269,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Faltan campos obligatorios' }, { status: 400 })
     }
 
-    // 1. Guardar en Supabase
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    // 1. Guardar en Supabase — cliente de servidor (service_role/secret),
+    // nunca la anon key: leads/contactos son privados una vez guardados
+    // (los lee el dashboard), la escritura pública ya la autoriza la política
+    // RLS "*_public_insert" de multiuser_rls.sql, no hace falta degradar la
+    // key para permitir la inserción sin sesión.
+    const supabase = getSupabaseServerClient()
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase server client no configurado' }, { status: 500 })
+    }
     const mensaje = [
       empresa ? `Empresa: ${empresa}` : null,
       `Tarifa: ${invoice_data?.tarifa ?? ''}`,
