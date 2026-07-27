@@ -29,7 +29,11 @@ export default function LeadsPage() {
   const load = () => {
     const supabase = getSupabaseClient()
     supabase.from('leads').select('*').order('created_at', { ascending: false })
-      .then(({ data }) => { setLeads(data ?? []); setLoading(false) })
+      .then(({ data, error }) => {
+        if (error) toast({ title: 'Error al cargar leads', description: error.message, variant: 'destructive' })
+        setLeads(data ?? [])
+        setLoading(false)
+      })
   }
 
   useEffect(() => { load() }, [])
