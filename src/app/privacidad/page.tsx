@@ -32,7 +32,7 @@ export default function PrivacidadPage() {
               <h2 className="text-white text-xl font-semibold mb-3">2. Datos que recogemos</h2>
               <ul className="list-disc pl-5 space-y-1">
                 <li>Nombre, email y teléfono al usar el comparador o formulario de contacto.</li>
-                <li>Datos de la factura eléctrica (CUPS, consumos, importes) para el análisis.</li>
+                <li>Datos de la factura eléctrica (CUPS, consumos, importes) para el análisis, y una copia del documento subido (PDF o foto) si completas el formulario para recibir el informe, con el fin de poder verificar el análisis.</li>
                 <li>Datos de navegación mediante cookies técnicas necesarias.</li>
               </ul>
             </section>

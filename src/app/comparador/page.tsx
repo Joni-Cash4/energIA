@@ -21,6 +21,7 @@ const STEPS = [
 export default function ComparadorPage() {
   const [step, setStep] = useState<ComparadorStep>(1)
   const [invoiceData, setInvoiceData] = useState<InvoiceAnalysis | null>(null)
+  const [invoiceFiles, setInvoiceFiles] = useState<File[]>([])
 
   return (
     <>
@@ -61,7 +62,7 @@ export default function ComparadorPage() {
           <AnimatePresence mode="wait">
             {step === 1 && (
               <motion.div key="s1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                <Step1Upload onComplete={(data) => { setInvoiceData(data); setStep(2) }} />
+                <Step1Upload onComplete={(data, files) => { setInvoiceData(data); setInvoiceFiles(files); setStep(2) }} />
               </motion.div>
             )}
             {step === 2 && invoiceData && (
@@ -71,7 +72,7 @@ export default function ComparadorPage() {
             )}
             {step === 3 && invoiceData && (
               <motion.div key="s3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                <Step3Form invoiceData={invoiceData} />
+                <Step3Form invoiceData={invoiceData} invoiceFiles={invoiceFiles} />
               </motion.div>
             )}
           </AnimatePresence>

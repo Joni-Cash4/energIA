@@ -131,7 +131,19 @@ export default function LeadsPage() {
                         <td className="px-5 py-4 text-white font-medium">{l.nombre}</td>
                         <td className="px-5 py-4 text-[#9CA3AF]">{l.email}</td>
                         <td className="px-5 py-4 text-[#9CA3AF]">{l.telefono ?? '—'}</td>
-                        <td className="px-5 py-4 font-mono text-xs text-[#9CA3AF]">{l.cups?.slice(0, 14) ?? '—'}</td>
+                        <td className="px-5 py-4 font-mono text-xs text-[#9CA3AF]">
+                          {l.cups?.slice(0, 14) ?? '—'}
+                          {l.factura_urls && l.factura_urls.length > 0 && (
+                            <div className="flex gap-2 mt-1">
+                              {l.factura_urls.map((url, i) => (
+                                <a key={url} href={url} target="_blank" rel="noopener noreferrer"
+                                  className="text-[#00E676] hover:underline normal-case">
+                                  Factura{l.factura_urls!.length > 1 ? ` ${i + 1}` : ''}
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </td>
                         <td className="px-5 py-4 text-[#00E676] font-semibold">
                           {l.ahorro_estimado_anual ? formatCurrency(l.ahorro_estimado_anual, 0) : '—'}
                         </td>

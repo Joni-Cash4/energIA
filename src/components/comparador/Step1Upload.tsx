@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import type { InvoiceAnalysis } from '@/types'
 
 interface Props {
-  onComplete: (data: InvoiceAnalysis) => void
+  onComplete: (data: InvoiceAnalysis, files: File[]) => void
 }
 
 const LOADING_MESSAGES = [
@@ -46,7 +46,7 @@ export function Step1Upload({ onComplete }: Props) {
     try {
       const data = await processInvoice(pendingFiles, FEE_PUBLICO_ENERGIA_MWH)
       clearInterval(interval)
-      onComplete(data)
+      onComplete(data, pendingFiles)
     } catch (err) {
       clearInterval(interval)
       setError(err instanceof Error ? err.message : 'No se pudo procesar la factura. Asegúrate de subir fotos o PDFs de una factura eléctrica.')
@@ -153,7 +153,9 @@ export function Step1Upload({ onComplete }: Props) {
         </AnimatePresence>
 
         <p className="text-center text-[#6B7280] text-xs mt-6">
-          Tu factura no se almacena permanentemente. Solo se usa para el análisis.
+          Solo usamos tu factura para el análisis. Se guarda únicamente si nos pides el informe,
+          para poder verificarlo — ver{' '}
+          <a href="/privacidad" className="underline hover:text-[#00E676]">política de privacidad</a>.
         </p>
       </motion.div>
     </div>

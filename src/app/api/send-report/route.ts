@@ -254,16 +254,25 @@ function buildAlertEmail(
 </html>`
 }
 
+const ALLOWED_MIME: Record<string, string> = {
+  'application/pdf': 'application/pdf',
+  'image/jpeg': 'image/jpeg',
+  'image/jpg': 'image/jpeg',
+  'image/png': 'image/png',
+  'image/webp': 'image/webp',
+}
+const FACTURAS_BUCKET = 'leads-facturas'
+
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const { nombre, email, telefono, empresa, invoice_data } = body as {
-      nombre: string
-      email: string
-      telefono?: string
-      empresa?: string
-      invoice_data: InvoiceAnalysis
-    }
+    const form = await req.formData()
+    const nombre = form.get('nombre') as string | null
+    const email = form.get('email') as string | null
+    const telefono = (form.get('telefono') as string | null) ?? undefined
+    const empresa = (form.get('empresa') as string | null) ?? undefined
+    const invoiceDataRaw = form.get('invoice_data') as string | null
+    const invoice_data = invoiceDataRaw ? (JSON.parse(invoiceDataRaw) as InvoiceAnalysis) : undefined
+    const files = form.getAll('files').filter((f): f is File => f instanceof File && !!ALLOWED_MIME[f.type])
 
     if (!nombre || !email) {
       return NextResponse.json({ error: 'Faltan campos obligatorios' }, { status: 400 })
@@ -278,6 +287,30 @@ export async function POST(req: NextRequest) {
     if (!supabase) {
       return NextResponse.json({ error: 'Supabase server client no configurado' }, { status: 500 })
     }
+
+    // Guardar la(s) factura(s) original(es) subida(s) — para poder verificar
+    // el análisis y hacer seguimiento manual del lead (ver privacidad.tsx).
+    // Solo se guarda si el visitante llega a pedir el informe, no en el
+    // simple análisis del paso 1.
+    const facturaUrls: string[] = []
+    if (files.length > 0) {
+      await supabase.storage.createBucket(FACTURAS_BUCKET, { public: true }).catch(() => {})
+      for (const file of files) {
+        const bytes = await file.arrayBuffer()
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+        const path = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safeName}`
+        const { error: uploadErr } = await supabase.storage
+          .from(FACTURAS_BUCKET)
+          .upload(path, bytes, { contentType: file.type, upsert: false })
+        if (uploadErr) {
+          console.error('[send-report] subida de factura falló:', uploadErr)
+          continue
+        }
+        const { data: { publicUrl } } = supabase.storage.from(FACTURAS_BUCKET).getPublicUrl(path)
+        facturaUrls.push(publicUrl)
+      }
+    }
+
     const mensaje = [
       empresa ? `Empresa: ${empresa}` : null,
       `Tarifa: ${invoice_data?.tarifa ?? ''}`,
@@ -301,6 +334,7 @@ export async function POST(req: NextRequest) {
       kwh_total: invoice_data?.kwh_total ?? null,
       ahorro_estimado_anual: invoice_data?.ahorro_estimado_anual ?? null,
       kwh_anuales_sips: invoice_data?.kwh_anuales_sips ?? null,
+      factura_urls: facturaUrls.length > 0 ? facturaUrls : null,
       estado: 'nuevo',
     })
     if (leadError) console.error('[send-report] insert lead falló:', leadError)

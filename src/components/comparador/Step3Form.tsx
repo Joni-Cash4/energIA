@@ -9,9 +9,10 @@ import type { InvoiceAnalysis } from '@/types'
 
 interface Props {
   invoiceData: InvoiceAnalysis
+  invoiceFiles: File[]
 }
 
-export function Step3Form({ invoiceData }: Props) {
+export function Step3Form({ invoiceData, invoiceFiles }: Props) {
   const [form, setForm] = useState({ nombre: '', email: '', telefono: '', empresa: '' })
   const [privacidad, setPrivacidad] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -24,7 +25,7 @@ export function Step3Form({ invoiceData }: Props) {
     setError(null)
     setLoading(true)
     try {
-      await sendReport({ ...form, invoice_data: invoiceData })
+      await sendReport({ ...form, invoice_data: invoiceData, files: invoiceFiles })
       setDone(true)
     } catch {
       setError('Ha ocurrido un error. Inténtalo de nuevo.')

@@ -155,6 +155,7 @@ export interface Lead {
   kwh_total?: number
   ahorro_estimado_anual?: number
   kwh_anuales_sips?: number
+  factura_urls?: string[]
   created_at: string
   estado: LeadEstado
 }

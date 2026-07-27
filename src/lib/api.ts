@@ -33,12 +33,18 @@ export async function sendReport(params: {
   telefono?: string
   empresa?: string
   invoice_data: InvoiceAnalysis
+  files?: File[]
 }): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`/api/send-report`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
+  const { files, ...rest } = params
+  const form = new FormData()
+  form.append('nombre', rest.nombre)
+  form.append('email', rest.email)
+  if (rest.telefono) form.append('telefono', rest.telefono)
+  if (rest.empresa) form.append('empresa', rest.empresa)
+  form.append('invoice_data', JSON.stringify(rest.invoice_data))
+  files?.forEach((f) => form.append('files', f))
+
+  const res = await fetch(`/api/send-report`, { method: 'POST', body: form })
   if (!res.ok) throw new Error('Error al enviar el informe')
   return res.json()
 }
