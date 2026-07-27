@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { getSupabaseClient } from '@/lib/supabase'
-import { formatDate, formatCurrency } from '@/lib/utils'
+import { formatDate, formatCurrency, formatNumber } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
 import { resolverEmpresaPago, calcularComisionContrato } from '@/lib/comisiones'
 import type { Contrato, Cliente, ContratoEstado, EstadoFirma, ContratoMotivoBaja, EmpresaPago } from '@/types'
@@ -87,6 +87,7 @@ export default function ContratosPage() {
     fee_energia_mwh: number
     fee_potencia_mwh: number | null
     producto: string | null
+    kwh_base_comision: number | null
     foto_url: string
   } | null>(null)
   const [comisionConfirming, setComisionConfirming] = useState<string | null>(null)
@@ -176,6 +177,7 @@ export default function ContratosPage() {
         fee_energia_mwh: json.extraido.fee_energia_mwh,
         fee_potencia_mwh: json.extraido.fee_potencia_mwh ?? null,
         producto: json.extraido.producto ?? null,
+        kwh_base_comision: json.extraido.kwh_base_comision ?? null,
         foto_url: json.foto_url,
       })
     } catch {
@@ -191,6 +193,7 @@ export default function ContratosPage() {
       ...c,
       fee_energia_mwh: comisionPreview.fee_energia_mwh,
       fee_potencia_mwh: comisionPreview.fee_potencia_mwh ?? c.fee_potencia_mwh,
+      kwh_base_comision: comisionPreview.kwh_base_comision ?? c.kwh_base_comision,
     })
   }
 
@@ -207,6 +210,7 @@ export default function ContratosPage() {
       comision_foto_url: comisionPreview.foto_url,
     }
     if (comisionPreview.fee_potencia_mwh != null) payload.fee_potencia_mwh = comisionPreview.fee_potencia_mwh
+    if (comisionPreview.kwh_base_comision != null) payload.kwh_base_comision = comisionPreview.kwh_base_comision
     // producto: no se pisa un dato ya puesto a mano con un OCR de menos precisión.
     if (comisionPreview.producto && !c.producto) payload.producto = comisionPreview.producto
 
@@ -705,6 +709,7 @@ export default function ContratosPage() {
                                           {comisionPreview.fee_energia_mwh} €/MWh
                                           {comisionPreview.fee_potencia_mwh != null && ` + ${comisionPreview.fee_potencia_mwh} €/kW`}
                                           {comisionPreview.producto && ` · ${comisionPreview.producto}`}
+                                          {comisionPreview.kwh_base_comision != null && ` · ${formatNumber(comisionPreview.kwh_base_comision, 0)} kWh/año`}
                                         </p>
                                         {comisionPreviewImporte(c) != null && (
                                           <p className="text-[10px] text-[#6B7280]">
@@ -957,6 +962,7 @@ export default function ContratosPage() {
                             {comisionPreview.fee_energia_mwh} €/MWh
                             {comisionPreview.fee_potencia_mwh != null && ` + ${comisionPreview.fee_potencia_mwh} €/kW`}
                             {comisionPreview.producto && ` · ${comisionPreview.producto}`}
+                            {comisionPreview.kwh_base_comision != null && ` · ${formatNumber(comisionPreview.kwh_base_comision, 0)} kWh/año`}
                           </p>
                           {comisionPreviewImporte(editando) != null && (
                             <p className="text-[10px] text-[#6B7280]">

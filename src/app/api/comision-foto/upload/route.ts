@@ -11,13 +11,15 @@ INSTRUCCIONES:
 - fee_potencia_mwh = la comisión de potencia en €/kW, tal cual aparece en la fila/campo de fee o comisión de potencia (ej. "FEE Potencia €/kW año"), SOLO si aparece explícitamente (no es habitual — la mayoría de comisiones son solo de energía). Si no aparece, usa null.
 - NO confundas el fee (€/MWh o €/kW, el precio pactado) con un porcentaje de reparto (ej. una columna "Total" con valores como "100" o "65" que representan el % que paga la comercializadora, no un precio). Si el documento tiene ambas cosas, extrae SIEMPRE el valor de la fila de fee/comisión (€/MWh, €/kW), nunca el del reparto en %.
 - producto = el nombre del producto/tarifa al que aplica esta comisión (ej. "Cristalina", "Atulado WEB", "Halley"), SOLO si aparece explícitamente en el documento. Si no aparece, usa null.
+- kwh_base_comision = el consumo anual de energía en kWh que usó la comercializadora como base para calcular esta comisión (ej. la fila "Consumo energía (kWh)", sumando el total de todos los periodos si viene desglosado por P1-P6). SOLO si el documento trae ese desglose de consumo; si el documento solo trae el fee sin ningún dato de consumo, usa null. NUNCA lo derives de "Imp Comisión Energía" hacia atrás (dividiendo el importe por el fee) — usa el valor de consumo tal cual aparece en el documento, no un cálculo inverso.
 - Si el documento no contiene una comisión/fee en €/MWh reconocible (ej. es una factura, un DNI, una foto no relacionada), devuelve ÚNICAMENTE {"error": "no_reconocido"} y nada más.
 
 Devuelve EXACTAMENTE este JSON (sin texto antes ni después):
 {
   "fee_energia_mwh": number,
   "fee_potencia_mwh": number | null,
-  "producto": string | null
+  "producto": string | null,
+  "kwh_base_comision": number | null
 }`
 
 const ALLOWED_MIME: Record<string, string> = {
@@ -35,6 +37,7 @@ type Extraccion = {
   fee_energia_mwh?: number
   fee_potencia_mwh?: number | null
   producto?: string | null
+  kwh_base_comision?: number | null
 }
 
 export async function POST(req: NextRequest) {
@@ -90,7 +93,11 @@ export async function POST(req: NextRequest) {
     // No se toca la tabla contratos aquí: la IA propone, el asesor confirma
     // desde el dashboard (comision-foto/upload solo extrae y guarda la
     // evidencia) — el UPDATE real lo hace el cliente al pulsar "Confirmar".
-    await supabase.storage.createBucket(BUCKET, { public: false }).catch(() => {})
+    // public:true — igual que asesor-foto/cliente-adjuntos. Con private el
+    // endpoint público de Supabase devuelve 404 "Bucket not found" en vez de
+    // servir el archivo (confirmado en producción: la URL guardada dejó de
+    // abrirse hasta pasar este bucket a público a mano).
+    await supabase.storage.createBucket(BUCKET, { public: true }).catch(() => {})
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     const storagePath = `${contratoId}/${Date.now()}_${safeName}`
     const { error: uploadErr } = await supabase.storage
@@ -104,6 +111,7 @@ export async function POST(req: NextRequest) {
         fee_energia_mwh: parsed.fee_energia_mwh,
         fee_potencia_mwh: parsed.fee_potencia_mwh ?? null,
         producto: parsed.producto ?? null,
+        kwh_base_comision: parsed.kwh_base_comision ?? null,
       },
       foto_url: publicUrl,
     })
