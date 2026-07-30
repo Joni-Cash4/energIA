@@ -1,24 +1,29 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Navbar } from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
-import { MapPin, Clock, Phone, Video, Star, ArrowRight, CheckCircle } from 'lucide-react'
+import { MapPin, Clock, Video, Star, ArrowRight, CheckCircle, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { getAsesorFotoUrl } from '@/lib/asesor-foto'
 
 export const metadata: Metadata = {
-  title: 'Tu asesor energético — IAenergía',
-  description: 'Asesor independiente especializado en energía. Análisis personalizado de tu factura, sin comisiones ocultas.',
+  title: 'Tu asesor energético',
+  description:
+    'Jonathan, asesor energético detrás de IAenergía. Superviso la energía de tu empresa durante todo el año, con transparencia total sobre cómo trabajamos y cómo cobramos.',
 }
 
-// Casos reales — mismos testimonios que src/components/landing/CasosReales.tsx
+const WHATSAPP_ASESOR =
+  'https://wa.me/34689880596?text=' +
+  encodeURIComponent('Hola Jonathan, me gustaría que revisáramos la energía de mi empresa.')
+
+// Casos reales — mismos testimonios que src/components/landing/ResultadosReales.tsx
 const reseñas = [
   { nombre: 'Mariano G.', lugar: 'Bar Restaurante La Carranzana', texto: 'Desde que empezamos a revisar facturas, mirando cambios de tarifa y estudiando operadores, tenemos más tranquilidad: hay un poco de ahorro y lo tenemos claro.', estrellas: 5 },
   { nombre: 'Jokin', lugar: 'Gerente · Makailo Etxarri', texto: 'Tenemos neveras que consumen bastante, pero no sabía interpretar las facturas. Jonathan me pidió un par y en 5 minutos me dijo: «tenéis potencia contratada de más, y vuestra compañía no tiene precios competitivos». Ajustamos potencias, buscamos mejores tarifas y el ahorro fue importante.', estrellas: 5 },
+  { nombre: 'Masus', lugar: 'Gerenta · Zuberoa Janaridenda', texto: 'Tengo un supermercado y pagaba 3.000 € de luz. Jonathan me revisó la factura y empecé a pagar 1.700 €. Y el servicio es inmejorable, porque si hay alguna mejora en el precio, se preocupa él de cambiártelo.', estrellas: 5 },
 ]
 
-export default async function AsesorPage() {
-  const fotoUrl = await getAsesorFotoUrl()
+export default function AsesorPage() {
   return (
     <>
       <Navbar />
@@ -27,20 +32,25 @@ export default async function AsesorPage() {
 
           {/* Hero asesor */}
           <div className="flex flex-col md:flex-row items-center gap-10 mb-16">
-            {/* Foto placeholder */}
-            <div className="shrink-0">
-              <img
-                src={fotoUrl}
+            {/* Foto */}
+            <div className="shrink-0 relative">
+              <div className="absolute -inset-2 bg-[#00E676]/10 rounded-full blur-2xl pointer-events-none" />
+              <Image
+                src="/asesor/Foto perfil.png"
                 alt="Jonathan, asesor energético de IAenergía"
-                className="w-44 h-44 rounded-3xl object-cover border-2 border-[#00E676]/30"
+                width={192}
+                height={192}
+                className="relative w-44 h-44 rounded-full object-cover border border-[#00E676]/20"
+                style={{ objectPosition: 'center 20%' }}
               />
             </div>
             <div>
               <p className="text-[#00E676] text-sm uppercase tracking-widest mb-2">Tu asesor energético</p>
               <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3">Jonathan</h1>
               <p className="text-[#9CA3AF] text-lg mb-4 leading-relaxed">
-                Asesor energético independiente. No trabajo para ninguna comercializadora — trabajo para ti.
-                Mi objetivo es que pagues solo lo que debes pagar.
+                Desde 2014 ayudo a empresas a entender, optimizar y controlar su energía. No vendo
+                electricidad: superviso la energía de tu empresa durante todo el año y te aviso solo
+                cuando de verdad merece la pena tomar una decisión.
               </p>
               <div className="flex flex-wrap gap-3">
                 <span className="flex items-center gap-1.5 text-sm text-[#9CA3AF]">
@@ -64,9 +74,9 @@ export default async function AsesorPage() {
             <h2 className="text-white font-bold text-xl mb-6">Cómo trabajo</h2>
             <div className="grid sm:grid-cols-3 gap-6">
               {[
-                { paso: '01', titulo: 'Analizas tu factura', desc: 'Subes el PDF. La IA extrae todos los datos en segundos.' },
-                { paso: '02', titulo: 'Recibo tu caso', desc: 'Me llega tu análisis. Estudio tu perfil de consumo.' },
-                { paso: '03', titulo: 'Te llamo yo', desc: 'Te explico el resultado y qué hacer. Sin tecnicismos.' },
+                { paso: '01', titulo: 'Accedo a tus datos', desc: 'Con tu autorización, vía Datadis o tu factura, veo tu consumo y tus contratos reales.' },
+                { paso: '02', titulo: 'Reviso y superviso', desc: 'Analizo potencia, tarifas y mercado. Y sigo vigilándolo durante todo el año, no solo al renovar.' },
+                { paso: '03', titulo: 'Te aviso y tú decides', desc: 'Solo te aviso cuando merece la pena. A veces la mejor decisión es no cambiar nada.' },
               ].map((s) => (
                 <div key={s.paso} className="flex flex-col gap-3">
                   <span className="text-[#00E676] font-black text-2xl">{s.paso}</span>
@@ -79,16 +89,16 @@ export default async function AsesorPage() {
 
           {/* Transparencia económica */}
           <div className="bg-[#00E676]/5 border border-[#00E676]/20 rounded-2xl p-8 mb-8">
-            <h2 className="text-white font-bold text-xl mb-4">Cómo gano dinero — sin letra pequeña</h2>
+            <h2 className="text-white font-bold text-xl mb-4">Cómo cobro — sin letra pequeña</h2>
             <p className="text-[#9CA3AF] leading-relaxed mb-5">
-              Muchos comparadores no te dicen de dónde vienen sus ingresos. Yo sí:
+              Prefiero decírtelo claro desde el principio:
             </p>
             <div className="space-y-3">
               {[
-                'Cobro una pequeña comisión a la comercializadora cuando cambias de tarifa.',
-                'Esa comisión nunca la pagas tú — la absorbe la comercializadora.',
-                'Tu precio final es exactamente el que te presento en el informe. Sin sorpresas.',
-                'Si no hay ahorro real para ti, te lo digo y no te recomiendo cambiar.',
+                'La primera revisión no tiene ningún coste ni compromiso.',
+                'Cobro una comisión de la comercializadora solo cuando hay un cambio que te conviene.',
+                'Esa comisión nunca la pagas tú, y mi forma de cobrar nunca condiciona lo que te recomiendo.',
+                'Si tu contrato actual sigue siendo la mejor opción, te lo digo y no cambiamos nada.',
               ].map((item) => (
                 <div key={item} className="flex items-start gap-3">
                   <CheckCircle className="w-4 h-4 text-[#00E676] shrink-0 mt-0.5" />
@@ -146,18 +156,18 @@ export default async function AsesorPage() {
 
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4">
-            <Link href="/comparador" className="flex-1">
+            <a href={WHATSAPP_ASESOR} target="_blank" rel="noopener noreferrer" className="flex-1">
               <Button size="xl" className="w-full gap-2 glow-green">
-                Analiza tu factura gratis
+                <MessageCircle className="w-5 h-5" />
+                Hablamos por WhatsApp
+              </Button>
+            </a>
+            <Link href="/comparador" className="flex-1">
+              <Button variant="secondary" size="xl" className="w-full gap-2">
+                Sube tu factura
                 <ArrowRight className="w-5 h-5" />
               </Button>
             </Link>
-            <a href="https://wa.me/34689880596" target="_blank" rel="noopener noreferrer" className="flex-1">
-              <Button variant="secondary" size="xl" className="w-full gap-2">
-                <Phone className="w-5 h-5" />
-                WhatsApp directo
-              </Button>
-            </a>
           </div>
           <p className="text-[#4B5563] text-xs text-center mt-4">Respondo en menos de 24h en días laborables.</p>
 
