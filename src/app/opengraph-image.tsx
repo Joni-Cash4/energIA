@@ -4,7 +4,7 @@ import { ImageResponse } from 'next/og'
 // Next añade solo las etiquetas og:image y twitter:image en todas las páginas.
 
 export const runtime = 'edge'
-export const alt = 'IAenergía — Analizamos tu factura eléctrica con IA. Asesor independiente, sin comisiones ocultas.'
+export const alt = 'IAenergía — Supervisión energética continua para empresas. Detectamos oportunidades de ahorro, errores de facturación y riesgos durante todo el año.'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
@@ -45,13 +45,13 @@ export default function OgImage() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', color: 'white', fontSize: 62, fontWeight: 700, lineHeight: 1.18 }}>
-          <span>La IA hace los números.</span>
-          <span>Nosotros te explicamos</span>
-          <span style={{ color: '#00E676' }}>qué significan.</span>
+          <span>Tu energía debería trabajar</span>
+          <span>para tu empresa.</span>
+          <span style={{ color: '#00E676' }}>Nosotros nos ocupamos.</span>
         </div>
 
         <div style={{ display: 'flex', marginTop: 44, fontSize: 30, color: '#9CA3AF' }}>
-          Analiza tu factura gratis · Asesor independiente · Sin comisiones ocultas
+          Supervisión energética continua para empresas
         </div>
 
         <div style={{ display: 'flex', marginTop: 56, fontSize: 26, color: '#00E676' }}>
