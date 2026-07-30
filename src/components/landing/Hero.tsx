@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowRight, Zap, Shield, TrendingDown } from 'lucide-react'
+import { ArrowRight, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const fadeUp = {
@@ -28,8 +28,8 @@ export function Hero() {
         {/* Pill badge */}
         <motion.div custom={0} variants={fadeUp} initial="hidden" animate="show">
           <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#00E676]/30 bg-[#00E676]/5 text-[#00E676] text-sm font-medium mb-8">
-            <Zap className="w-3.5 h-3.5" />
-            Asesor independiente · Sin comisiones ocultas
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Supervisión energética continua para empresas
           </span>
         </motion.div>
 
@@ -41,10 +41,10 @@ export function Hero() {
           animate="show"
           className="text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight leading-tight mb-6"
         >
-          La IA hace los números.{' '}
-          <br />
-          <span className="gradient-text glow-green-text">Nosotros te explicamos</span>
-          <br />qué significan.
+          Tu energía debería trabajar para tu empresa.{' '}
+          <br className="hidden sm:block" />
+          <span className="gradient-text glow-green-text">Nosotros nos ocupamos</span>{' '}
+          de que así sea.
         </motion.h1>
 
         {/* Subtitle */}
@@ -55,8 +55,8 @@ export function Hero() {
           animate="show"
           className="text-lg sm:text-xl text-[#9CA3AF] max-w-2xl mx-auto mb-10"
         >
-          Analizamos tu factura con precisión milimétrica y te llamamos nosotros para explicarte el resultado.
-          Sin letra pequeña, sin sorpresas. Gratis.
+          Monitorizamos continuamente tu energía para detectar oportunidades de ahorro, errores de
+          facturación y riesgos antes de que se conviertan en un problema.
         </motion.p>
 
         {/* CTAs */}
@@ -65,39 +65,19 @@ export function Hero() {
           variants={fadeUp}
           initial="hidden"
           animate="show"
-          className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16"
+          className="flex flex-col sm:flex-row items-center justify-center gap-4"
         >
-          <Link href="/comparador">
+          <Link href="#empieza">
             <Button size="xl" className="gap-2 glow-green">
-              Analiza tu factura gratis
+              Quiero saber si puedo mejorar
               <ArrowRight className="w-5 h-5" />
             </Button>
           </Link>
-          <Link href="/asesor">
+          <Link href="#como-trabajamos">
             <Button variant="secondary" size="xl">
-              Conoce a tu asesor
+              Cómo trabajamos
             </Button>
           </Link>
-        </motion.div>
-
-        {/* Trust chips */}
-        <motion.div
-          custom={4}
-          variants={fadeUp}
-          initial="hidden"
-          animate="show"
-          className="flex flex-wrap items-center justify-center gap-6 text-sm text-[#6B7280]"
-        >
-          {[
-            { icon: Shield, text: 'Sin registrarte' },
-            { icon: Zap, text: 'Análisis en segundos' },
-            { icon: TrendingDown, text: 'Te llamamos nosotros' },
-          ].map(({ icon: Icon, text }) => (
-            <span key={text} className="flex items-center gap-1.5">
-              <Icon className="w-4 h-4 text-[#00E676]" />
-              {text}
-            </span>
-          ))}
         </motion.div>
       </div>
     </section>

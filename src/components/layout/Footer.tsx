@@ -1,5 +1,26 @@
 import Link from 'next/link'
-import { Zap } from 'lucide-react'
+import { Zap, MessageCircle, Mail, Linkedin } from 'lucide-react'
+
+const contactLinks = [
+  {
+    icon: MessageCircle,
+    label: 'WhatsApp',
+    href: 'https://wa.me/34689880596',
+    external: true,
+  },
+  {
+    icon: Mail,
+    label: 'Email',
+    href: 'mailto:contacto@iaenergia.es',
+    external: false,
+  },
+  {
+    icon: Linkedin,
+    label: 'LinkedIn',
+    href: 'https://www.linkedin.com/in/jonathan-lacalle-iaenergia',
+    external: true,
+  },
+]
 
 const publicLinks = [
   { href: '/',           label: 'Inicio' },
@@ -26,14 +47,21 @@ export function Footer() {
               </span>
             </Link>
             <p className="text-[#6B7280] text-sm max-w-xs">
-              Tu asesor energético independiente
+              Supervisión energética continua para empresas
             </p>
-            <a
-              href="mailto:contacto@iaenergia.es"
-              className="text-[#6B7280] text-sm hover:text-[#00E676] transition-colors"
-            >
-              contacto@iaenergia.es
-            </a>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-1">
+              {contactLinks.map(({ icon: Icon, label, href, external }) => (
+                <a
+                  key={label}
+                  href={href}
+                  {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                  className="flex items-center gap-1.5 text-[#6B7280] text-sm hover:text-[#00E676] transition-colors"
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </a>
+              ))}
+            </div>
           </div>
 
           {/* Links */}

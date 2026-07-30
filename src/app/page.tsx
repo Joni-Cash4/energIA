@@ -2,24 +2,29 @@ import type { Metadata } from 'next'
 import { Navbar } from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
 import { Hero } from '@/components/landing/Hero'
-import { Stats } from '@/components/landing/Stats'
-import { Transparencia } from '@/components/landing/Transparencia'
+import { DosManeras } from '@/components/landing/DosManeras'
 import { HowItWorks } from '@/components/landing/HowItWorks'
-import { Calculadora } from '@/components/landing/Calculadora'
-import { FaqAccordion } from '@/components/landing/FaqAccordion'
+import { QueHacemos } from '@/components/landing/QueHacemos'
+import { FormaDeTrabajar } from '@/components/landing/FormaDeTrabajar'
+import { PorQueConfiar } from '@/components/landing/PorQueConfiar'
+import { ComoCobramos } from '@/components/landing/ComoCobramos'
+import { LoQueEncontramos } from '@/components/landing/LoQueEncontramos'
+import { ResultadosReales } from '@/components/landing/ResultadosReales'
+import { Vision } from '@/components/landing/Vision'
+import { Manifiesto } from '@/components/landing/Manifiesto'
+import { QuienEstaDetras } from '@/components/landing/QuienEstaDetras'
 import { FinalCTA } from '@/components/landing/FinalCTA'
-import { PorQueAhorrar } from '@/components/landing/PorQueAhorrar'
-import { CasosReales } from '@/components/landing/CasosReales'
 import { ExitModal } from '@/components/landing/ExitModal'
 import { Toaster } from '@/components/ui/toaster'
 
 export const metadata: Metadata = {
-  title: 'IAenergía — Tu asesor energético inteligente',
-  description: 'Analiza tu factura eléctrica con inteligencia artificial. Descubre cuánto puedes ahorrar cambiando de comercializadora. Gratis y sin compromiso.',
-  keywords: ['energía', 'ahorro', 'factura eléctrica', 'comparador luz', 'comercializadora', 'OMIE', 'tarifa indexada'],
+  title: 'IAenergía — Supervisión energética continua para empresas',
+  description:
+    'Monitorizamos continuamente la energía de tu empresa para detectar oportunidades de ahorro, errores de facturación y riesgos antes de que se conviertan en un problema. Primera revisión gratis y sin compromiso.',
+  keywords: ['energía', 'ahorro', 'factura eléctrica', 'asesor energético', 'monitorización energética', 'empresas', 'Datadis', 'potencia contratada'],
   openGraph: {
-    title: 'IAenergía — Tu asesor energético inteligente',
-    description: 'Analiza tu factura y descubre tu ahorro potencial en segundos. Gratis.',
+    title: 'IAenergía — Supervisión energética continua para empresas',
+    description: 'Tu energía debería trabajar para tu empresa. Nosotros nos ocupamos de que así sea.',
     url: 'https://iaenergia.es',
     siteName: 'IAenergía',
     type: 'website',
@@ -33,13 +38,17 @@ export default function HomePage() {
       <Navbar />
       <main>
         <Hero />
-        <Stats />
-        <Transparencia />
+        <DosManeras />
         <HowItWorks />
-        <PorQueAhorrar />
-        <CasosReales />
-        <Calculadora />
-        <FaqAccordion />
+        <QueHacemos />
+        <FormaDeTrabajar />
+        <PorQueConfiar />
+        <ComoCobramos />
+        <LoQueEncontramos />
+        <ResultadosReales />
+        <Vision />
+        <Manifiesto />
+        <QuienEstaDetras />
         <FinalCTA />
       </main>
       <Footer />
