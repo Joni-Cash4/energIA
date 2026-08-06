@@ -5,7 +5,7 @@ import { getSupabaseClient } from '@/lib/supabase'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
 import { generarCobros, esComisionProxima } from '@/lib/cobros'
-import type { ComisionCobro } from '@/types'
+import type { ComisionCobro, ComisionTipo } from '@/types'
 
 function nombreMes(mes: string): string {
   const [y, m] = mes.split('-').map(Number)
@@ -34,32 +34,47 @@ export default function CobrosPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
 
-    // 1) Asegurar el calendario: generar cobros para las comisiones que aún no
-    //    lo tengan (idempotente por la unique (comision_id, num_pago)).
-    const { data: coms } = await supabase
-      .from('comisiones_generadas')
-      .select('id, importe, fecha, comercializadora, cobros:comision_cobros(id)')
-    // Solo Próxima: el fraccionamiento es su regla, y así no se resucitan
-    // comisiones antiguas de otras comercializadoras como cobros pendientes.
-    const faltan = (coms ?? []).filter(
-      (c: { importe: number | null; fecha: string | null; comercializadora?: string; cobros?: unknown[] }) =>
-        c.importe != null && !!c.fecha && esComisionProxima(c.comercializadora) && (!c.cobros || c.cobros.length === 0)
-    )
+    // Consultas separadas + cruce en JS: NO se usa el embed
+    // comision_cobros<->comisiones_generadas porque esa relación tarda (o no
+    // llega) a registrarse en la caché de la API de Supabase. Las tablas
+    // sueltas y el embed comisiones->clientes (ya establecido) sí funcionan.
+    type ComRow = {
+      id: string; cups?: string; importe: number | null; fecha: string | null
+      tipo: ComisionTipo; comercializadora?: string
+      cliente?: { id: string; nombre?: string; empresa?: string } | null
+    }
+    const [{ data: comsRaw }, { data: cobrosExist }] = await Promise.all([
+      supabase.from('comisiones_generadas')
+        .select('id, cups, importe, fecha, tipo, comercializadora, cliente:clientes(id, nombre, empresa)'),
+      supabase.from('comision_cobros').select('comision_id'),
+    ])
+    const coms = (comsRaw ?? []) as unknown as ComRow[]
+    const conCobros = new Set((cobrosExist ?? []).map((c: { comision_id: string }) => c.comision_id))
+
+    // 1) Generar calendario para las comisiones de Próxima que aún no lo tengan
+    //    (idempotente por la unique (comision_id, num_pago)). Solo Próxima: el
+    //    fraccionamiento es su regla, y así no se resucitan comisiones antiguas
+    //    de otras comercializadoras como cobros pendientes.
+    const faltan = coms.filter(c =>
+      c.importe != null && !!c.fecha && esComisionProxima(c.comercializadora) && !conCobros.has(c.id))
     if (faltan.length) {
-      const rows = faltan.flatMap((c: { id: string; importe: number; fecha: string; comercializadora?: string }) =>
-        generarCobros(c).map(p => ({ user_id: user.id, comision_id: c.id, ...p }))
-      )
+      const rows = faltan.flatMap(c =>
+        generarCobros({ importe: c.importe as number, fecha: c.fecha as string, comercializadora: c.comercializadora })
+          .map(p => ({ user_id: user.id, comision_id: c.id, ...p })))
       if (rows.length) {
         await supabase.from('comision_cobros').upsert(rows, { onConflict: 'comision_id,num_pago', ignoreDuplicates: true })
       }
     }
 
-    // 2) Cargar los cobros con el contexto de su comisión.
-    const { data } = await supabase
-      .from('comision_cobros')
-      .select('*, comision:comisiones_generadas(id, cups, comercializadora, importe, tipo, cliente:clientes(id, nombre, empresa))')
-      .order('fecha_prevista', { ascending: true })
-    setCobros((data ?? []) as unknown as ComisionCobro[])
+    // 2) Cargar todos los cobros y cruzarlos en JS con su comisión.
+    const { data: cobrosRaw } = await supabase
+      .from('comision_cobros').select('*').order('fecha_prevista', { ascending: true })
+    const comById = new Map(coms.map(c => [c.id, c]))
+    const enriquecidos = (cobrosRaw ?? []).map((cb: Record<string, unknown>) => ({
+      ...cb,
+      comision: comById.get(cb.comision_id as string) ?? null,
+    }))
+    setCobros(enriquecidos as unknown as ComisionCobro[])
     setLoading(false)
   }, [])
 
