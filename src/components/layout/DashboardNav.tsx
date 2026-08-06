@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, FileText, Users, Inbox, Zap, LogOut,
-  ChevronRight, TrendingUp, CalendarDays, Mail, Sliders, FileCheck, Receipt, Banknote, UserCircle, ClipboardList,
+  ChevronRight, TrendingUp, CalendarDays, Mail, Sliders, FileCheck, Receipt, Banknote, Wallet, UserCircle, ClipboardList,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getSupabaseClient } from '@/lib/supabase'
@@ -19,6 +19,7 @@ const navItems = [
   { href: '/dashboard/gestiones',      label: 'Gestiones',       icon: ClipboardList, badge: 'gestiones' },
   { href: '/dashboard/comisiones',     label: 'Comisiones',      icon: Receipt },
   { href: '/dashboard/facturacion',    label: 'Facturación',     icon: Banknote },
+  { href: '/dashboard/cobros',         label: 'Cobros',          icon: Wallet },
   { href: '/dashboard/cartera',        label: 'Cartera',         icon: TrendingUp },
   { href: '/dashboard/agenda',         label: 'Agenda',          icon: CalendarDays },
   { href: '/dashboard/contactos',      label: 'Mensajes web',    icon: Mail, badge: 'contactos' },

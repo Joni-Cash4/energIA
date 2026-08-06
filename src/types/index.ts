@@ -344,6 +344,32 @@ export interface ComisionGenerada {
   cliente?: Pick<Cliente, 'id' | 'nombre' | 'empresa'>
 }
 
+// Calendario de cobros: Próxima fracciona el pago de una comisión según su
+// importe (>1.000€ → 3 pagos, >10.000€ → 6, resto único), cada uno con
+// vencimiento el último día de su mes. Una fila por cuota. Ver lib/cobros.ts.
+export interface ComisionCobro {
+  id: string
+  user_id: string
+  comision_id: string
+  num_pago: number
+  total_pagos: number
+  importe: number
+  fecha_prevista: string
+  cobrado: boolean
+  fecha_cobro?: string
+  prefactura_num?: string
+  notas?: string
+  created_at: string
+  comision?: {
+    id: string
+    cups?: string
+    comercializadora?: string
+    importe: number
+    tipo: ComisionTipo
+    cliente?: Pick<Cliente, 'id' | 'nombre' | 'empresa'> | null
+  } | null
+}
+
 export type AccionTipoVal     = 'llamada' | 'email' | 'reunion' | 'visita' | 'otro'
 export type AccionResultadoVal = 'pendiente' | 'completado' | 'fracaso' | 'no_contesta'
 
