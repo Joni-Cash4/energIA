@@ -217,6 +217,42 @@ export function validarFactura(
     })
   }
 
+  // 3.b Diferencia de energía frente a Próxima. NO es "cobrado de más" ni un
+  // juicio sobre los precios del competidor: solo cuánto pagaría el cliente con
+  // Próxima en ESTE mismo periodo (precio_kwh_nuevo, que ya calcula
+  // process-invoice con OMIE+PERD+SC+CAP + nuestro fee) frente a lo que paga hoy.
+  // Esa diferencia es el origen del ahorro que ofrecemos. Uso de SC/CAP permitido
+  // (simulación Próxima, no reclamación — ver ADR-0008). En una factura de
+  // Próxima da ≈ 0, y sirve de autochequeo del motor. Siempre informativo.
+  const periodosDif = periodosConKwh.filter((p) => p.precio_kwh != null && p.precio_kwh_nuevo != null)
+  if (periodosDif.length === 0) {
+    conceptos.push({
+      concepto: 'Diferencia de energía frente a Próxima', esperado: null, real: null,
+      diferencia_eur: null, estado: 'no_verificable',
+      detalle: 'Falta la simulación de Próxima del periodo (OMIE/PERD) para comparar el precio de energía.',
+    })
+  } else {
+    let kwhTotal = 0
+    let difEur = 0
+    for (const p of periodosDif) {
+      const kwh = p.kwh ?? 0
+      difEur += ((p.precio_kwh as number) - (p.precio_kwh_nuevo as number)) * kwh
+      kwhTotal += kwh
+    }
+    const difMwh = kwhTotal > 0 ? r2((difEur / kwhTotal) * 1000) : 0
+    const difCent = Math.round((difMwh / 10) * 10) / 10 // c€/kWh
+    difEur = r2(difEur)
+    const detalle = esProxima
+      ? `Ya es una factura de Próxima: la diferencia debería rondar 0 (${difMwh} €/MWh). Autochequeo del motor de cálculo.`
+      : difMwh > 0
+        ? `El cliente paga ≈ ${difCent} c€/kWh (${difMwh} €/MWh) más en energía que con Próxima en este mismo periodo — potencial de ahorro de ${difEur.toFixed(2)} € en energía en esta factura. Es una tarifa distinta, no un cobro indebido.`
+        : `En energía, Próxima no mejora el precio de este periodo (${difMwh} €/MWh de diferencia). El ahorro, si lo hay, vendría de potencia u otros conceptos.`
+    conceptos.push({
+      concepto: 'Diferencia de energía frente a Próxima',
+      esperado: null, real: difMwh, diferencia_eur: null, estado: 'info', detalle,
+    })
+  }
+
   // 4. IVA aplicado — 21% general, verificable de forma independiente (a
   // diferencia del IEE, cuyo tipo efectivo varía por normativa y ya se deriva
   // de la propia factura en el simulador, no hay un % oficial fijo que asumir).

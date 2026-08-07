@@ -512,6 +512,18 @@ export default function NuevaFacturaPage() {
       : null
     const supabase = getSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
+    // Data-asset por comercializadora: diferencia de energía frente a Próxima
+    // (€/MWh) = lo que paga hoy en energía menos lo que pagaría con Próxima ese
+    // mismo periodo. Solo si la simulación se basó en OMIE real; si no, null
+    // para no ensuciar los agregados. No es "sobrecoste": es una tarifa distinta.
+    const kwh = analysis.kwh_total ?? 0
+    const diferenciaEnergiaMwh = kwh > 0 && analysis.mercado_historico_ok
+      ? Math.round(((analysis.coste_actual_energia - analysis.coste_nuevo_energia) / kwh) * 1000 * 100) / 100
+      : null
+    // Segmento por tarifa. 2.0TD ('residencial') mezcla hogar y micro-empresa
+    // — no distinguibles desde la factura; afinable más adelante.
+    const tar = (analysis.tarifa ?? '').toUpperCase()
+    const segmento = tar.startsWith('2.0') ? 'residencial' : tar.startsWith('6.1') ? 'industria' : 'pyme'
     const { error: err } = await supabase.from('facturas').insert({
       cliente_id:                clienteId,
       user_id:                   user?.id,
@@ -532,6 +544,8 @@ export default function NuevaFacturaPage() {
       comercializadora_anterior: analysis.comercializadora || null,
       tarifa_anterior:           analysis.tarifa       || null,
       fee_aplicado:              fee,
+      diferencia_energia_mwh:    diferenciaEnergiaMwh,
+      segmento,
     })
     if (!err) setFacturaSaved(true)
     return err
@@ -881,7 +895,7 @@ export default function NuevaFacturaPage() {
                   {validacion.conceptos.map((c) => (
                     <div key={c.concepto} className="flex items-start justify-between gap-4 text-sm border-b border-white/5 pb-2 last:border-0">
                       <div className="flex items-start gap-2 min-w-0">
-                        <span className="leading-5">{c.estado === 'ok' ? '✓' : c.estado === 'error' ? '✗' : c.estado === 'revisar' ? '⚠' : '·'}</span>
+                        <span className="leading-5">{c.estado === 'ok' ? '✓' : c.estado === 'error' ? '✗' : c.estado === 'revisar' ? '⚠' : c.estado === 'info' ? 'ℹ' : '·'}</span>
                         <div className="min-w-0">
                           <span className="text-[#D1D5DB]">{c.concepto}</span>
                           {c.detalle && <p className="text-[#6B7280] text-xs mt-0.5">{c.detalle}</p>}
@@ -890,6 +904,8 @@ export default function NuevaFacturaPage() {
                       <div className="text-right shrink-0">
                         {c.estado === 'no_verificable' ? (
                           <span className="text-[#6B7280] text-xs">No verificable</span>
+                        ) : c.estado === 'info' ? (
+                          <span className="text-sky-400 text-xs">{c.real != null ? `≈ ${c.real} €/MWh` : 'Informativo'}</span>
                         ) : (
                           <span className={cn(
                             'font-medium',

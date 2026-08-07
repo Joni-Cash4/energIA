@@ -464,7 +464,7 @@ export interface FormulaIndexada {
   notas?: string
 }
 
-export type EstadoConcepto = 'ok' | 'error' | 'revisar' | 'no_verificable'
+export type EstadoConcepto = 'ok' | 'error' | 'revisar' | 'no_verificable' | 'info'
 
 export interface ConceptoValidacion {
   concepto: string
