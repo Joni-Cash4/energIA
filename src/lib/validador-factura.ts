@@ -49,17 +49,19 @@ export function validarFactura(
 
   // 1. Peajes + cargos de energía por periodo — verificable contra la tabla
   // oficial 2026 SOLO si la factura desglosa el componente de mercado. En una
-  // tarifa de precio fijo ese desglose no existe (la IA devuelve 0 o null): ahí
-  // el precio de la energía es un todo-en-uno del que no se pueden separar los
-  // peajes, así que no se evalúa — restar un mercado de 0 daría un error falso
-  // por el importe entero de la energía.
+  // tarifa de precio fijo o all-in ese desglose no existe: la IA devuelve el
+  // mercado igual al precio total (o 0/null). Ahí el precio de la energía es un
+  // todo-en-uno del que no se pueden separar los peajes, así que no se evalúa —
+  // restar un mercado == precio daría un error falso por el importe entero.
   const periodosConKwh = periodos.filter((p) => (p.kwh ?? 0) > 0)
-  const conMercado = periodosConKwh.filter((p) => (p.mercado_kwh ?? 0) > 0)
+  const conMercado = periodosConKwh.filter(
+    (p) => (p.mercado_kwh ?? 0) > 0 && (p.mercado_kwh ?? 0) < (p.precio_kwh ?? 0),
+  )
   if (conMercado.length === 0) {
     conceptos.push({
       concepto: 'Peajes y cargos de energía', esperado: null, real: null, diferencia_eur: null,
       estado: 'no_verificable',
-      detalle: 'La factura no desglosa el componente de mercado (habitual en precio fijo): no se pueden aislar los peajes.',
+      detalle: 'La factura no separa el componente de mercado de los peajes/cargos (habitual en precio fijo o tarifas all-in): no se pueden aislar los peajes.',
     })
   } else {
     let esperado = 0

@@ -45,10 +45,10 @@ INSTRUCCIONES IMPORTANTES:
 - potencias = un array con la potencia contratada en kW de CADA periodo tarifario (P1 a P6 para 3.0TD/6.1TD, P1 a P3 para 2.0TD), AUNQUE NO TENGAN CONSUMO DE ENERGÍA. IMPORTANTE: la potencia contratada NO siempre es igual en todos los periodos (ej: P1=30kW, P2-P5=35kW, P6=60kW es habitual en 3.0TD). Busca la tabla "Potencia contratada" o "Potencia facturada" por periodo y extrae el valor exacto de cada uno, no asumas que son iguales.
 - dias_facturados = número de días del periodo de facturación (fecha_fin - fecha_inicio).
 - dias_facturados_potencia = días de potencia facturada. Busca "Término Potencia" y lee cuántos días pone (ej: "30 Días"). Si coincide con dias_facturados, usa el mismo valor. Si no aparece, usa dias_facturados.
-- potencia_total = importe total facturado por potencia, SUMANDO TODAS las secciones relacionadas con potencia que aparezcan en el detalle de la factura, antes de IEE e IVA. ALGUNAS FACTURAS DESGLOSAN LA POTENCIA EN VARIAS SECCIONES SEPARADAS (ej: "Término Potencia Tarifa Acceso", "Término Potencia" propio de la comercializadora, "Término Cargos Potencia Acceso") — debes sumar el importe de TODAS ellas, no solo una. Incluye también excesos de potencia si existen.
-- reactiva_total = importe total de energía reactiva + excesos de energía reactiva (si existe, sino 0).
+- potencia_total = importe total facturado por potencia, SUMANDO TODAS las secciones relacionadas con potencia que aparezcan en el detalle de la factura, antes de IEE e IVA. ALGUNAS FACTURAS DESGLOSAN LA POTENCIA EN VARIAS SECCIONES SEPARADAS (ej: "Término Potencia Tarifa Acceso", "Término Potencia" propio de la comercializadora, "Término Cargos Potencia Acceso") — debes sumar el importe de TODAS ellas, no solo una. NO incluyas aquí los excesos de potencia: van SIEMPRE en su propio campo excesos_potencia_total.
+- reactiva_total = importe total de energía REACTIVA (incluidos los excesos de energía reactiva si existen; sino 0). NUNCA incluyas aquí los excesos de POTENCIA: esos van SIEMPRE en excesos_potencia_total, jamás en reactiva.
+- excesos_potencia_total = importe total facturado por EXCESOS DE POTENCIA (potencia demandada por encima de la contratada). Busca líneas como "Excesos", "Término de excesos", "Excesos Potencia" o "Término Excesos Distribuidora" referidas a POTENCIA (no a energía reactiva). Si no hay, usa 0. Se registra por separado: NO se suma a potencia_total ni a reactiva_total.
 - alquiler_equipos = importe del alquiler de equipos de medida y control (antes de IVA).
-- productos_total = suma de cualquier concepto adicional que NO sea energía/potencia/reactiva/alquiler/impuestos — por ejemplo "Regularización Servicios de Ajuste del Sistema", penalizaciones, cargos extraordinarios, ajustes de periodos anteriores, etc. Si no hay ninguno, usa 0. Estos conceptos son específicos de la comercializadora actual y NO se trasladan a una simulación con otra tarifa.
 - importe_iee = importe en euros del Impuesto Especial sobre la Electricidad (busca "Impuesto Electricidad", "IEE" o similar).
 - base_imponible = base imponible antes de IVA (busca "Base imponible").
 - importe_iva = importe en euros del IVA aplicado.
@@ -69,8 +69,8 @@ Devuelve EXACTAMENTE este JSON (sin texto antes ni después):
   "dias_facturados_potencia": number,
   "potencia_total": number,
   "reactiva_total": number,
+  "excesos_potencia_total": number,
   "alquiler_equipos": number,
-  "productos_total": number,
   "importe_iee": number,
   "base_imponible": number,
   "importe_iva": number,
@@ -114,8 +114,8 @@ type InvoiceData = {
   dias_facturados_potencia?: number
   potencia_total?: number
   reactiva_total?: number
+  excesos_potencia_total?: number
   alquiler_equipos?: number
-  productos_total?: number
   importe_iee?: number
   base_imponible?: number
   importe_iva?: number
@@ -337,7 +337,14 @@ export async function POST(req: NextRequest) {
     })
 
     const raw = (message.content[0] as { type: string; text: string }).text.trim()
-    const json = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
+    let json = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
+    // Facturas atípicas (ej. extraordinarias): el modelo a veces antepone prosa al
+    // JSON pese a la instrucción. Nos quedamos con el objeto para no romper el parseo.
+    if (!json.trimStart().startsWith('{')) {
+      const first = json.indexOf('{')
+      const last = json.lastIndexOf('}')
+      if (first !== -1 && last > first) json = json.slice(first, last + 1)
+    }
     const parsed = JSON.parse(json) as InvoiceData & { error?: string; tipo?: string }
 
     if (parsed.error === 'no_electrica') {
@@ -351,6 +358,17 @@ export async function POST(req: NextRequest) {
               ? 'Esto es una factura de internet/teléfono. Necesitamos tu factura de electricidad.'
               : 'Este documento no parece ser una factura eléctrica. Sube una foto o PDF de tu factura de la luz.'
       return NextResponse.json({ error: msg, tipo }, { status: 422 })
+    }
+
+    // Factura sin consumo por periodos que comparar (p.ej. extraordinaria de solo
+    // Servicios de Ajuste): no hay energía que simular → no comparable. OJO: esto
+    // es SOLO por falta de consumo, NUNCA por no saber si es fija o indexada.
+    const periodosComparables = (parsed.periodos ?? []).filter((p) => (p.kwh ?? 0) > 0)
+    if (periodosComparables.length === 0) {
+      return NextResponse.json({
+        error: 'Esta factura no tiene consumo por periodos que comparar (puede ser una factura extraordinaria, p.ej. de regularización de servicios de ajuste). No se puede generar una comparativa de ahorro.',
+        no_comparable: true,
+      }, { status: 422 })
     }
 
     const tarifa = normalizaTarifa(parsed.tarifa)

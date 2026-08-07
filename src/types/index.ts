@@ -60,8 +60,8 @@ export interface InvoiceAnalysis {
   mercado_actual_mwh?: number
   potencia_total?: number
   reactiva_total?: number
+  excesos_potencia_total?: number
   alquiler_equipos?: number
-  productos_total?: number
   total_nuevo_estimado?: number
   importe_iee?: number
   base_imponible?: number
