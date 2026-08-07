@@ -40,23 +40,32 @@ export default function CobrosPage() {
     // sueltas y el embed comisiones->clientes (ya establecido) sí funcionan.
     type ComRow = {
       id: string; cups?: string; importe: number | null; fecha: string | null
-      tipo: ComisionTipo; comercializadora?: string
+      tipo: ComisionTipo; comercializadora?: string; contrato_id?: string | null
       cliente?: { id: string; nombre?: string; empresa?: string } | null
     }
-    const [{ data: comsRaw }, { data: cobrosExist }] = await Promise.all([
+    const [{ data: comsRaw }, { data: cobrosExist }, { data: ctRaw }] = await Promise.all([
       supabase.from('comisiones_generadas')
-        .select('id, cups, importe, fecha, tipo, comercializadora, cliente:clientes(id, nombre, empresa)'),
+        .select('id, cups, importe, fecha, tipo, comercializadora, contrato_id, cliente:clientes(id, nombre, empresa)'),
       supabase.from('comision_cobros').select('comision_id'),
+      supabase.from('contratos').select('id, estado'),
     ])
     const coms = (comsRaw ?? []) as unknown as ComRow[]
     const conCobros = new Set((cobrosExist ?? []).map((c: { comision_id: string }) => c.comision_id))
+    // Contratos realmente activos: solo esos generan cobro. El estado real lo
+    // marca el portal de Próxima (ACTIVADO en Contratos, no PROCESADO en
+    // Gestiones); un contrato en trámite/pendiente NO cobra todavía.
+    const activos = new Set(
+      (ctRaw ?? []).filter((k: { estado: string }) => k.estado === 'activo').map((k: { id: string }) => k.id)
+    )
 
-    // 1) Generar calendario para las comisiones de Próxima que aún no lo tengan
-    //    (idempotente por la unique (comision_id, num_pago)). Solo Próxima: el
-    //    fraccionamiento es su regla, y así no se resucitan comisiones antiguas
-    //    de otras comercializadoras como cobros pendientes.
+    // 1) Generar calendario para las comisiones de Próxima cuyo contrato esté
+    //    ACTIVO y aún no tengan cobro (idempotente por la unique
+    //    (comision_id, num_pago)). Solo Próxima (su regla de fraccionamiento) y
+    //    solo activos, para no resucitar comisiones antiguas ni contratos en
+    //    trámite como cobros pendientes.
     const faltan = coms.filter(c =>
-      c.importe != null && !!c.fecha && esComisionProxima(c.comercializadora) && !conCobros.has(c.id))
+      c.importe != null && !!c.fecha && esComisionProxima(c.comercializadora)
+      && !!c.contrato_id && activos.has(c.contrato_id) && !conCobros.has(c.id))
     if (faltan.length) {
       const rows = faltan.flatMap(c =>
         generarCobros({ importe: c.importe as number, fecha: c.fecha as string, comercializadora: c.comercializadora })
