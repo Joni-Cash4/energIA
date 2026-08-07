@@ -4,8 +4,7 @@ import { Wallet, Loader2, Check, CalendarClock } from 'lucide-react'
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import { generarCobros, esComisionProxima } from '@/lib/cobros'
-import type { ComisionCobro, ComisionTipo } from '@/types'
+import type { ComisionCobro } from '@/types'
 
 function nombreMes(mes: string): string {
   const [y, m] = mes.split('-').map(Number)
@@ -31,54 +30,21 @@ export default function CobrosPage() {
   const load = useCallback(async () => {
     setLoading(true)
     const supabase = getSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
 
-    // Consultas separadas + cruce en JS: NO se usa el embed
-    // comision_cobros<->comisiones_generadas porque esa relación tarda (o no
-    // llega) a registrarse en la caché de la API de Supabase. Las tablas
-    // sueltas y el embed comisiones->clientes (ya establecido) sí funcionan.
+    // Solo MOSTRAR. Los cobros NO se auto-generan aquí: se crean de forma
+    // deliberada cuando un contrato se activa (verificado contra el portal de
+    // Próxima), no al abrir la página. Auto-generar recreaba cobros de
+    // contratos aún pendientes/en trámite (el estado heredado no es fiable).
+    // Consultas separadas + cruce en JS para no depender del embed FK.
     type ComRow = {
-      id: string; cups?: string; importe: number | null; fecha: string | null
-      tipo: ComisionTipo; comercializadora?: string; contrato_id?: string | null
+      id: string; cups?: string; comercializadora?: string
       cliente?: { id: string; nombre?: string; empresa?: string } | null
     }
-    const [{ data: comsRaw }, { data: cobrosExist }, { data: ctRaw }] = await Promise.all([
-      supabase.from('comisiones_generadas')
-        .select('id, cups, importe, fecha, tipo, comercializadora, contrato_id, cliente:clientes(id, nombre, empresa)'),
-      supabase.from('comision_cobros').select('comision_id'),
-      supabase.from('contratos').select('id, estado'),
+    const [{ data: cobrosRaw }, { data: comsRaw }] = await Promise.all([
+      supabase.from('comision_cobros').select('*').order('fecha_prevista', { ascending: true }),
+      supabase.from('comisiones_generadas').select('id, cups, comercializadora, cliente:clientes(id, nombre, empresa)'),
     ])
-    const coms = (comsRaw ?? []) as unknown as ComRow[]
-    const conCobros = new Set((cobrosExist ?? []).map((c: { comision_id: string }) => c.comision_id))
-    // Contratos realmente activos: solo esos generan cobro. El estado real lo
-    // marca el portal de Próxima (ACTIVADO en Contratos, no PROCESADO en
-    // Gestiones); un contrato en trámite/pendiente NO cobra todavía.
-    const activos = new Set(
-      (ctRaw ?? []).filter((k: { estado: string }) => k.estado === 'activo').map((k: { id: string }) => k.id)
-    )
-
-    // 1) Generar calendario para las comisiones de Próxima cuyo contrato esté
-    //    ACTIVO y aún no tengan cobro (idempotente por la unique
-    //    (comision_id, num_pago)). Solo Próxima (su regla de fraccionamiento) y
-    //    solo activos, para no resucitar comisiones antiguas ni contratos en
-    //    trámite como cobros pendientes.
-    const faltan = coms.filter(c =>
-      c.importe != null && !!c.fecha && esComisionProxima(c.comercializadora)
-      && !!c.contrato_id && activos.has(c.contrato_id) && !conCobros.has(c.id))
-    if (faltan.length) {
-      const rows = faltan.flatMap(c =>
-        generarCobros({ importe: c.importe as number, fecha: c.fecha as string, comercializadora: c.comercializadora })
-          .map(p => ({ user_id: user.id, comision_id: c.id, ...p })))
-      if (rows.length) {
-        await supabase.from('comision_cobros').upsert(rows, { onConflict: 'comision_id,num_pago', ignoreDuplicates: true })
-      }
-    }
-
-    // 2) Cargar todos los cobros y cruzarlos en JS con su comisión.
-    const { data: cobrosRaw } = await supabase
-      .from('comision_cobros').select('*').order('fecha_prevista', { ascending: true })
-    const comById = new Map(coms.map(c => [c.id, c]))
+    const comById = new Map((comsRaw as unknown as ComRow[] ?? []).map(c => [c.id, c]))
     const enriquecidos = (cobrosRaw ?? []).map((cb: Record<string, unknown>) => ({
       ...cb,
       comision: comById.get(cb.comision_id as string) ?? null,
