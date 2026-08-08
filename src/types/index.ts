@@ -473,6 +473,10 @@ export interface ConceptoValidacion {
   diferencia_eur: number | null
   estado: EstadoConcepto
   detalle?: string
+  // Unidad de `real` cuando no es un importe en € (ej. '€/MWh'). Los conceptos
+  // 'info' pueden reportar cosas distintas — sin esto la UI no puede saber si
+  // el número es un precio unitario o un importe.
+  unidad?: string
 }
 
 export interface ValidacionFactura {

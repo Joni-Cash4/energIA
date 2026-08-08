@@ -190,6 +190,7 @@ export function validarFactura(
     conceptos.push({
       concepto: 'Exceso de potencia (identificado en factura)',
       esperado: null, real: r2(data.excesos_potencia_total!), diferencia_eur: null, estado: 'info',
+      unidad: '€',
       detalle: 'Potencia demandada por encima de la contratada, según el maxímetro de la factura. No se traslada a la simulación ni al ahorro.',
     })
   }
@@ -325,7 +326,7 @@ export function validarFactura(
         : `En energía, Próxima no mejora el precio de este periodo (${difMwh} €/MWh de diferencia). El ahorro, si lo hay, vendría de potencia u otros conceptos.`
     conceptos.push({
       concepto: 'Diferencia de energía frente a Próxima',
-      esperado: null, real: difMwh, diferencia_eur: null, estado: 'info', detalle,
+      esperado: null, real: difMwh, diferencia_eur: null, estado: 'info', unidad: '€/MWh', detalle,
     })
   }
 

@@ -908,7 +908,7 @@ export default function NuevaFacturaPage() {
                         {c.estado === 'no_verificable' ? (
                           <span className="text-[#6B7280] text-xs">No verificable</span>
                         ) : c.estado === 'info' ? (
-                          <span className="text-sky-400 text-xs">{c.real != null ? `≈ ${c.real} €/MWh` : 'Informativo'}</span>
+                          <span className="text-sky-400 text-xs">{c.real != null ? `≈ ${c.real} ${c.unidad ?? '€'}` : 'Informativo'}</span>
                         ) : (
                           <span className={cn(
                             'font-medium',
