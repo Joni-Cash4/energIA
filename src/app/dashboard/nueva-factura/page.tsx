@@ -631,7 +631,10 @@ export default function NuevaFacturaPage() {
     setCreatingGestion(true)
     const supabase = getSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    const compania = contrato?.comercializadora || data.comercializadora || ''
+    // La reclamación es contra quien EMITIÓ la factura, no contra el contrato
+    // activo del cliente hoy — pueden ser compañías distintas (ej. factura
+    // antigua de antes de un cambio de proveedor).
+    const compania = data.comercializadora || contrato?.comercializadora || ''
     const resumen = validacion.conceptos
       .filter((c) => c.estado === 'error')
       .map((c) => `${c.concepto}: esperado ${formatCurrency(c.esperado ?? 0)}, facturado ${formatCurrency(c.real ?? 0)} (${(c.diferencia_eur ?? 0) >= 0 ? '+' : ''}${formatCurrency(c.diferencia_eur ?? 0)})`)

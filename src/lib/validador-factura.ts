@@ -5,11 +5,16 @@
 // que ya hace /api/process-invoice (sim_indexada / sim_fijas) — no duplica
 // lógica de tarifas, solo compara lo ya calculado contra lo realmente facturado.
 //
-// Lo que NO se verifica en v1 (y se marca como tal, nunca como "error" falso):
-// - Exceso de potencia real: sin curva de consumo (Datadis) no se distingue de
-//   un error de facturación, así que solo se marca "revisar".
+// Lo que NO se verifica (y se marca como tal, nunca como "error" falso):
+// - Exceso de potencia: si la factura lo identifica explícitamente
+//   (excesos_potencia_total), se reconoce como tal; si no, "revisar" (podría
+//   ser error o exceso real, sin curva de consumo no se distingue).
 // - Precio de la energía de comercializadoras/productos que no están en el
 //   maestro de tarifas ni son Próxima — se marca "no_verificable".
+// - Cualquier concepto que dependa del "contrato usado para validar" cuando
+//   la factura analizada es de OTRA comercializadora (ej. factura antigua de
+//   antes de cambiar de proveedor) — se marca "no_verificable", nunca se
+//   compara contra un contrato que no es el suyo (ver facturaCoincideConContrato).
 
 import { PEAJES_ENERGIA_2026, CARGOS_ENERGIA_2026, normalizaTarifa, type Periodo } from '@/lib/market-rates'
 import type { InvoiceAnalysis, SimTarifa, Contrato, ConceptoValidacion, ValidacionFactura, FormulaIndexada } from '@/types'
@@ -34,6 +39,37 @@ const NOTA_INFRACOBRO = 'Facturado por debajo de lo esperado: no es reclamable, 
 
 function nombreProducto(comercializadora?: string, producto?: string): string {
   return `${(comercializadora ?? '').trim()} — ${(producto ?? '').trim()}`.toLowerCase()
+}
+
+// Normaliza un nombre de comercializadora para comparar (minúsculas, sin
+// acentos, sin puntuación/espacios) — "TOTAL" y "TotalEnergies Electricidad y
+// Gas España, S.A.U." deben poder reconocerse como la misma compañía.
+const ACENTOS: Record<string, string> = { á: 'a', é: 'e', í: 'i', ó: 'o', ú: 'u', ñ: 'n', ü: 'u' }
+function normalizaComercializadora(s: string | null | undefined): string {
+  const sinAcentos = (s ?? '').toLowerCase().replace(/[áéíóúñü]/g, (c) => ACENTOS[c] ?? c)
+  return sinAcentos.replace(/[^a-z0-9]/g, '')
+}
+
+// Próxima es un caso especial conocido: el CRM a veces guarda el nombre legal
+// ("Proxima Energía") y a veces la marca del producto ("Cristalina") en el
+// mismo campo comercializadora — se tratan como la misma compañía.
+function esProximaComercializadora(s: string | null | undefined): boolean {
+  const n = normalizaComercializadora(s)
+  return n.includes('proxima') || n.includes('cristalina')
+}
+
+// ¿Son la misma comercializadora? Usado para distinguir "la factura que se
+// está analizando" de "el contrato activo del cliente en el CRM" — son cosas
+// DISTINTAS: el contrato dice qué tiene firmado HOY, la factura dice de qué
+// proveedor es ESTE documento (puede ser de antes de un cambio de compañía).
+function mismaComercializadora(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = normalizaComercializadora(a)
+  const nb = normalizaComercializadora(b)
+  if (!na || !nb) return false
+  const proximaA = esProximaComercializadora(a)
+  const proximaB = esProximaComercializadora(b)
+  if (proximaA || proximaB) return proximaA && proximaB
+  return na.includes(nb) || nb.includes(na)
 }
 
 export function validarFactura(
@@ -97,11 +133,22 @@ export function validarFactura(
     const objetivo = nombreProducto(contrato.comercializadora, contrato.producto)
     matched = simsFijas.find((s) => (s.nota ?? '').toLowerCase() === objetivo) ?? null
     if (!matched) {
-      const com = (contrato.comercializadora ?? '').toLowerCase()
-      esProxima = com.includes('proxima') || com.includes('próxima') || com.includes('cristalina')
+      esProxima = esProximaComercializadora(contrato.comercializadora)
     }
   }
   const simContratada = matched ?? (esProxima ? simIdx : null)
+
+  // ¿Es ESTA factura de la misma comercializadora que el contrato usado como
+  // referencia? Son preguntas distintas: `esProxima`/`matched` (arriba) miran
+  // el CONTRATO ACTIVO del cliente en el CRM — lo que tiene firmado HOY.
+  // `esProximaFactura` mira la comercializadora extraída de ESTE documento —
+  // puede ser una factura de antes de cambiar de compañía. Solo tiene sentido
+  // validar "¿está bien facturado según mi tarifa?" cuando ambas coinciden;
+  // si no, cualquier comparación es peras contra manzanas, no un error real.
+  const esProximaFactura = esProximaComercializadora(data.comercializadora)
+  const facturaCoincideConContrato = contrato
+    ? mismaComercializadora(data.comercializadora, contrato.comercializadora)
+    : true
 
   // 2. Término de potencia. OJO: casi todas las comercializadoras añaden un
   // margen propio legítimo sobre los peajes/cargos regulados, así que comparar
@@ -119,10 +166,13 @@ export function validarFactura(
     // (superó sus kW): sin curva de consumo no se distingue → "revisar", nunca
     // "error" confirmado. Por debajo de lo contratado no perjudica al cliente.
     const estado: ConceptoValidacion['estado'] = diff > Math.max(3, esperado * 0.02) ? 'revisar' : 'ok'
+    const excesoConocido = (data.excesos_potencia_total ?? 0) > 0
     conceptos.push({
       concepto: 'Término de potencia', esperado, real: realPotencia, diferencia_eur: diff, estado,
       detalle: estado === 'revisar'
-        ? 'Puede ser un error o un exceso de potencia real — no distinguible sin curva de consumo (Datadis).'
+        ? (excesoConocido
+            ? `La factura identifica un exceso de potencia de ${r2(data.excesos_potencia_total!).toFixed(2)} € (maxímetro por encima de lo contratado) — ver concepto aparte. El resto puede ser margen legítimo de la comercializadora.`
+            : 'Puede ser un error o un exceso de potencia real — no distinguible sin curva de consumo (Datadis).')
         : undefined,
     })
   } else {
@@ -133,13 +183,35 @@ export function validarFactura(
     })
   }
 
+  // Exceso de potencia — dato que ya extrae la factura (maxímetros), mostrado
+  // aparte para que se vea claro. Puramente informativo: NO participa en la
+  // simulación de la alternativa ni en el cálculo del ahorro (ADR-0009).
+  if ((data.excesos_potencia_total ?? 0) > 0) {
+    conceptos.push({
+      concepto: 'Exceso de potencia (identificado en factura)',
+      esperado: null, real: r2(data.excesos_potencia_total!), diferencia_eur: null, estado: 'info',
+      detalle: 'Potencia demandada por encima de la contratada, según el maxímetro de la factura. No se traslada a la simulación ni al ahorro.',
+    })
+  }
+
   // 3. Precio de la energía según la tarifa contratada — solo si se conoce la
   // fórmula exacta (match en el maestro de tarifas o Próxima indexado).
   const realEnergiaTotal = r2(periodos.reduce((s, p) => s + (p.importe ?? 0), 0))
   const pmdPeriodos = data.pmd_periodos ?? {}
   const hayPmd = periodosConKwh.some((p) => (pmdPeriodos[p.periodo] ?? 0) > 0)
 
-  if (formula && !hayPmd) {
+  if (contrato && !facturaCoincideConContrato) {
+    // Esta factura NO es de la comercializadora del contrato usado como
+    // referencia (ej. factura antigua de TotalEnergies, contrato activo ya
+    // en Próxima) — ninguna fórmula/tarifa contratada aplica a ESTE documento.
+    // No es "cobrado de más": es que se estaría comparando contra un contrato
+    // que no es el suyo. Nunca puede alimentar una reclamación.
+    conceptos.push({
+      concepto: 'Precio de la energía (tarifa contratada)', esperado: null, real: realEnergiaTotal,
+      diferencia_eur: null, estado: 'no_verificable',
+      detalle: `Esta factura es de ${data.comercializadora || 'una comercializadora distinta'}; el contrato usado para validar es de ${contrato.comercializadora}. No se compara contra una tarifa que no es la suya.`,
+    })
+  } else if (formula && !hayPmd) {
     // Con fórmula pero sin OMIE del periodo facturado no se puede calcular nada:
     // el precio indexado es OMIE dependiente por definición.
     conceptos.push({
@@ -244,7 +316,9 @@ export function validarFactura(
     const difMwh = kwhTotal > 0 ? r2((difEur / kwhTotal) * 1000) : 0
     const difCent = Math.round((difMwh / 10) * 10) / 10 // c€/kWh
     difEur = r2(difEur)
-    const detalle = esProxima
+    // Aquí mira la comercializadora de ESTA factura (esProximaFactura), no la
+    // del contrato activo (esProxima) — son preguntas distintas, ver arriba.
+    const detalle = esProximaFactura
       ? `Ya es una factura de Próxima: la diferencia debería rondar 0 (${difMwh} €/MWh). Autochequeo del motor de cálculo.`
       : difMwh > 0
         ? `El cliente paga ≈ ${difCent} c€/kWh (${difMwh} €/MWh) más en energía que con Próxima en este mismo periodo — potencial de ahorro de ${difEur.toFixed(2)} € en energía en esta factura. Es una tarifa distinta, no un cobro indebido.`
