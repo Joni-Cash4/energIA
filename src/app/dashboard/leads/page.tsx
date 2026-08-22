@@ -38,6 +38,22 @@ export default function LeadsPage() {
 
   useEffect(() => { load() }, [])
 
+  // El bucket leads-facturas es privado: hay que generar una signed URL de
+  // corta duración al vuelo, no guardamos ni reutilizamos URLs públicas.
+  // Soporta filas antiguas que aún guardan la URL pública completa.
+  const abrirFactura = async (pathOrUrl: string) => {
+    const path = pathOrUrl.includes('/leads-facturas/')
+      ? pathOrUrl.split('/leads-facturas/')[1]
+      : pathOrUrl
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase.storage.from('leads-facturas').createSignedUrl(path, 300)
+    if (error || !data) {
+      toast({ title: 'No se pudo abrir la factura', description: error?.message, variant: 'destructive' })
+      return
+    }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+  }
+
   const handleConvert = async (lead: Lead) => {
     setConverting(lead.id)
     const supabase = getSupabaseClient()
@@ -136,10 +152,10 @@ export default function LeadsPage() {
                           {l.factura_urls && l.factura_urls.length > 0 && (
                             <div className="flex gap-2 mt-1">
                               {l.factura_urls.map((url, i) => (
-                                <a key={url} href={url} target="_blank" rel="noopener noreferrer"
+                                <button key={url} type="button" onClick={() => abrirFactura(url)}
                                   className="text-[#00E676] hover:underline normal-case">
                                   Factura{l.factura_urls!.length > 1 ? ` ${i + 1}` : ''}
-                                </a>
+                                </button>
                               ))}
                             </div>
                           )}

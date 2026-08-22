@@ -292,9 +292,14 @@ export async function POST(req: NextRequest) {
     // el análisis y hacer seguimiento manual del lead (ver privacidad.tsx).
     // Solo se guarda si el visitante llega a pedir el informe, no en el
     // simple análisis del paso 1.
+    //
+    // Bucket privado (no público): guardamos el PATH, no una URL pública.
+    // La factura tiene CUPS y consumo real — solo debe verse desde el
+    // dashboard autenticado, generando una signed URL de corta duración
+    // (ver /dashboard/leads). No usar getPublicUrl aquí.
     const facturaUrls: string[] = []
     if (files.length > 0) {
-      await supabase.storage.createBucket(FACTURAS_BUCKET, { public: true }).catch(() => {})
+      await supabase.storage.createBucket(FACTURAS_BUCKET, { public: false }).catch(() => {})
       for (const file of files) {
         const bytes = await file.arrayBuffer()
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -306,8 +311,7 @@ export async function POST(req: NextRequest) {
           console.error('[send-report] subida de factura falló:', uploadErr)
           continue
         }
-        const { data: { publicUrl } } = supabase.storage.from(FACTURAS_BUCKET).getPublicUrl(path)
-        facturaUrls.push(publicUrl)
+        facturaUrls.push(path)
       }
     }
 

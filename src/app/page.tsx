@@ -25,11 +25,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'IAenergía — Supervisión energética continua para empresas',
     description: 'Tu energía debería trabajar para tu empresa. Nosotros nos ocupamos de que así sea.',
-    url: 'https://iaenergia.es',
+    url: 'https://www.iaenergia.es',
     siteName: 'IAenergía',
     type: 'website',
   },
-  alternates: { canonical: 'https://iaenergia.es' },
+  alternates: { canonical: 'https://www.iaenergia.es' },
 }
 
 export default function HomePage() {
