@@ -33,19 +33,13 @@ export function Hero() {
           </span>
         </motion.div>
 
-        {/* Headline */}
-        <motion.h1
-          custom={1}
-          variants={fadeUp}
-          initial="hidden"
-          animate="show"
-          className="text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight leading-tight mb-6"
-        >
+        {/* Headline: sin animación de entrada para no retrasar el LCP */}
+        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight leading-tight mb-6">
           Tu energía debería trabajar para tu empresa.{' '}
           <br className="hidden sm:block" />
           <span className="gradient-text glow-green-text">Nosotros nos ocupamos</span>{' '}
           de que así sea.
-        </motion.h1>
+        </h1>
 
         {/* Subtitle */}
         <motion.p

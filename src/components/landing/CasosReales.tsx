@@ -1,4 +1,5 @@
 'use client'
+import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { Building2, TrendingDown } from 'lucide-react'
 
@@ -69,8 +70,17 @@ function iniciales(nombre: string) {
 
 function Avatar({ nombre, foto, size = 'md' }: { nombre: string; foto?: string; size?: 'md' | 'sm' }) {
   const cls = size === 'md' ? 'w-11 h-11 text-sm' : 'w-9 h-9 text-xs'
+  const px = size === 'md' ? 44 : 36
   if (foto) {
-    return <img src={foto} alt={nombre} className={`${cls} rounded-full object-cover shrink-0`} />
+    return (
+      <Image
+        src={foto}
+        alt={nombre}
+        width={px}
+        height={px}
+        className={`${cls} rounded-full object-cover shrink-0`}
+      />
+    )
   }
   return (
     <div
@@ -109,10 +119,12 @@ export function CasosReales() {
         >
           <div className="md:col-span-2 min-h-[220px] relative">
             {casoDestacado.fotoNegocio ? (
-              <img
+              <Image
                 src={casoDestacado.fotoNegocio}
                 alt={casoDestacado.etiqueta}
-                className="absolute inset-0 w-full h-full object-cover"
+                fill
+                sizes="(min-width: 768px) 40vw, 100vw"
+                className="object-cover"
               />
             ) : (
               <div className="absolute inset-0 bg-[#0D0D0D] flex flex-col items-center justify-center gap-3 text-[#6B7280]">
@@ -165,11 +177,15 @@ export function CasosReales() {
               className="card overflow-hidden flex flex-col"
             >
               {t.fotoNegocio && (
-                <img
-                  src={t.fotoNegocio}
-                  alt={t.negocio}
-                  className="w-full h-36 object-cover"
-                />
+                <div className="relative w-full h-36">
+                  <Image
+                    src={t.fotoNegocio}
+                    alt={t.negocio}
+                    fill
+                    sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                    className="object-cover"
+                  />
+                </div>
               )}
               <div className="p-6 flex flex-col flex-1">
                 <blockquote className="text-[#D1D5DB] leading-relaxed mb-6 flex-1">

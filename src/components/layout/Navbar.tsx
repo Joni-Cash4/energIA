@@ -31,7 +31,13 @@ function Ticker() {
     return () => clearInterval(id)
   }, [])
 
-  if (!data) return null
+  // Altura fija reservada desde el primer render: si esto devolviera null mientras
+  // carga el fetch, el bloque aparecería de golpe y empujaría todo lo de abajo (CLS).
+  if (!data) {
+    return (
+      <div className="w-full bg-[#0D0D0D] border-b border-[#1A1A1A] py-1.5 px-4 h-[30px]" aria-hidden="true" />
+    )
+  }
 
   const spainHour = parseInt(
     new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid', hour: 'numeric', hour12: false }),
@@ -40,7 +46,7 @@ function Ticker() {
   const precioAhora = data.precios[spainHour]?.precio_mwh ?? data.precio_ahora
 
   return (
-    <div className="w-full bg-[#0D0D0D] border-b border-[#1A1A1A] py-1.5 px-4 text-xs text-[#9CA3AF] flex items-center justify-center gap-1 overflow-hidden">
+    <div className="w-full bg-[#0D0D0D] border-b border-[#1A1A1A] py-1.5 px-4 h-[30px] text-xs text-[#9CA3AF] flex items-center justify-center gap-1 overflow-hidden">
       <Zap className="w-3 h-3 text-[#00E676] shrink-0" />
       <span>Precio OMIE ahora:</span>
       <span className="text-[#00E676] font-semibold">{precioAhora.toFixed(1)} €/MWh</span>

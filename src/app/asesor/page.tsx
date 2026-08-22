@@ -36,7 +36,7 @@ export default function AsesorPage() {
             <div className="shrink-0 relative">
               <div className="absolute -inset-2 bg-[#00E676]/10 rounded-full blur-2xl pointer-events-none" />
               <Image
-                src="/asesor/Foto perfil.png"
+                src="/asesor/Foto perfil.jpg"
                 alt="Jonathan, asesor energético de IAenergía"
                 width={192}
                 height={192}

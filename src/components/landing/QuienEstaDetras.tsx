@@ -22,7 +22,7 @@ export function QuienEstaDetras() {
           >
             <div className="absolute -inset-2 bg-[#00E676]/10 rounded-full blur-2xl pointer-events-none" />
             <Image
-              src="/asesor/Foto perfil.png"
+              src="/asesor/Foto perfil.jpg"
               alt="Jonathan, asesor energético y fundador de IAenergía"
               width={300}
               height={300}

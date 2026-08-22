@@ -1,4 +1,5 @@
 'use client'
+import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { Search, Wrench, TrendingDown } from 'lucide-react'
 
@@ -74,7 +75,13 @@ export function ResultadosReales() {
             >
               {c.foto && (
                 <div className="relative h-40">
-                  <img src={c.foto} alt={c.negocio} className="absolute inset-0 w-full h-full object-cover" />
+                  <Image
+                    src={c.foto}
+                    alt={c.negocio}
+                    fill
+                    sizes="(min-width: 768px) 33vw, 100vw"
+                    className="object-cover"
+                  />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/20 to-transparent" />
                 </div>
               )}
