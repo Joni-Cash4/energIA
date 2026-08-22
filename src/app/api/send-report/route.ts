@@ -5,6 +5,10 @@ import type { InvoiceAnalysis } from '@/types'
 
 const JONATHAN_EMAIL = 'contacto@iaenergia.es'
 const FROM_EMAIL = 'IAenergía <noreply@iaenergia.es>'
+// Los leads/contactos del sitio público no vienen de una cuenta logueada — se
+// asignan por defecto a Jonathan (dueño del negocio). Reasignar a otra cuenta
+// se hace a mano desde el dashboard.
+const JONATHAN_USER_ID = '2dd86dac-d444-4e2c-83be-ccc21cf7af80'
 
 function eur(n?: number) {
   if (n == null) return '—'
@@ -322,7 +326,7 @@ export async function POST(req: NextRequest) {
       `Ahorro anual: ${invoice_data?.ahorro_estimado_anual ?? ''}€`,
     ].filter(Boolean).join(' | ')
 
-    await supabase.from('contactos').insert({ nombre, email, telefono: telefono || null, mensaje })
+    await supabase.from('contactos').insert({ nombre, email, telefono: telefono || null, mensaje, user_id: JONATHAN_USER_ID })
 
     // También como lead en el pipeline del dashboard (antes solo iba a
     // "Mensajes web" y la pestaña Leads quedaba siempre vacía)
@@ -340,6 +344,7 @@ export async function POST(req: NextRequest) {
       kwh_anuales_sips: invoice_data?.kwh_anuales_sips ?? null,
       factura_urls: facturaUrls.length > 0 ? facturaUrls : null,
       estado: 'nuevo',
+      user_id: JONATHAN_USER_ID,
     })
     if (leadError) console.error('[send-report] insert lead falló:', leadError)
 
