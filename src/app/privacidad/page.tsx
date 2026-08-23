@@ -3,7 +3,7 @@ import { Navbar } from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
 
 export const metadata: Metadata = {
-  title: 'Política de privacidad — IAenergía',
+  title: 'Política de privacidad',
   description: 'Política de privacidad y protección de datos de IAenergía.',
 }
 

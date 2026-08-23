@@ -6,7 +6,7 @@ import { FAQ_ITEMS } from '@/lib/faq-items'
 import { Toaster } from '@/components/ui/toaster'
 
 export const metadata: Metadata = {
-  title: 'Preguntas frecuentes — IAenergía',
+  title: 'Preguntas frecuentes',
   description: 'Resolvemos tus dudas sobre el cambio de comercializadora, tarifas indexadas, el CUPS y nuestros servicios.',
   openGraph: { title: 'FAQ — IAenergía', description: 'Todo lo que necesitas saber sobre el ahorro en tu factura eléctrica.' },
 }
