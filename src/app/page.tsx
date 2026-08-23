@@ -32,9 +32,25 @@ export const metadata: Metadata = {
   alternates: { canonical: 'https://www.iaenergia.es' },
 }
 
+// Datos estructurados Organization — solo datos ya publicados en el sitio
+// (privacidad.tsx, footer), nada inventado: sin dirección física verificada
+// no se usa LocalBusiness.
+const organizationJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'IAenergía',
+  legalName: 'Jonathan López de Lacalle Calvo',
+  url: 'https://www.iaenergia.es',
+  description:
+    'Supervisión energética continua para empresas: detectamos oportunidades de ahorro, errores de facturación y riesgos en la factura eléctrica.',
+  email: 'contacto@iaenergia.es',
+  telephone: '+34689880596',
+}
+
 export default function HomePage() {
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }} />
       <Navbar />
       <main>
         <Hero />
