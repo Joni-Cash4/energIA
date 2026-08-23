@@ -5,6 +5,7 @@ import { CheckCircle2, Loader2, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { sendReport } from '@/lib/api'
+import { track } from '@/lib/analytics'
 import type { InvoiceAnalysis } from '@/types'
 
 interface Props {
@@ -26,6 +27,7 @@ export function Step3Form({ invoiceData, invoiceFiles }: Props) {
     setLoading(true)
     try {
       await sendReport({ ...form, invoice_data: invoiceData, files: invoiceFiles })
+      track('contacto_completado')
       setDone(true)
     } catch {
       setError('Ha ocurrido un error. Inténtalo de nuevo.')

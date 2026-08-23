@@ -92,6 +92,25 @@ export default function PrivacidadPage() {
                 (sesión de autenticación). No usamos cookies de seguimiento ni publicidad.
               </p>
             </section>
+
+            <section>
+              <h2 className="text-white text-xl font-semibold mb-3">8. Analítica web</h2>
+              <p className="mb-3">
+                Usamos <strong className="text-white">Umami</strong> (proveedor: Umami Software Inc.,
+                alojado en la UE) para medir de forma agregada las visitas al sitio y algunas
+                interacciones puntuales (por ejemplo, si se pulsa el botón de analizar factura, si
+                se completa una subida, o si se contacta por WhatsApp o formulario). Umami no usa
+                cookies, no genera un identificador que siga a la misma persona entre visitas, y no
+                recoge datos personales: no envía nombres, emails, teléfonos, CUPS, el contenido de
+                las facturas ni ningún importe. Solo mide que la acción ha ocurrido, de forma
+                agregada y anónima.
+              </p>
+              <p>
+                Esto no constituye una declaración de cumplimiento legal garantizado — la valoración
+                definitiva de si esta configuración cumple con todos los requisitos aplicables
+                corresponde a un profesional del derecho si se necesita esa garantía.
+              </p>
+            </section>
           </div>
         </div>
       </main>

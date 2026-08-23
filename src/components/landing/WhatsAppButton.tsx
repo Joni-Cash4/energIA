@@ -1,5 +1,6 @@
 'use client'
 import { motion } from 'framer-motion'
+import { track } from '@/lib/analytics'
 
 export function WhatsAppButton() {
   return (
@@ -8,6 +9,7 @@ export function WhatsAppButton() {
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Contactar por WhatsApp"
+      onClick={() => track('whatsapp_click')}
       initial={{ scale: 0, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ delay: 2, type: 'spring', stiffness: 260, damping: 20 }}

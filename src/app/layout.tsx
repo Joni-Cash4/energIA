@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Script from 'next/script'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
 import { WhatsAppButton } from '@/components/landing/WhatsAppButton'
@@ -32,6 +33,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <WhatsAppButton />
         <CookieBanner />
+        {/* Umami: sin cookies, sin datos personales, región UE. Solo pageviews
+            automáticos + los 5 eventos definidos en src/lib/analytics.ts. */}
+        <Script
+          defer
+          src="https://cloud.umami.is/script.js"
+          data-website-id="1b5cfd0b-acd0-4fd6-a294-026e1107e452"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   )

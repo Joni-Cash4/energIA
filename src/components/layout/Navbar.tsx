@@ -6,6 +6,7 @@ import { Zap, Menu, X } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { track } from '@/lib/analytics'
 import type { MarketHourlyResponse } from '@/types'
 
 const links = [
@@ -107,7 +108,7 @@ export function Navbar() {
             <Link href="/dashboard">
               <Button variant="secondary" size="sm">Dashboard</Button>
             </Link>
-            <Link href="/comparador">
+            <Link href="/comparador" onClick={() => track('analizar_factura_click')}>
               <Button size="sm">Analiza tu factura</Button>
             </Link>
           </div>
@@ -165,7 +166,7 @@ export function Navbar() {
                   <Link href="/dashboard" onClick={() => setOpen(false)}>
                     <Button variant="secondary" className="w-full">Dashboard</Button>
                   </Link>
-                  <Link href="/comparador" onClick={() => setOpen(false)}>
+                  <Link href="/comparador" onClick={() => { track('analizar_factura_click'); setOpen(false) }}>
                     <Button className="w-full">Analiza tu factura</Button>
                   </Link>
                 </div>

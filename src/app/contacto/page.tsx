@@ -7,6 +7,7 @@ import { Footer } from '@/components/layout/Footer'
 import { Toaster } from '@/components/ui/toaster'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { track } from '@/lib/analytics'
 
 export default function ContactoPage() {
   const [form, setForm] = useState({ nombre: '', email: '', telefono: '', mensaje: '' })
@@ -28,6 +29,7 @@ export default function ContactoPage() {
         body: JSON.stringify(form),
       })
       if (!res.ok) throw new Error()
+      track('contacto_completado')
       setDone(true)
     } catch {
       setError('Ha ocurrido un error. Escríbenos directamente a contacto@iaenergia.es')

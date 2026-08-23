@@ -1,5 +1,7 @@
+'use client'
 import Link from 'next/link'
 import { Zap, MessageCircle, Mail, Linkedin } from 'lucide-react'
+import { track } from '@/lib/analytics'
 
 const contactLinks = [
   {
@@ -55,6 +57,7 @@ export function Footer() {
                   key={label}
                   href={href}
                   {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                  onClick={label === 'WhatsApp' ? () => track('whatsapp_click') : undefined}
                   className="flex items-center gap-1.5 text-[#6B7280] text-sm hover:text-[#00E676] transition-colors"
                 >
                   <Icon className="w-4 h-4" />

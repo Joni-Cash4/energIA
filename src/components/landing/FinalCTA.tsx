@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { Upload, CalendarCheck, MessageCircle } from 'lucide-react'
+import { track } from '@/lib/analytics'
 
 const WHATSAPP_REVISION =
   'https://wa.me/34689880596?text=' +
@@ -46,7 +47,7 @@ export function FinalCTA() {
               Sube una factura y obtendrás al momento una primera revisión con tus datos reales. Es la
               forma más rápida de empezar a conocer tu caso.
             </p>
-            <Link href="/comparador">
+            <Link href="/comparador" onClick={() => track('analizar_factura_click')}>
               <Button className="w-full gap-2">
                 <Upload className="w-4 h-4" />
                 Subir factura
@@ -72,7 +73,7 @@ export function FinalCTA() {
               tus contratos y te explicamos personalmente lo que hemos encontrado. Si creemos que ya
               tienes el mejor contrato posible, también te lo diremos.
             </p>
-            <a href={WHATSAPP_REVISION} target="_blank" rel="noopener noreferrer">
+            <a href={WHATSAPP_REVISION} target="_blank" rel="noopener noreferrer" onClick={() => track('whatsapp_click')}>
               <Button className="w-full gap-2 glow-green">
                 <MessageCircle className="w-4 h-4" />
                 Escríbenos por WhatsApp

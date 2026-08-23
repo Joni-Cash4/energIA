@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Upload, FileText, Loader2, AlertCircle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { processInvoice } from '@/lib/api'
+import { track } from '@/lib/analytics'
 import { FEE_PUBLICO_ENERGIA_MWH } from '@/lib/market-rates'
 import { cn } from '@/lib/utils'
 import type { InvoiceAnalysis } from '@/types'
@@ -38,6 +39,7 @@ export function Step1Upload({ onComplete }: Props) {
     if (pendingFiles.length === 0) return
     setError(null)
     setLoading(true)
+    track('subida_iniciada')
 
     const interval = setInterval(() => {
       setLoadingMsg((p) => (p + 1) % LOADING_MESSAGES.length)
@@ -46,6 +48,7 @@ export function Step1Upload({ onComplete }: Props) {
     try {
       const data = await processInvoice(pendingFiles, FEE_PUBLICO_ENERGIA_MWH)
       clearInterval(interval)
+      track('subida_completada')
       onComplete(data, pendingFiles)
     } catch (err) {
       clearInterval(interval)
