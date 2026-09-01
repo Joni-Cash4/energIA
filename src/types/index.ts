@@ -375,6 +375,19 @@ export interface ComisionCobro {
   } | null
 }
 
+// Guardián de accesos: quién (Jonathan o Claude) entró en qué plataforma
+// externa (Próxima, TotalEnergies, WolfCRM AE2000...) y cuándo.
+export interface AccesoPlataforma {
+  id: string
+  user_id: string
+  plataforma: string
+  actor: 'jonathan' | 'claude'
+  origen: 'manual' | 'script'
+  nota?: string
+  fecha_hora: string
+  created_at: string
+}
+
 export type AccionTipoVal     = 'llamada' | 'email' | 'reunion' | 'visita' | 'otro'
 export type AccionResultadoVal = 'pendiente' | 'completado' | 'fracaso' | 'no_contesta'
 
