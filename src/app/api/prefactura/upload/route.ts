@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import ExcelJS from 'exceljs'
 import { getSupabaseServerClient } from '@/lib/supabase-server'
 
 const SYSTEM_PROMPT = `Eres un extractor de datos de prefacturas que una empresa pagadora (intermediaria de comisiones) manda por email a un agente energético. Tu única función es devolver un JSON válido con los datos extraídos. NUNCA expliques tu razonamiento, NUNCA escribas texto fuera del JSON, NUNCA uses markdown. Solo JSON.`
@@ -29,6 +30,12 @@ const ALLOWED_MIME: Record<string, string> = {
   'image/webp': 'image/webp',
 }
 
+const EXCEL_MIME = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/octet-stream', // algunos navegadores no identifican bien el .xlsx
+])
+
 const BUCKET = 'prefacturas'
 
 type LineaExtraida = { referencia: string; importe: number }
@@ -39,18 +46,53 @@ type Extraccion = {
   lineas?: LineaExtraida[]
 }
 
-export async function POST(req: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 })
-  }
+const DIACRITICS_RE = new RegExp('[' + String.fromCharCode(0x0300) + '-' + String.fromCharCode(0x036f) + ']', 'g')
 
+function normalizarCabecera(s: string): string {
+  return s.normalize('NFD').replace(DIACRITICS_RE, '').toLowerCase().trim()
+}
+
+// Empresas pagadoras como Gaolania mandan la prefactura como Excel
+// estructurado (una fila por cliente/CUPS), no como foto/PDF — se parsea
+// directamente, sin IA, buscando las columnas por nombre (no por posición,
+// para no depender del orden exacto de columnas del emisor).
+async function extraerDeExcel(bytes: ArrayBuffer): Promise<{ lineas: LineaExtraida[] } | { error: string }> {
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(bytes)
+  const hoja = workbook.worksheets[0]
+  if (!hoja) return { error: 'no_reconocido' }
+
+  const headerRow = hoja.getRow(1)
+  const columnas = new Map<string, number>()
+  headerRow.eachCell((cell, colNumber) => {
+    columnas.set(normalizarCabecera(String(cell.value ?? '')), colNumber)
+  })
+  const colReferencia = columnas.get('cups/concepto') ?? columnas.get('cups') ?? columnas.get('concepto')
+  const colImporte = columnas.get('retribucion') ?? columnas.get('importe')
+  if (!colReferencia || !colImporte) return { error: 'no_reconocido' }
+
+  const lineas: LineaExtraida[] = []
+  hoja.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return
+    const referencia = row.getCell(colReferencia).value
+    const importe = row.getCell(colImporte).value
+    if (referencia == null || importe == null) return // fila de totales u otra fila vacía
+    const importeNum = typeof importe === 'number' ? importe : Number(String(importe).replace(',', '.'))
+    if (Number.isNaN(importeNum)) return
+    lineas.push({ referencia: String(referencia).trim(), importe: importeNum })
+  })
+
+  return lineas.length ? { lineas } : { error: 'no_reconocido' }
+}
+
+export async function POST(req: NextRequest) {
   const form = await req.formData()
   const file = form.get('file') as File | null
   const empresaPagoId = form.get('empresaPagoId') as string | null
 
-  if (!file || !ALLOWED_MIME[file.type]) {
-    return NextResponse.json({ error: 'Sube una foto o PDF de la prefactura' }, { status: 400 })
+  const esExcel = !!file && (EXCEL_MIME.has(file.type) || /\.xlsx?$/i.test(file.name))
+  if (!file || (!ALLOWED_MIME[file.type] && !esExcel)) {
+    return NextResponse.json({ error: 'Sube una foto, PDF o Excel de la prefactura' }, { status: 400 })
   }
   if (!empresaPagoId) {
     return NextResponse.json({ error: 'Falta empresaPagoId' }, { status: 400 })
@@ -62,24 +104,46 @@ export async function POST(req: NextRequest) {
   }
 
   const bytes = await file.arrayBuffer()
-  const base64 = Buffer.from(bytes).toString('base64')
-  const mime = ALLOWED_MIME[file.type]
-  const fileBlock = mime === 'application/pdf'
-    ? { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: base64 } }
-    : { type: 'image' as const, source: { type: 'base64' as const, media_type: mime as 'image/jpeg' | 'image/png' | 'image/webp', data: base64 } }
 
   try {
-    const client = new Anthropic({ apiKey })
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: [fileBlock, { type: 'text', text: PROMPT }] }],
-    })
+    let parsed: Extraccion
 
-    const raw = (message.content[0] as { type: string; text: string }).text.trim()
-    const json = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
-    const parsed = JSON.parse(json) as Extraccion
+    if (esExcel) {
+      const resultado = await extraerDeExcel(bytes)
+      if ('error' in resultado) {
+        return NextResponse.json(
+          { error: 'No se han reconocido columnas de CUPS/importe en el Excel. Revisa que tenga cabeceras "CUPS/Concepto" y "Retribución".' },
+          { status: 422 },
+        )
+      }
+      parsed = {
+        numero_prefactura: file.name.replace(/\.[^.]+$/, ''),
+        fecha: null,
+        lineas: resultado.lineas,
+      }
+    } else {
+      const apiKey = process.env.ANTHROPIC_API_KEY
+      if (!apiKey) {
+        return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 })
+      }
+      const base64 = Buffer.from(bytes).toString('base64')
+      const mime = ALLOWED_MIME[file.type]
+      const fileBlock = mime === 'application/pdf'
+        ? { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: base64 } }
+        : { type: 'image' as const, source: { type: 'base64' as const, media_type: mime as 'image/jpeg' | 'image/png' | 'image/webp', data: base64 } }
+
+      const client = new Anthropic({ apiKey })
+      const message = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: [fileBlock, { type: 'text', text: PROMPT }] }],
+      })
+
+      const raw = (message.content[0] as { type: string; text: string }).text.trim()
+      const json = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
+      parsed = JSON.parse(json) as Extraccion
+    }
 
     if (parsed.error === 'no_reconocido' || !parsed.lineas || parsed.lineas.length === 0) {
       return NextResponse.json(
@@ -89,8 +153,9 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Upload evidencia a Storage ──────────────────────────────────────────
-    // No se toca comision_cobros aquí: la IA propone, el asesor confirma
-    // desde /dashboard/cobros tras revisar la conciliación. Bucket privado
+    // No se escribe en comision_cobros ni comisiones_generadas aquí: esta
+    // ruta solo extrae, el asesor confirma desde /dashboard/cobros o
+    // /dashboard/facturacion tras revisar la conciliación. Bucket privado
     // (documento financiero de un tercero) — se sirve con createSignedUrl(),
     // nunca con getPublicUrl() (eso rompió en producción para un bucket
     // privado, ver comision-foto/upload/route.ts).

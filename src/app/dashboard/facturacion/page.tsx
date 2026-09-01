@@ -1,12 +1,13 @@
 'use client'
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Banknote, Loader2, Pencil, Check, X, FileCheck } from 'lucide-react'
+import { Banknote, Loader2, Pencil, Check, X, FileCheck, ShieldCheck, Upload, AlertTriangle } from 'lucide-react'
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/lib/use-toast'
+import { conciliarPrefactura, type ResultadoConciliacion, type CuotaPendiente } from '@/lib/prefacturas'
 import type { ComisionGenerada } from '@/types'
 
 // Tipo de IVA general — no varía entre las empresas pagadoras.
@@ -93,6 +94,15 @@ export default function FacturacionPage() {
   const [comisiones, setComisiones] = useState<ComisionGenerada[]>([])
   const [loading, setLoading] = useState(true)
   const [marcando, setMarcando] = useState<string | null>(null)
+
+  // Verificar prefactura: una empresa a la vez (subir archivo → conciliar
+  // contra las líneas pendientes de esa empresa → confirmar selección).
+  const [verificandoEmpresaId, setVerificandoEmpresaId] = useState<string | null>(null)
+  const [subiendoPrefactura, setSubiendoPrefactura] = useState(false)
+  const [prefacturaExtraida, setPrefacturaExtraida] = useState<{ numero_prefactura: string | null; path: string } | null>(null)
+  const [resultado, setResultado] = useState<ResultadoConciliacion | null>(null)
+  const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set())
+  const [confirmandoPrefactura, setConfirmandoPrefactura] = useState(false)
   // Meses que tienen comisiones en la vista actual (pendientes o facturadas),
   // para el desplegable de salto rápido.
   const [mesesDisponibles, setMesesDisponibles] = useState<{ mes: string; count: number; total: number }[]>([])
@@ -181,6 +191,82 @@ export default function FacturacionPage() {
     if (error) toast({ title: 'Error al desmarcar', variant: 'destructive' })
     else { toast({ title: 'Devuelto a pendientes' }); await load(); await loadMeses() }
     setMarcando(null)
+  }
+
+  async function handleSubirPrefactura(empresaId: string, filasEmpresa: ComisionGenerada[], file: File) {
+    setVerificandoEmpresaId(empresaId)
+    setSubiendoPrefactura(true)
+    setResultado(null)
+    setPrefacturaExtraida(null)
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      body.append('empresaPagoId', empresaId)
+      const res = await fetch('/api/prefactura/upload', { method: 'POST', body })
+      const json = await res.json()
+      if (!res.ok) {
+        toast({ title: json.error ?? 'Error al analizar la prefactura', variant: 'destructive' })
+        return
+      }
+      setPrefacturaExtraida({ numero_prefactura: json.extraido.numero_prefactura, path: json.path })
+      const cuotasCandidatas: CuotaPendiente[] = filasEmpresa
+        .filter(f => !f.verificado_prefactura)
+        .map(f => ({
+          id: f.id,
+          importe: f.importe,
+          fecha_prevista: f.fecha,
+          clienteNombre: f.cliente?.nombre,
+          clienteEmpresa: f.cliente?.empresa,
+          cups: f.cups,
+          comercializadora: f.comercializadora,
+        }))
+      const r = conciliarPrefactura(json.extraido.lineas, cuotasCandidatas)
+      setResultado(r)
+      setSeleccionadas(new Set(
+        r.matches.filter(m => m.estado === 'confirmado' && m.cuota).map(m => m.cuota!.id),
+      ))
+    } catch {
+      toast({ title: 'Error al subir la prefactura', variant: 'destructive' })
+    } finally {
+      setSubiendoPrefactura(false)
+    }
+  }
+
+  function toggleSeleccionPrefactura(id: string) {
+    setSeleccionadas(p => {
+      const next = new Set(p)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function confirmarPrefactura() {
+    if (!resultado || !prefacturaExtraida) return
+    setConfirmandoPrefactura(true)
+    const supabase = getSupabaseClient()
+    const aConfirmar = resultado.matches.filter(m => m.cuota && seleccionadas.has(m.cuota.id))
+    const nowISO = new Date().toISOString()
+    const resultados = await Promise.all(aConfirmar.map(m => supabase.from('comisiones_generadas').update({
+      verificado_prefactura: true,
+      prefactura_importe: m.linea.importe,
+      prefactura_evidencia_url: prefacturaExtraida.path,
+      prefactura_num: prefacturaExtraida.numero_prefactura,
+      verificado_en: nowISO,
+    }).eq('id', m.cuota!.id)))
+    const fallos = resultados.filter(r => r.error).length
+    toast({
+      title: fallos
+        ? `${aConfirmar.length - fallos} verificada(s), ${fallos} con error`
+        : `${aConfirmar.length} línea(s) verificada(s) contra la prefactura`,
+      variant: fallos ? 'destructive' : undefined,
+    })
+    setResultado(null)
+    setPrefacturaExtraida(null)
+    setSeleccionadas(new Set())
+    setVerificandoEmpresaId(null)
+    await load()
+    setConfirmandoPrefactura(false)
   }
 
   if (loading) {
@@ -279,27 +365,121 @@ export default function FacturacionPage() {
                     {facturado && filas[0]?.numero_factura ? ` · Factura ${filas[0].numero_factura}` : ''}
                   </p>
                 </div>
-                {facturado ? (
-                  <Button
-                    variant="outline"
-                    onClick={() => desmarcarFacturado(empresa.id, filas)}
-                    disabled={marcando === empresa.id}
-                    className="gap-2"
-                  >
-                    {marcando === empresa.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
-                    Devolver a pendientes
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => marcarFacturado(empresa.id, filas)}
-                    disabled={marcando === empresa.id}
-                    className="gap-2"
-                  >
-                    {marcando === empresa.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileCheck className="w-4 h-4" />}
-                    Marcar como facturado
-                  </Button>
-                )}
+                <div className="flex items-center gap-3">
+                  {!facturado && (
+                    <label className="flex items-center gap-1.5 text-xs text-[#9CA3AF] cursor-pointer">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      Verificar prefactura
+                      <input
+                        type="file" accept="application/pdf,image/*,.xlsx,.xls" className="hidden"
+                        disabled={subiendoPrefactura && verificandoEmpresaId === empresa.id}
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handleSubirPrefactura(empresa.id, filas, f); e.target.value = '' }}
+                      />
+                      {subiendoPrefactura && verificandoEmpresaId === empresa.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                    </label>
+                  )}
+                  {facturado ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => desmarcarFacturado(empresa.id, filas)}
+                      disabled={marcando === empresa.id}
+                      className="gap-2"
+                    >
+                      {marcando === empresa.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                      Devolver a pendientes
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => marcarFacturado(empresa.id, filas)}
+                      disabled={marcando === empresa.id}
+                      className="gap-2"
+                    >
+                      {marcando === empresa.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileCheck className="w-4 h-4" />}
+                      Marcar como facturado
+                    </Button>
+                  )}
+                </div>
               </div>
+
+              {verificandoEmpresaId === empresa.id && resultado && (
+                <div className="px-5 py-4 border-b border-[#1F1F1F] space-y-4">
+                  {prefacturaExtraida?.numero_prefactura && (
+                    <p className="text-xs text-[#9CA3AF]">Prefactura <span className="text-white font-medium">{prefacturaExtraida.numero_prefactura}</span></p>
+                  )}
+
+                  {resultado.matches.filter(m => m.estado === 'confirmado').length > 0 && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-[#00E676] font-semibold mb-1.5">Coinciden</p>
+                      <div className="space-y-1">
+                        {resultado.matches.filter(m => m.estado === 'confirmado').map(m => (
+                          <label key={m.lineaIndex} className="flex items-center gap-2 text-xs text-[#E5E7EB] bg-[#00E676]/5 border border-[#00E676]/20 rounded-lg px-3 py-1.5">
+                            <input type="checkbox" checked={seleccionadas.has(m.cuota!.id)} onChange={() => toggleSeleccionPrefactura(m.cuota!.id)} />
+                            <span className="flex-1">{m.cuota!.clienteNombre ?? m.cuota!.clienteEmpresa ?? m.linea.referencia}</span>
+                            <span className="tabular-nums text-white">{formatCurrency(m.linea.importe)}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {resultado.matches.filter(m => m.estado === 'importe_distinto').length > 0 && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-amber-400 font-semibold mb-1.5">Importe distinto</p>
+                      <div className="space-y-1">
+                        {resultado.matches.filter(m => m.estado === 'importe_distinto').map(m => (
+                          <label key={m.lineaIndex} className="flex items-center gap-2 text-xs text-[#E5E7EB] bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-1.5">
+                            <input type="checkbox" checked={seleccionadas.has(m.cuota!.id)} onChange={() => toggleSeleccionPrefactura(m.cuota!.id)} />
+                            <span className="flex-1">{m.cuota!.clienteNombre ?? m.cuota!.clienteEmpresa ?? m.linea.referencia}</span>
+                            <span className="tabular-nums text-[#9CA3AF]">previsto {formatCurrency(m.cuota!.importe)}</span>
+                            <span className="tabular-nums text-amber-400">prefactura {formatCurrency(m.linea.importe)}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {resultado.matches.filter(m => m.estado === 'sin_correspondencia').length > 0 && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-[#6B7280] font-semibold mb-1.5">En la prefactura, sin línea conocida</p>
+                      <div className="space-y-1">
+                        {resultado.matches.filter(m => m.estado === 'sin_correspondencia').map(m => (
+                          <div key={m.lineaIndex} className="flex items-center gap-2 text-xs text-[#9CA3AF] bg-[#1A1A1A] rounded-lg px-3 py-1.5">
+                            <span className="flex-1">{m.linea.referencia}</span>
+                            <span className="tabular-nums">{formatCurrency(m.linea.importe)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {resultado.cuotasSinLinea.length > 0 && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-red-400 font-semibold mb-1.5 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />Pendientes de facturar, no aparecen en la prefactura
+                      </p>
+                      <div className="space-y-1">
+                        {resultado.cuotasSinLinea.map(c => (
+                          <div key={c.id} className="flex items-center gap-2 text-xs text-red-300 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-1.5">
+                            <span className="flex-1">{c.clienteNombre ?? c.clienteEmpresa ?? c.cups ?? '—'}</span>
+                            <span className="tabular-nums">{formatCurrency(c.importe)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={confirmarPrefactura}
+                      disabled={confirmandoPrefactura || seleccionadas.size === 0}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-[#00E676] text-black hover:bg-[#00c765] disabled:opacity-40"
+                    >
+                      {confirmandoPrefactura ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                      Confirmar seleccionados ({seleccionadas.size})
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -321,9 +501,19 @@ export default function FacturacionPage() {
                           <td className="px-4 py-2.5 text-[#9CA3AF] text-xs whitespace-nowrap">{f.numero_factura ?? '—'}</td>
                         )}
                         <td className="px-4 py-2.5">
-                          {facturado
-                            ? <span className="text-sm tabular-nums text-[#E5E7EB]">{formatCurrency(f.importe)}</span>
-                            : <InlineEditImporte value={f.importe} onSave={v => updateImporte(f.id, v)} />}
+                          <div className="flex items-center gap-2 justify-end">
+                            {f.verificado_prefactura && (
+                              <span
+                                title={`Verificado contra prefactura${f.prefactura_num ? ' ' + f.prefactura_num : ''}${f.verificado_en ? ' · ' + formatDate(f.verificado_en) : ''}`}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                              >
+                                <ShieldCheck className="w-3 h-3" />
+                              </span>
+                            )}
+                            {facturado
+                              ? <span className="text-sm tabular-nums text-[#E5E7EB]">{formatCurrency(f.importe)}</span>
+                              : <InlineEditImporte value={f.importe} onSave={v => updateImporte(f.id, v)} />}
+                          </div>
                         </td>
                       </tr>
                     ))}

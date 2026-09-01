@@ -338,6 +338,11 @@ export interface ComisionGenerada {
   fecha: string
   facturado: boolean
   numero_factura?: string
+  verificado_prefactura?: boolean
+  prefactura_num?: string
+  prefactura_importe?: number
+  prefactura_evidencia_url?: string
+  verificado_en?: string
   notas?: string
   created_at: string
   empresa_pago?: Pick<EmpresaPago, 'id' | 'nombre' | 'nif' | 'retencion_pct'>
