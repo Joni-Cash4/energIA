@@ -31,6 +31,10 @@
     {
       "path": "/api/cron/prefactura-alert",
       "schedule": "0 9 5 * *"
+    },
+    {
+      "path": "/api/cron/weekly-digest",
+      "schedule": "0 7 * * 1"
     }
   ]
 }
