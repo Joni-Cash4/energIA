@@ -56,7 +56,7 @@ export async function GET(req: Request) {
 
   const alertas = [
     renovacionesProximas ? { texto: `${renovacionesProximas} contrato${renovacionesProximas === 1 ? '' : 's'} vence${renovacionesProximas === 1 ? '' : 'n'} en los próximos 30 días`, href: '/dashboard/contratos' } : null,
-    gestionesVencidas ? { texto: `${gestionesVencidas} gestión${gestionesVencidas === 1 ? '' : 'es'} con seguimiento vencido`, href: '/dashboard/gestiones' } : null,
+    gestionesVencidas ? { texto: `${gestionesVencidas} ${gestionesVencidas === 1 ? 'gestión' : 'gestiones'} con seguimiento vencido`, href: '/dashboard/gestiones' } : null,
     cuotasSinVerificar ? { texto: `${cuotasSinVerificar} cuota${cuotasSinVerificar === 1 ? '' : 's'} de cobro sin verificar contra su prefactura`, href: '/dashboard/cobros' } : null,
     contactosSinLeer ? { texto: `${contactosSinLeer} mensaje${contactosSinLeer === 1 ? '' : 's'} web sin leer`, href: '/dashboard/contactos' } : null,
   ].filter((a): a is { texto: string; href: string } => a !== null)
