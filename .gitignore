@@ -27,3 +27,7 @@ npm-debug.log*
 server.log
 server-err.log
 .env*
+
+# Datos locales con datos de clientes - NUNCA subir
+_local/
+*.xlsx

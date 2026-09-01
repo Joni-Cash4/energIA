@@ -28,7 +28,15 @@ Un CRM almacena información. El objetivo de IAenergía es que el sistema **trab
 
 En la práctica, esto significa **unificar en una sola vista priorizada** las señales que ya calculan los módulos existentes (renovaciones próximas, comisiones pendientes de revisar/reclamar, facturas con anomalías del validador, oportunidades de ahorro nuevas) en vez de construir un "motor de IA" nuevo y separado. El objetivo final: que un asesor pueda gestionar una cartera grande casi solo, porque el sistema reduce al mínimo el trabajo manual de buscar qué merece atención.
 
-Cualquier automatización nueva se mide contra esto: **¿hace que el asesor tenga que pensar menos, tarde menos, o aporte más valor al cliente?** Y contra el principio 2 (desarrollo aditivo) y el 1 (nunca actuar sin certeza): "trabajar de forma continua" no significa sin límite ni criterio — el coste y la frecuencia de cualquier proceso automático (llamadas a IA, a APIs externas) se diseñan con la misma disciplina de uso responsable que ya aplicamos a ESIOS (ver [ADR-0005](adr/0005-datos-mercado-desde-esios.md)).
+Cualquier funcionalidad o automatización nueva debe responder con claridad a una de estas tres preguntas:
+
+- ¿Ayuda a supervisar mejor la energía del cliente?
+- ¿Ayuda a detectar antes una oportunidad o un riesgo?
+- ¿Ayuda al asesor a tomar una mejor decisión — pensar menos, tardar menos o aportar más valor?
+
+Si no responde a ninguna, probablemente no pertenece a IAenergía. Este es el filtro que evita que el sistema derive hacia un CRM lleno de funciones sin relación entre sí.
+
+Se mide además contra el principio 2 (desarrollo aditivo) y el 1 (nunca actuar sin certeza): "trabajar de forma continua" no significa sin límite ni criterio — el coste y la frecuencia de cualquier proceso automático (llamadas a IA, a APIs externas) se diseñan con la misma disciplina de uso responsable que ya aplicamos a ESIOS (ver [ADR-0005](adr/0005-datos-mercado-desde-esios.md)).
 
 ## 6. Migraciones de datos históricos: exactitud antes que automatización
 

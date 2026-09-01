@@ -45,6 +45,7 @@ Sin SQL ni implementación. Describe el negocio: qué representa cada entidad, q
 - **Quién la modifica:** Jonathan, mientras se negocia con el cliente.
 - **Eventos que genera:** si se acepta, da lugar a un Contrato.
 - **Depende de:** una Comparativa.
+- **Estado real (28-jul-2026):** no implementada. En producción se colapsa en `clientes.estado='oferta'`, que tiene 0 filas de 346 — la negociación pasa siempre de `prospecto` a `firmado` sin rastro estructurado. Pendiente de revisar cuando se complete la limpieza del CRM (traspaso desde AE2000, en curso) y se sepa qué cartera de clientes es real.
 
 ### Comisión — [ADR-0003](adr/0003-modelo-comisiones.md)
 - **Qué representa:** no es una entidad estática — es una secuencia de eventos de liquidación (alta / renovación / corrección) ligados a un Contrato, con un importe calculado a partir de un fee (€/MWh) y el consumo real del cliente.

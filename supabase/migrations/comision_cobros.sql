@@ -31,3 +31,4 @@ create index if not exists comision_cobros_fecha_idx    on comision_cobros (fech
 create index if not exists comision_cobros_cobrado_idx  on comision_cobros (cobrado);
 
 grant select, insert, update, delete on comision_cobros to authenticated;
+grant select, insert, update, delete on comision_cobros to service_role;
