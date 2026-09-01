@@ -1,10 +1,12 @@
 'use client'
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Wallet, Loader2, Check, CalendarClock } from 'lucide-react'
+import { Wallet, Loader2, Check, CalendarClock, Upload, ShieldCheck, AlertTriangle } from 'lucide-react'
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import type { ComisionCobro } from '@/types'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { conciliarPrefactura, type ResultadoConciliacion, type CuotaPendiente } from '@/lib/prefacturas'
+import type { ComisionCobro, EmpresaPago } from '@/types'
 
 function nombreMes(mes: string): string {
   const [y, m] = mes.split('-').map(Number)
@@ -23,9 +25,17 @@ function mesActual(): string {
 export default function CobrosPage() {
   const { toast } = useToast()
   const [cobros, setCobros] = useState<ComisionCobro[]>([])
+  const [empresasPago, setEmpresasPago] = useState<EmpresaPago[]>([])
   const [loading, setLoading] = useState(true)
   const [vista, setVista] = useState<'pendientes' | 'todos'>('pendientes')
   const [marcando, setMarcando] = useState<string | null>(null)
+
+  const [empresaPagoId, setEmpresaPagoId] = useState<string>('')
+  const [subiendoPrefactura, setSubiendoPrefactura] = useState(false)
+  const [prefacturaExtraida, setPrefacturaExtraida] = useState<{ numero_prefactura: string | null; path: string } | null>(null)
+  const [resultado, setResultado] = useState<ResultadoConciliacion | null>(null)
+  const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set())
+  const [confirmando, setConfirmando] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -37,12 +47,13 @@ export default function CobrosPage() {
     // contratos aún pendientes/en trámite (el estado heredado no es fiable).
     // Consultas separadas + cruce en JS para no depender del embed FK.
     type ComRow = {
-      id: string; cups?: string; comercializadora?: string
+      id: string; cups?: string; comercializadora?: string; empresa_pago_id?: string
       cliente?: { id: string; nombre?: string; empresa?: string } | null
     }
-    const [{ data: cobrosRaw }, { data: comsRaw }] = await Promise.all([
+    const [{ data: cobrosRaw }, { data: comsRaw }, { data: empresasRaw }] = await Promise.all([
       supabase.from('comision_cobros').select('*').order('fecha_prevista', { ascending: true }),
-      supabase.from('comisiones_generadas').select('id, cups, comercializadora, cliente:clientes(id, nombre, empresa)'),
+      supabase.from('comisiones_generadas').select('id, cups, comercializadora, empresa_pago_id, cliente:clientes(id, nombre, empresa)'),
+      supabase.from('empresas_pago').select('*').eq('activo', true),
     ])
     const comById = new Map((comsRaw as unknown as ComRow[] ?? []).map(c => [c.id, c]))
     const enriquecidos = (cobrosRaw ?? []).map((cb: Record<string, unknown>) => ({
@@ -50,10 +61,25 @@ export default function CobrosPage() {
       comision: comById.get(cb.comision_id as string) ?? null,
     }))
     setCobros(enriquecidos as unknown as ComisionCobro[])
+    setEmpresasPago((empresasRaw ?? []) as EmpresaPago[])
     setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Empresa pagadora por defecto: la que tenga más cuotas pendientes ahora
+  // mismo (no hardcodeado a ninguna en concreto — hay varias que facturan:
+  // Geoatlanter, Gaolania, Escandinava, Soillik).
+  useEffect(() => {
+    if (empresaPagoId || empresasPago.length === 0) return
+    const conteo = new Map<string, number>()
+    for (const c of cobros) {
+      if (c.cobrado || !c.comision?.empresa_pago_id) continue
+      conteo.set(c.comision.empresa_pago_id, (conteo.get(c.comision.empresa_pago_id) ?? 0) + 1)
+    }
+    const masFrecuente = [...conteo.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+    setEmpresaPagoId(masFrecuente ?? empresasPago.find(e => e.es_default)?.id ?? empresasPago[0].id)
+  }, [cobros, empresasPago, empresaPagoId])
 
   const visibles = useMemo(
     () => (vista === 'pendientes' ? cobros.filter(c => !c.cobrado) : cobros),
@@ -87,6 +113,87 @@ export default function CobrosPage() {
     if (error) toast({ title: 'Error al actualizar', variant: 'destructive' })
     else setCobros(p => p.map(x => x.id === c.id ? { ...x, cobrado: nuevo, fecha_cobro: fecha_cobro ?? undefined } : x))
     setMarcando(null)
+  }
+
+  function cuotasPendientesDe(empId: string, hastaMes: string): CuotaPendiente[] {
+    // Solo cuotas ya vencidas o del mismo mes que la prefactura — una cuota
+    // futura (aún no facturada por la empresa pagadora) no es "riesgo" por no
+    // aparecer todavía, es lo esperado (cada prefactura cubre una cuota).
+    return cobros
+      .filter(c => !c.cobrado && c.comision?.empresa_pago_id === empId && c.fecha_prevista.slice(0, 7) <= hastaMes)
+      .map(c => ({
+        id: c.id,
+        importe: c.importe,
+        fecha_prevista: c.fecha_prevista,
+        clienteNombre: c.comision?.cliente?.nombre,
+        clienteEmpresa: c.comision?.cliente?.empresa,
+        cups: c.comision?.cups,
+        comercializadora: c.comision?.comercializadora,
+      }))
+  }
+
+  async function handleSubirPrefactura(file: File) {
+    setSubiendoPrefactura(true)
+    setResultado(null)
+    setPrefacturaExtraida(null)
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      body.append('empresaPagoId', empresaPagoId)
+      const res = await fetch('/api/prefactura/upload', { method: 'POST', body })
+      const json = await res.json()
+      if (!res.ok) {
+        toast({ title: json.error ?? 'Error al analizar la prefactura', variant: 'destructive' })
+        return
+      }
+      setPrefacturaExtraida({ numero_prefactura: json.extraido.numero_prefactura, path: json.path })
+      const hastaMes: string = json.extraido.fecha?.slice(0, 7) || mesActual()
+      const r = conciliarPrefactura(json.extraido.lineas, cuotasPendientesDe(empresaPagoId, hastaMes))
+      setResultado(r)
+      setSeleccionadas(new Set(
+        r.matches.filter(m => m.estado === 'confirmado' && m.cuota).map(m => m.cuota!.id),
+      ))
+    } catch {
+      toast({ title: 'Error al subir la prefactura', variant: 'destructive' })
+    } finally {
+      setSubiendoPrefactura(false)
+    }
+  }
+
+  function toggleSeleccion(cuotaId: string) {
+    setSeleccionadas(p => {
+      const next = new Set(p)
+      if (next.has(cuotaId)) next.delete(cuotaId)
+      else next.add(cuotaId)
+      return next
+    })
+  }
+
+  async function confirmarSeleccionados() {
+    if (!resultado || !prefacturaExtraida) return
+    setConfirmando(true)
+    const supabase = getSupabaseClient()
+    const aConfirmar = resultado.matches.filter(m => m.cuota && seleccionadas.has(m.cuota.id))
+    const nowISO = new Date().toISOString()
+    const resultados = await Promise.all(aConfirmar.map(m => supabase.from('comision_cobros').update({
+      verificado_prefactura: true,
+      prefactura_importe: m.linea.importe,
+      prefactura_evidencia_url: prefacturaExtraida.path,
+      prefactura_num: prefacturaExtraida.numero_prefactura,
+      verificado_en: nowISO,
+    }).eq('id', m.cuota!.id)))
+    const fallos = resultados.filter(r => r.error).length
+    toast({
+      title: fallos
+        ? `${aConfirmar.length - fallos} verificada(s), ${fallos} con error`
+        : `${aConfirmar.length} cuota(s) verificada(s) contra la prefactura`,
+      variant: fallos ? 'destructive' : undefined,
+    })
+    setResultado(null)
+    setPrefacturaExtraida(null)
+    setSeleccionadas(new Set())
+    await load()
+    setConfirmando(false)
   }
 
   if (loading) {
@@ -125,6 +232,126 @@ export default function CobrosPage() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Verificar prefactura */}
+      <div className="bg-[#141414] border border-[#1F1F1F] rounded-2xl p-5 mb-8">
+        <div className="flex items-center gap-2 mb-3">
+          <ShieldCheck className="w-4 h-4 text-[#00E676]" />
+          <h2 className="text-white font-semibold text-sm">Verificar prefactura</h2>
+        </div>
+        <p className="text-[#6B7280] text-xs mb-4">
+          Sube la prefactura que te manda la empresa pagadora y compárala automáticamente contra el calendario. No marca nada como cobrado — solo deja constancia de que se ha cotejado.
+        </p>
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="w-64">
+            <label className="block text-[10px] text-[#9CA3AF] mb-1 uppercase tracking-wide">Empresa pagadora</label>
+            <Select value={empresaPagoId} onValueChange={setEmpresaPagoId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecciona…" />
+              </SelectTrigger>
+              <SelectContent>
+                {empresasPago.map(e => (
+                  <SelectItem key={e.id} value={e.id}>{e.nombre}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="block text-[10px] text-[#9CA3AF] mb-1 uppercase tracking-wide">Prefactura (PDF o foto)</label>
+            <input
+              type="file" accept="application/pdf,image/*" capture="environment"
+              disabled={subiendoPrefactura || !empresaPagoId}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleSubirPrefactura(f); e.target.value = '' }}
+              className="block text-[10px] text-[#9CA3AF] file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-[#1A1A1A] file:text-[#9CA3AF] file:text-[10px] hover:file:bg-[#2A2A2A]"
+            />
+          </div>
+          {subiendoPrefactura && (
+            <p className="text-[10px] text-[#6B7280] flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" />Analizando prefactura...
+            </p>
+          )}
+        </div>
+
+        {resultado && (
+          <div className="mt-5 space-y-4 border-t border-[#1F1F1F] pt-4">
+            {prefacturaExtraida?.numero_prefactura && (
+              <p className="text-xs text-[#9CA3AF]">Prefactura <span className="text-white font-medium">{prefacturaExtraida.numero_prefactura}</span></p>
+            )}
+
+            {resultado.matches.filter(m => m.estado === 'confirmado').length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-[#00E676] font-semibold mb-1.5">Coinciden</p>
+                <div className="space-y-1">
+                  {resultado.matches.filter(m => m.estado === 'confirmado').map(m => (
+                    <label key={m.lineaIndex} className="flex items-center gap-2 text-xs text-[#E5E7EB] bg-[#00E676]/5 border border-[#00E676]/20 rounded-lg px-3 py-1.5">
+                      <input type="checkbox" checked={seleccionadas.has(m.cuota!.id)} onChange={() => toggleSeleccion(m.cuota!.id)} />
+                      <span className="flex-1">{m.cuota!.clienteNombre ?? m.cuota!.clienteEmpresa ?? m.linea.referencia}</span>
+                      <span className="tabular-nums text-white">{formatCurrency(m.linea.importe)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {resultado.matches.filter(m => m.estado === 'importe_distinto').length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-amber-400 font-semibold mb-1.5">Importe distinto</p>
+                <div className="space-y-1">
+                  {resultado.matches.filter(m => m.estado === 'importe_distinto').map(m => (
+                    <label key={m.lineaIndex} className="flex items-center gap-2 text-xs text-[#E5E7EB] bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-1.5">
+                      <input type="checkbox" checked={seleccionadas.has(m.cuota!.id)} onChange={() => toggleSeleccion(m.cuota!.id)} />
+                      <span className="flex-1">{m.cuota!.clienteNombre ?? m.cuota!.clienteEmpresa ?? m.linea.referencia}</span>
+                      <span className="tabular-nums text-[#9CA3AF]">previsto {formatCurrency(m.cuota!.importe)}</span>
+                      <span className="tabular-nums text-amber-400">prefactura {formatCurrency(m.linea.importe)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {resultado.matches.filter(m => m.estado === 'sin_correspondencia').length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-[#6B7280] font-semibold mb-1.5">En la prefactura, sin cuota conocida</p>
+                <div className="space-y-1">
+                  {resultado.matches.filter(m => m.estado === 'sin_correspondencia').map(m => (
+                    <div key={m.lineaIndex} className="flex items-center gap-2 text-xs text-[#9CA3AF] bg-[#1A1A1A] rounded-lg px-3 py-1.5">
+                      <span className="flex-1">{m.linea.referencia}</span>
+                      <span className="tabular-nums">{formatCurrency(m.linea.importe)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {resultado.cuotasSinLinea.length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-red-400 font-semibold mb-1.5 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />Previstas pero no aparecen en la prefactura
+                </p>
+                <div className="space-y-1">
+                  {resultado.cuotasSinLinea.map(c => (
+                    <div key={c.id} className="flex items-center gap-2 text-xs text-red-300 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-1.5">
+                      <span className="flex-1">{c.clienteNombre ?? c.clienteEmpresa ?? c.cups ?? '—'}</span>
+                      <span className="tabular-nums">{formatCurrency(c.importe)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                onClick={confirmarSeleccionados}
+                disabled={confirmando || seleccionadas.size === 0}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-[#00E676] text-black hover:bg-[#00c765] disabled:opacity-40"
+              >
+                {confirmando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                Confirmar seleccionados ({seleccionadas.size})
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Resumen */}
@@ -197,6 +424,14 @@ export default function CobrosPage() {
                           </td>
                           <td className="px-4 py-2.5 text-sm tabular-nums text-[#E5E7EB] whitespace-nowrap">{formatCurrency(f.importe)}</td>
                           <td className="px-4 py-2.5">
+                            {f.verificado_prefactura && (
+                              <span
+                                title={`Verificado contra prefactura${f.prefactura_num ? ' ' + f.prefactura_num : ''}${f.verificado_en ? ' · ' + formatDate(f.verificado_en) : ''}`}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 mr-1.5"
+                              >
+                                <ShieldCheck className="w-3 h-3" />Verificada
+                              </span>
+                            )}
                             <button
                               onClick={() => toggleCobrado(f)}
                               disabled={marcando === f.id}

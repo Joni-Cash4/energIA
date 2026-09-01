@@ -358,12 +358,17 @@ export interface ComisionCobro {
   cobrado: boolean
   fecha_cobro?: string
   prefactura_num?: string
+  verificado_prefactura?: boolean
+  prefactura_importe?: number
+  prefactura_evidencia_url?: string
+  verificado_en?: string
   notas?: string
   created_at: string
   comision?: {
     id: string
     cups?: string
     comercializadora?: string
+    empresa_pago_id?: string
     importe: number
     tipo: ComisionTipo
     cliente?: Pick<Cliente, 'id' | 'nombre' | 'empresa'> | null
