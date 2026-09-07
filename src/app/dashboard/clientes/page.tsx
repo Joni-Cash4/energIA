@@ -162,7 +162,7 @@ export default function ClientesPage() {
                           </div>
                         </td>
                         <td className="px-5 py-4 text-[#9CA3AF] text-sm">{c.empresa ?? '—'}</td>
-                        <td className="px-5 py-4 font-mono text-xs text-[#9CA3AF]">{c.cups?.slice(0, 14) ?? '—'}</td>
+                        <td className="px-5 py-4 font-mono text-xs text-[#9CA3AF] whitespace-nowrap">{c.cups ?? '—'}</td>
                         <td className="px-5 py-4 text-[#9CA3AF] text-sm">{c.comercializadora ?? '—'}</td>
                         <td className="px-5 py-4">
                           <Badge variant={est.variant}>{est.label}</Badge>

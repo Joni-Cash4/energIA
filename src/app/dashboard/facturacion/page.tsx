@@ -495,7 +495,7 @@ export default function FacturacionPage() {
                       <tr key={f.id} className="border-b border-[#1A1A1A] last:border-0">
                         <td className="px-4 py-2.5 text-[#9CA3AF] text-xs whitespace-nowrap">{formatDate(f.fecha)}</td>
                         <td className="px-4 py-2.5 text-white text-sm whitespace-nowrap">{f.cliente?.nombre ?? '—'}</td>
-                        <td className="px-4 py-2.5 font-mono text-xs text-[#9CA3AF]">{f.cups?.slice(0, 14) ?? '—'}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs text-[#9CA3AF] whitespace-nowrap">{f.cups ?? '—'}</td>
                         <td className="px-4 py-2.5 text-[#9CA3AF] text-xs">{TIPO_LABELS[f.tipo] ?? f.tipo}</td>
                         {facturado && (
                           <td className="px-4 py-2.5 text-[#9CA3AF] text-xs whitespace-nowrap">{f.numero_factura ?? '—'}</td>

@@ -12,14 +12,13 @@ import { useToast } from '@/lib/use-toast'
 type ContratoRaw = {
   id: string
   cliente_id: string | null
+  cups: string | null
   comercializadora: string | null
   tarifa: string | null
   fecha_alta: string | null
   fecha_vencimiento: string | null
   kwh_base_comision: number | null
   fee_energia_mwh: number | null
-  kw_base_comision: number | null
-  fee_potencia_mwh: number | null
   reparto_energia: number | null
   a_cobrar: number | null
   clientes: { nombre: string; empresa: string | null } | null
@@ -32,6 +31,9 @@ type FacturaRaw = {
 }
 
 type Estado = 'sin_base' | 'sin_datos' | 'seguimiento' | 'ok' | 'revisar' | 'reclamar'
+
+// Corta un guardado que no responde en vez de dejar la fila bloqueada.
+const SAVE_TIMEOUT_MS = 15_000
 
 type ContratoMetrics = ContratoRaw & {
   kwhAcumulado: number
@@ -78,6 +80,25 @@ function InlineEdit({
   const [draft, setDraft] = useState(String(value ?? ''))
   const [saving, setSaving] = useState(false)
 
+  // Un guardado que falla o que nunca responde no debe dejar el botón bloqueado:
+  // `finally` siempre libera `saving`, y el editor sigue abierto con lo tecleado
+  // para poder reintentar sin volver a escribirlo.
+  const commit = async () => {
+    if (saving) return
+    if (draft.trim() === '') { setEditing(false); return }
+    const parsed = Number(draft)
+    if (Number.isNaN(parsed)) { setEditing(false); return }
+    setSaving(true)
+    try {
+      await onSave(parsed)
+      setEditing(false)
+    } catch {
+      // updateContrato ya ha mostrado el aviso; mantenemos el editor abierto
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (!editing) {
     return (
       <button
@@ -100,19 +121,25 @@ function InlineEdit({
         step={step}
         className="h-7 w-28 text-xs px-2"
         autoFocus
-        onKeyDown={async e => {
-          if (e.key === 'Enter') { setSaving(true); await onSave(Number(draft)); setSaving(false); setEditing(false) }
+        disabled={saving}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); void commit() }
           if (e.key === 'Escape') setEditing(false)
         }}
       />
       <button
-        onClick={async () => { setSaving(true); await onSave(Number(draft)); setSaving(false); setEditing(false) }}
+        onClick={() => void commit()}
         disabled={saving}
-        className="text-[#00E676] hover:text-[#00E676]/80"
+        title="Guardar"
+        className="text-[#00E676] hover:text-[#00E676]/80 disabled:opacity-40"
       >
         <Check className="w-4 h-4" />
       </button>
-      <button onClick={() => setEditing(false)} className="text-[#4B5563] hover:text-white">
+      <button
+        onClick={() => setEditing(false)}
+        title="Cancelar"
+        className="text-[#4B5563] hover:text-white"
+      >
         <X className="w-4 h-4" />
       </button>
     </div>
@@ -131,7 +158,7 @@ export default function ComisionesPage() {
     const [{ data: rawContratos }, { data: rawFacturas }] = await Promise.all([
       supabase
         .from('contratos')
-        .select('id,cliente_id,comercializadora,tarifa,fecha_alta,fecha_vencimiento,kwh_base_comision,fee_energia_mwh,kw_base_comision,fee_potencia_mwh,reparto_energia,a_cobrar,clientes(nombre,empresa)')
+        .select('id,cliente_id,cups,comercializadora,tarifa,fecha_alta,fecha_vencimiento,kwh_base_comision,fee_energia_mwh,reparto_energia,a_cobrar,clientes(nombre,empresa)')
         .eq('estado', 'activo')
         .not('fecha_alta', 'is', null)
         .order('fecha_alta', { ascending: false }),
@@ -186,8 +213,25 @@ export default function ComisionesPage() {
 
   const updateContrato = useCallback(async (id: string, fields: Record<string, number | null>) => {
     const supabase = getSupabaseClient()
-    const { error } = await supabase.from('contratos').update(fields).eq('id', id)
-    if (error) { toast({ title: 'Error al guardar', variant: 'destructive' }); return }
+    try {
+      const { error } = await supabase
+        .from('contratos')
+        .update(fields)
+        .eq('id', id)
+        .abortSignal(AbortSignal.timeout(SAVE_TIMEOUT_MS))
+      if (error) throw new Error(error.message)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      const expirado = /abort|timeout|signal/i.test(msg)
+      toast({
+        title: expirado ? 'El guardado tardó demasiado' : 'Error al guardar',
+        description: expirado
+          ? 'Puede que sí se haya guardado: recarga para comprobarlo antes de reintentar.'
+          : msg,
+        variant: 'destructive',
+      })
+      throw e instanceof Error ? e : new Error(msg)
+    }
     toast({ title: 'Guardado' })
     await load()
   }, [load, toast])
@@ -257,7 +301,7 @@ export default function ComisionesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1F1F1F]">
-                {['Cliente','Comerc.','Alta','Meses','Base comisión','kWh real acum.','Proyección anual','Desviación','Fee','Potencia (opcional)','Estado','Reclamable'].map(h => (
+                {['Cliente','Comerc.','Alta','Meses','Base comisión','kWh real acum.','Proyección anual','Desviación','Fee','Estado','Reclamable'].map(h => (
                   <th key={h} className="px-3 py-3 text-left text-xs text-[#6B7280] uppercase tracking-wide font-medium whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -275,7 +319,15 @@ export default function ComisionesPage() {
                   }`}>
                     <td className="px-3 py-3">
                       <p className="text-white font-medium text-sm">{c.clientes?.nombre ?? '—'}</p>
-                      {c.clientes?.empresa && <p className="text-[#4B5563] text-xs truncate max-w-[120px]">{c.clientes.empresa}</p>}
+                      {/* La empresa suele repetir el nombre; solo aporta cuando difiere */}
+                      {c.clientes?.empresa && c.clientes.empresa !== c.clientes.nombre && (
+                        <p className="text-[#4B5563] text-xs truncate max-w-[160px]">{c.clientes.empresa}</p>
+                      )}
+                      {/* El CUPS va aquí y no en columna propia: es lo único que distingue
+                          varios suministros del mismo cliente, y así no ensancha la tabla. */}
+                      {c.cups && (
+                        <p className="font-mono text-[10px] text-[#6B7280] whitespace-nowrap mt-0.5">{c.cups}</p>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-[#9CA3AF] text-xs whitespace-nowrap">{c.comercializadora ?? '—'}</td>
                     <td className="px-3 py-3 text-[#9CA3AF] text-xs whitespace-nowrap">{c.fecha_alta ? formatDate(c.fecha_alta) : '—'}</td>
@@ -350,24 +402,6 @@ export default function ComisionesPage() {
                         step={0.5}
                         onSave={v => updateContrato(c.id, { fee_energia_mwh: v })}
                       />
-                    </td>
-
-                    {/* Potencia — opcional, normalmente no se pacta */}
-                    <td className="px-3 py-3">
-                      <div className="flex flex-col gap-1">
-                        <InlineEdit
-                          value={c.kw_base_comision}
-                          suffix="kW"
-                          step={0.5}
-                          onSave={v => updateContrato(c.id, { kw_base_comision: v })}
-                        />
-                        <InlineEdit
-                          value={c.fee_potencia_mwh}
-                          suffix="€/kW"
-                          step={0.1}
-                          onSave={v => updateContrato(c.id, { fee_potencia_mwh: v })}
-                        />
-                      </div>
                     </td>
 
                     {/* Estado */}

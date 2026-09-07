@@ -624,7 +624,7 @@ export default function ContratosPage() {
                           {dias !== null ? <DiaBadge dias={dias} verificado={c.renovacion_verificada} /> : '—'}
                         </td>
                         <td className="px-4 py-3 text-white font-medium whitespace-nowrap">{nombre}</td>
-                        <td className="px-4 py-3 font-mono text-xs text-[#9CA3AF]">{c.cups?.slice(0, 14) ?? '—'}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-[#9CA3AF] whitespace-nowrap">{c.cups ?? '—'}</td>
                         <td className="px-4 py-3 text-[#9CA3AF]">{c.comercializadora ?? '—'}</td>
                         <td className="px-4 py-3 text-[#9CA3AF]">{c.producto ?? '—'}</td>
                         <td className="px-4 py-3 text-[#9CA3AF] text-xs whitespace-nowrap">

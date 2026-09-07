@@ -147,8 +147,8 @@ export default function LeadsPage() {
                         <td className="px-5 py-4 text-white font-medium">{l.nombre}</td>
                         <td className="px-5 py-4 text-[#9CA3AF]">{l.email}</td>
                         <td className="px-5 py-4 text-[#9CA3AF]">{l.telefono ?? '—'}</td>
-                        <td className="px-5 py-4 font-mono text-xs text-[#9CA3AF]">
-                          {l.cups?.slice(0, 14) ?? '—'}
+                        <td className="px-5 py-4 font-mono text-xs text-[#9CA3AF] whitespace-nowrap">
+                          {l.cups ?? '—'}
                           {l.factura_urls && l.factura_urls.length > 0 && (
                             <div className="flex gap-2 mt-1">
                               {l.factura_urls.map((url, i) => (

@@ -64,7 +64,7 @@ export async function GET(req: Request) {
       return `
         <tr>
           <td style="padding:10px 14px;border-bottom:1px solid #2A2A2A;color:#fff;font-weight:500">${nombre}</td>
-          <td style="padding:10px 14px;border-bottom:1px solid #2A2A2A;color:#9CA3AF;font-family:monospace;font-size:12px">${c.cups?.slice(0, 14) ?? '—'}</td>
+          <td style="padding:10px 14px;border-bottom:1px solid #2A2A2A;color:#9CA3AF;font-family:monospace;font-size:12px">${c.cups ?? '—'}</td>
           <td style="padding:10px 14px;border-bottom:1px solid #2A2A2A;color:#9CA3AF">${c.comercializadora ?? '—'}</td>
           <td style="padding:10px 14px;border-bottom:1px solid #2A2A2A;color:#9CA3AF">${c.fecha_vencimiento ?? '—'}</td>
           <td style="padding:10px 14px;border-bottom:1px solid #2A2A2A;font-weight:700;color:${color}">${diasTexto}</td>

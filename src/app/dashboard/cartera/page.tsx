@@ -96,7 +96,7 @@ export default function CarteraPage() {
                         <td className="px-4 py-3 text-white font-medium whitespace-nowrap">
                           {f.cliente?.nombre ?? '—'}{f.cliente?.empresa ? ` — ${f.cliente.empresa}` : ''}
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs text-[#9CA3AF]">{f.cups?.slice(0, 14) ?? '—'}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-[#9CA3AF] whitespace-nowrap">{f.cups ?? '—'}</td>
                         <td className="px-4 py-3 text-[#9CA3AF]">{f.kwh_base_comision ? formatNumber(f.kwh_base_comision) : '—'}</td>
                         <td className="px-4 py-3 text-[#9CA3AF]">{f.fee_energia_mwh ?? '—'} €/MWh</td>
                         <td className="px-4 py-3 text-[#9CA3AF]">{f.fee_potencia_mwh ? `${f.fee_potencia_mwh} €/kW` : '—'}</td>
