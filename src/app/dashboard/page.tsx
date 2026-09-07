@@ -38,9 +38,10 @@ export default function DashboardHome() {
       supabase.from('facturas').select('id, ahorro_estimado_anual').gte('created_at', since.toISOString()),
       supabase.from('clientes').select('id', { count: 'exact' }).not('proximo_contacto', 'is', null).lte('proximo_contacto', en7.toISOString().split('T')[0]),
       supabase.from('contactos').select('id', { count: 'exact' }).eq('leido', false),
+      // Sin límite inferior: un contrato vencido y sin verificar sigue contando
+      // (antes desaparecía de la alerta en cuanto pasaba la fecha, en vez de escalar).
       supabase.from('contratos').select('id', { count: 'exact' })
         .eq('estado', 'activo').eq('renovacion_verificada', false)
-        .gte('fecha_vencimiento', new Date().toISOString().split('T')[0])
         .lte('fecha_vencimiento', en30.toISOString().split('T')[0]),
       supabase.from('clientes').select('id', { count: 'exact' }).eq('revision_pendiente', true),
     ]).then(([leads, clientes, facturas, agenda, contactos, renovaciones, revision]) => {
@@ -88,7 +89,7 @@ export default function DashboardHome() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-white text-sm font-medium">
-                  {s.renovacionesProximas} {s.renovacionesProximas === 1 ? 'contrato vence' : 'contratos vencen'} en los próximos 30 días
+                  {s.renovacionesProximas} {s.renovacionesProximas === 1 ? 'contrato por renovar' : 'contratos por renovar'} (vencidos o en 30 días)
                 </p>
                 <p className="text-[#6B7280] text-xs mt-0.5">Gestionar renovaciones</p>
               </div>

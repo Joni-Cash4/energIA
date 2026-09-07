@@ -18,12 +18,13 @@ export async function GET(req: Request) {
   const hoy = new Date()
   const en30 = new Date(); en30.setDate(hoy.getDate() + 30)
 
-  // Contratos activos que vencen en ≤30 días y no están verificados
+  // Contratos activos que vencen en ≤30 días y no están verificados. Sin
+  // límite inferior: uno ya vencido y sin verificar sigue avisando cada día
+  // en vez de desaparecer silenciosamente en cuanto pasa la fecha.
   const { data: contratos, error } = await supabase
     .from('contratos')
     .select('*, cliente:clientes(nombre, empresa)')
     .lte('fecha_vencimiento', en30.toISOString().split('T')[0])
-    .gte('fecha_vencimiento', hoy.toISOString().split('T')[0])
     .eq('renovacion_verificada', false)
     .eq('estado', 'activo')
     .order('fecha_vencimiento')
@@ -59,13 +60,14 @@ export async function GET(req: Request) {
       const dias = c.fecha_vencimiento ? diasRestantes(c.fecha_vencimiento) : '?'
       const nombre = (c.cliente as { nombre?: string })?.nombre ?? c.cups ?? '—'
       const color = typeof dias === 'number' && dias <= 7 ? '#EF4444' : '#F59E0B'
+      const diasTexto = typeof dias === 'number' && dias < 0 ? `Vencido hace ${Math.abs(dias)}d` : `${dias}d`
       return `
         <tr>
           <td style="padding:10px 14px;border-bottom:1px solid #2A2A2A;color:#fff;font-weight:500">${nombre}</td>
           <td style="padding:10px 14px;border-bottom:1px solid #2A2A2A;color:#9CA3AF;font-family:monospace;font-size:12px">${c.cups?.slice(0, 14) ?? '—'}</td>
           <td style="padding:10px 14px;border-bottom:1px solid #2A2A2A;color:#9CA3AF">${c.comercializadora ?? '—'}</td>
           <td style="padding:10px 14px;border-bottom:1px solid #2A2A2A;color:#9CA3AF">${c.fecha_vencimiento ?? '—'}</td>
-          <td style="padding:10px 14px;border-bottom:1px solid #2A2A2A;font-weight:700;color:${color}">${dias}d</td>
+          <td style="padding:10px 14px;border-bottom:1px solid #2A2A2A;font-weight:700;color:${color}">${diasTexto}</td>
         </tr>`
     }).join('')
 
@@ -86,10 +88,10 @@ export async function GET(req: Request) {
 
     <div style="padding:32px">
       <h1 style="color:#fff;font-size:20px;margin:0 0 8px">
-        ${items.length} contrato${items.length !== 1 ? 's' : ''} próximo${items.length !== 1 ? 's' : ''} a vencer
+        ${items.length} contrato${items.length !== 1 ? 's' : ''} por renovar
       </h1>
       <p style="color:#6B7280;font-size:14px;margin:0 0 24px">
-        Los siguientes contratos vencen en los próximos 30 días y están pendientes de renovación.
+        Los siguientes contratos están vencidos o vencen en los próximos 30 días y siguen pendientes de renovación.
       </p>
 
       <table style="width:100%;border-collapse:collapse;background:#0F0F0F;border-radius:8px;overflow:hidden">

@@ -42,9 +42,10 @@ export function DashboardNav() {
     supabase.from('leads').select('id', { count: 'exact' }).eq('estado', 'nuevo')
       .then(({ count }) => setLeadsNuevos(count ?? 0))
     const en30 = new Date(); en30.setDate(en30.getDate() + 30)
+    // Sin límite inferior: un contrato vencido y sin verificar sigue contando
+    // (antes desaparecía de la alerta en cuanto pasaba la fecha, en vez de escalar).
     supabase.from('contratos').select('id', { count: 'exact' })
       .lte('fecha_vencimiento', en30.toISOString().split('T')[0])
-      .gte('fecha_vencimiento', new Date().toISOString().split('T')[0])
       .eq('renovacion_verificada', false)
       .eq('estado', 'activo')
       .then(({ count }) => setProximosContratos(count ?? 0))

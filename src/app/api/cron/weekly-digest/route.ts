@@ -35,9 +35,11 @@ export async function GET(req: Request) {
     { data: facturasSemana },
     { data: contratosActivos },
   ] = await Promise.all([
+    // Sin límite inferior: un contrato vencido y sin verificar sigue contando
+    // (antes desaparecía de la alerta en cuanto pasaba la fecha, en vez de escalar).
     supabase.from('contratos').select('id', { count: 'exact', head: true })
       .eq('estado', 'activo').eq('renovacion_verificada', false)
-      .gte('fecha_vencimiento', hoy).lte('fecha_vencimiento', en30.toISOString().split('T')[0]),
+      .lte('fecha_vencimiento', en30.toISOString().split('T')[0]),
     supabase.from('gestiones').select('id', { count: 'exact', head: true })
       .neq('estado', 'resuelto').lte('proximo_seguimiento', hoy),
     supabase.from('comision_cobros').select('id', { count: 'exact', head: true })
@@ -55,7 +57,7 @@ export async function GET(req: Request) {
   const contratosConDatos = filasCartera.filter(f => calcularComisionContrato(f) != null).length
 
   const alertas = [
-    renovacionesProximas ? { texto: `${renovacionesProximas} contrato${renovacionesProximas === 1 ? '' : 's'} vence${renovacionesProximas === 1 ? '' : 'n'} en los próximos 30 días`, href: '/dashboard/contratos' } : null,
+    renovacionesProximas ? { texto: `${renovacionesProximas} contrato${renovacionesProximas === 1 ? '' : 's'} por renovar (vencido${renovacionesProximas === 1 ? '' : 's'} o en 30 días)`, href: '/dashboard/contratos' } : null,
     gestionesVencidas ? { texto: `${gestionesVencidas} ${gestionesVencidas === 1 ? 'gestión' : 'gestiones'} con seguimiento vencido`, href: '/dashboard/gestiones' } : null,
     cuotasSinVerificar ? { texto: `${cuotasSinVerificar} cuota${cuotasSinVerificar === 1 ? '' : 's'} de cobro sin verificar contra su prefactura`, href: '/dashboard/cobros' } : null,
     contactosSinLeer ? { texto: `${contactosSinLeer} mensaje${contactosSinLeer === 1 ? '' : 's'} web sin leer`, href: '/dashboard/contactos' } : null,
