@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { getSupabaseClient } from '@/lib/supabase'
 import { formatDate, formatCurrency, formatNumber } from '@/lib/utils'
 import { useToast } from '@/lib/use-toast'
-import { resolverEmpresaPago, calcularComisionContrato } from '@/lib/comisiones'
+import { resolverEmpresaPago, calcularComisionContrato, calcularDescomision } from '@/lib/comisiones'
 import type { Contrato, Cliente, ContratoEstado, EstadoFirma, ContratoMotivoBaja, EmpresaPago } from '@/types'
 
 function diasRestantes(fecha: string): number {
@@ -46,11 +46,13 @@ const EMPTY: {
   producto: string; fecha_firma: string; fecha_alta: string; fecha_vencimiento: string
   duracion_meses: string; estado: ContratoEstado; estado_firma: EstadoFirma
   motivo_baja: ContratoMotivoBaja | ''
+  fecha_baja: string; descomision: string
   ref_comercializadora: string; a_cobrar: string; notas: string
 } = {
   cliente_id: '', cups: '', comercializadora: '', tarifa: '', producto: '',
   fecha_firma: '', fecha_alta: '', fecha_vencimiento: '', duracion_meses: '12',
   estado: 'activo', estado_firma: 'pendiente_firma', motivo_baja: '',
+  fecha_baja: '', descomision: '',
   ref_comercializadora: '', a_cobrar: '', notas: '',
 }
 
@@ -430,6 +432,10 @@ export default function ContratosPage() {
       estado:               form.estado,
       estado_firma:         form.estado_firma,
       motivo_baja:          form.estado === 'baja' ? (form.motivo_baja || null) : null,
+      // Los datos de baja solo tienen sentido si el contrato está de baja:
+      // al reactivarlo se limpian para no dejar una descomisión fantasma.
+      fecha_baja:           form.estado === 'baja' ? (form.fecha_baja || null) : null,
+      descomision:          form.estado === 'baja' && form.descomision ? Number(form.descomision) : null,
       ref_comercializadora: form.ref_comercializadora || null,
       a_cobrar:             form.a_cobrar ? Number(form.a_cobrar) : null,
       notas:                form.notas || null,
@@ -510,6 +516,8 @@ export default function ContratosPage() {
       estado:               c.estado,
       estado_firma:         c.estado_firma ?? 'pendiente_firma',
       motivo_baja:          c.motivo_baja ?? '',
+      fecha_baja:           c.fecha_baja ?? '',
+      descomision:          c.descomision != null ? String(c.descomision) : '',
       ref_comercializadora: c.ref_comercializadora ?? '',
       a_cobrar:             c.a_cobrar != null ? String(c.a_cobrar) : '',
       notas:                c.notas ?? '',
@@ -993,16 +1001,74 @@ export default function ContratosPage() {
                 })()}
 
                 {form.estado === 'baja' && (
-                  <div>
-                    <label className="block text-xs text-[#9CA3AF] mb-1.5">Motivo de la baja</label>
-                    <Select value={form.motivo_baja} onValueChange={v => setForm(p => ({ ...p, motivo_baja: v as ContratoMotivoBaja }))}>
-                      <SelectTrigger><SelectValue placeholder="Seleccionar motivo..." /></SelectTrigger>
-                      <SelectContent>
-                        {(Object.entries(MOTIVO_BAJA_LABELS) as [ContratoMotivoBaja, string][]).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>{label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-[#9CA3AF] mb-1.5">Motivo de la baja</label>
+                      <Select value={form.motivo_baja} onValueChange={v => setForm(p => ({ ...p, motivo_baja: v as ContratoMotivoBaja }))}>
+                        <SelectTrigger><SelectValue placeholder="Seleccionar motivo..." /></SelectTrigger>
+                        <SelectContent>
+                          {(Object.entries(MOTIVO_BAJA_LABELS) as [ContratoMotivoBaja, string][]).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>{label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-[#9CA3AF] mb-1.5">Fecha de baja efectiva</label>
+                        <Input
+                          type="date"
+                          value={form.fecha_baja}
+                          onChange={e => setForm(p => ({ ...p, fecha_baja: e.target.value }))}
+                        />
+                        <p className="text-[10px] text-[#4B5563] mt-1">Cuándo deja el suministro la comercializadora, no cuándo se firma el nuevo contrato.</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[#9CA3AF] mb-1.5">Descomisión cargada (€)</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="cuando llegue el cargo"
+                          value={form.descomision}
+                          onChange={e => setForm(p => ({ ...p, descomision: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const d = calcularDescomision({
+                        fecha_alta: form.fecha_alta || undefined,
+                        fecha_vencimiento: form.fecha_vencimiento || undefined,
+                        fecha_baja: form.fecha_baja || undefined,
+                        a_cobrar: form.a_cobrar ? Number(form.a_cobrar) : undefined,
+                        descomision: form.descomision ? Number(form.descomision) : undefined,
+                      })
+                      if (!d) return null
+                      const cobrada = Number(form.a_cobrar)
+                      return (
+                        <div className="rounded-lg border border-[#1F1F1F] bg-[#0F0F0F] p-3 space-y-1.5">
+                          <p className="text-xs text-[#9CA3AF]">
+                            Prorrata por días · <span className="text-white">{d.diasConsumidos}</span> cumplidos de{' '}
+                            <span className="text-white">{d.diasTotales}</span>, quedan{' '}
+                            <span className="text-white">{d.diasPendientes}</span> ({formatCurrency(d.importeDiario)}/día)
+                          </p>
+                          <p className="text-sm">
+                            <span className="text-[#9CA3AF]">Descomisión estimada </span>
+                            <span className="text-red-400 font-bold tabular-nums">−{formatCurrency(d.estimada)}</span>
+                            <span className="text-[#4B5563]"> · te quedas con </span>
+                            <span className="text-white font-medium tabular-nums">{formatCurrency(cobrada - d.estimada)}</span>
+                            <span className="text-[#4B5563]"> de {formatCurrency(cobrada)}</span>
+                          </p>
+                          {d.desviacion != null && d.desviacion !== 0 && (
+                            <p className={`text-xs ${d.desviacion > 0 ? 'text-red-400' : 'text-[#00E676]'}`}>
+                              El cargo real difiere {d.desviacion > 0 ? '+' : ''}{formatCurrency(d.desviacion)} de la estimación
+                              {d.desviacion > 0 && ' — revisa qué fecha de baja han aplicado'}
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )}
 

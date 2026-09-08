@@ -284,6 +284,11 @@ export interface Contrato {
   estado: ContratoEstado
   estado_firma: EstadoFirma
   motivo_baja?: ContratoMotivoBaja
+  // Baja anticipada (ver calcularDescomision en lib/comisiones.ts): fecha real
+  // en que el suministro deja la comercializadora — no la de firma del contrato
+  // nuevo — y descomisión que esta acabó cargando, si ya se conoce.
+  fecha_baja?: string
+  descomision?: number
   ref_comercializadora?: string
   renovacion_verificada: boolean
   a_cobrar?: number
