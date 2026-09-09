@@ -123,7 +123,13 @@ export async function GET(req: Request) {
         `&startDate=${currentYearMonth()}` +
         `&endDate=${currentYearMonth()}` +
         `&measurementType=0` +
-        `&pointType=${supply.pointType}`,
+        `&pointType=${supply.pointType}` +
+        // Para suministros de tercero hay que repetir el NIF autorizado también aquí,
+        // no solo en get-supplies-v2: sin él Datadis responde 200 con array VACÍO
+        // (no error), así que el cron reportaba "sin lecturas" para todos los CUPS
+        // delegados y no traía nunca la curva. Verificado contra 2026/07 de un CUPS
+        // real: sin el parámetro 0 lecturas, con él 744.
+        (isOwnSupply ? '' : `&authorizedNif=${encodeURIComponent(nif!)}`),
         {
           headers: { authorization: authHeaderVal, Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' },
           cache: 'no-store',
@@ -140,8 +146,16 @@ export async function GET(req: Request) {
         continue
       }
 
-      const readings: Array<{ date: string; time: string; consumptionKWh: number }> =
-        await consumptionRes.json()
+      // Datadis contesta en TEXTO PLANO (no JSON) para avisos como "Consulta ya
+      // realizada en las últimas 24 horas": un .json() a ciegas lanza excepción.
+      const cuerpo = await consumptionRes.text()
+      let readings: Array<{ date: string; time: string; consumptionKWh: number }>
+      try {
+        readings = JSON.parse(cuerpo)
+      } catch {
+        results.push({ cups, status: `aviso Datadis: ${cuerpo.trim().slice(0, 80)}` })
+        continue
+      }
 
       if (!Array.isArray(readings) || readings.length === 0) {
         results.push({ cups, status: 'sin lecturas' })
@@ -161,7 +175,11 @@ export async function GET(req: Request) {
         kwh_total,
         readings,
       })], { type: 'application/json' })
-      await supabase.storage.from(BUCKET).upload(path, blob, { upsert: true })
+      // El resultado del upload NO se puede ignorar: si falla, la curva horaria se
+      // pierde y el cron seguía reportando "ok" porque el kwh_total sí se guardaba.
+      // Así es como el bucket acabó vacío teniendo 33 meses en consumos_datadis.
+      const { error: errorStorage } = await supabase.storage
+        .from(BUCKET).upload(path, blob, { upsert: true })
 
       // Actualizar BD
       await supabase.from('consumos_datadis').upsert(
@@ -172,7 +190,13 @@ export async function GET(req: Request) {
         .update({ ultima_sync_datadis: new Date().toISOString() })
         .eq('id', clienteId)
 
-      results.push({ cups, status: `ok (${kwh_total} kWh)` })
+      results.push({
+        cups,
+        status: errorStorage
+          ? `ok BD, curva PERDIDA (${kwh_total} kWh)`
+          : `ok (${kwh_total} kWh, ${readings.length} lecturas)`,
+        ...(errorStorage ? { error: `storage: ${errorStorage.message}` } : {}),
+      })
     } catch (err) {
       results.push({ cups, status: 'exception', error: String(err) })
     }

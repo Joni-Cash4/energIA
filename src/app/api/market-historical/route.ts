@@ -77,13 +77,21 @@ export async function GET(req: NextRequest) {
   const tarifa = normalizaTarifa(searchParams.get('tarifa'))
   const zonaParam = searchParams.get('zona')
   const zona: Zona = (zonaParam === 'CANARIAS' || zonaParam === 'BALEARES') ? zonaParam : 'PENINSULA'
+  const cups = searchParams.get('cups')
 
   if (!start || !end) {
     return NextResponse.json({ error: 'Parámetros start y end requeridos (YYYY-MM-DD)' }, { status: 400 })
   }
 
-  // Acumulador de precios por periodo: { P1: [€/MWh, ...], ... }
-  const porPeriodo: Partial<Record<Periodo, number[]>> = {}
+  // Acumulador de precios por periodo. Se guarda precio y peso (kWh consumidos en esa
+  // hora) para poder devolver la media PONDERADA cuando hay curva del cliente — que es
+  // lo que hacen de verdad las dos comercializadoras. Ver ADR-0010:
+  //   Próxima: "PMD: precio marginal del mercado diario en el CUARTO DE HORA
+  //             correspondiente publicado por OMIE (MARGINALPDBC)"
+  //   Total JAZZ: "Σ(OMIEh × Di + CMFi + ATRe)", OMIEh horario "para cada hora"
+  // Sin curva, peso = 1 en todas las horas y el resultado es la media aritmética de
+  // siempre — misma respuesta que antes, marcada como estimación.
+  const porPeriodo: Partial<Record<Periodo, { precio: number; peso: number }[]>> = {}
 
   const fechaInicio = new Date(start + 'T00:00:00')
   const fechaFin    = new Date(end   + 'T23:59:59')
@@ -114,20 +122,62 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Curva horaria real del CUPS, si la hay. Es lo que convierte la media en ponderada.
+  // La tabla va por cups_id (ADR-0001), así que primero se resuelve el código.
+  const pesos = new Map<string, number>()   // "YYYY-MM-DD|hora" -> kWh
+  if (cups && supabase) {
+    const { data: filaCups } = await supabase
+      .from('cups').select('id').eq('codigo', cups).maybeSingle()
+    if (filaCups) {
+      // Paginado: un rango de un año son ~8.760 filas y PostgREST corta en 1.000.
+      for (let desde = 0; ; desde += 1000) {
+        const { data } = await supabase
+          .from('consumos_datadis_horario')
+          .select('fecha, hora, kwh')
+          .eq('cups_id', filaCups.id)
+          .gte('fecha', start).lte('fecha', end)
+          .range(desde, desde + 999)
+        if (!data?.length) break
+        for (const r of data) pesos.set(`${r.fecha}|${r.hora}`, Number(r.kwh))
+        if (data.length < 1000) break
+      }
+    }
+  }
+
   const fechasFaltantes = fechas.filter(f => !porFecha.has(fechaKey(f)))
   const resultadosOmie = await Promise.all(fechasFaltantes.map(f => fetchOmieDia(f)))
   fechasFaltantes.forEach((f, i) => {
     if (resultadosOmie[i].length > 0) porFecha.set(fechaKey(f), resultadosOmie[i])
   })
 
+  // Solo se pondera si la curva cubre casi todo el rango: con cobertura parcial la
+  // media ponderada sale sesgada hacia los días que sí están, que es peor que la
+  // aritmética. Por debajo del umbral se ignora la curva por completo.
+  const COBERTURA_MINIMA = 0.95
+  let horasConCurva = 0, horasTotales = 0
+
   for (const fecha of fechas) {
     const datos = porFecha.get(fechaKey(fecha))
     if (!datos || datos.length === 0) continue
     diasOk++
     for (const { hora, precio } of datos) {
+      horasTotales++
+      if (pesos.has(`${fechaKey(fecha)}|${hora}`)) horasConCurva++
+    }
+  }
+  const cobertura = horasTotales > 0 ? horasConCurva / horasTotales : 0
+  const ponderado = pesos.size > 0 && cobertura >= COBERTURA_MINIMA
+
+  for (const fecha of fechas) {
+    const datos = porFecha.get(fechaKey(fecha))
+    if (!datos || datos.length === 0) continue
+    for (const { hora, precio } of datos) {
       const p = getPeriodo(fecha, hora, tarifa, zona)
       if (!porPeriodo[p]) porPeriodo[p] = []
-      porPeriodo[p]!.push(precio)
+      porPeriodo[p]!.push({
+        precio,
+        peso: ponderado ? (pesos.get(`${fechaKey(fecha)}|${hora}`) ?? 0) : 1,
+      })
     }
   }
 
@@ -135,10 +185,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'OMIE no disponible para ese rango', _fallback: true }, { status: 200 })
   }
 
-  // Promediar por periodo (€/MWh)
+  // Media por periodo (€/MWh), ponderada por consumo si hay curva.
+  // Si un periodo tiene curva pero consumo cero (ej. un bar que no consume de
+  // madrugada), el peso total es 0 y no hay media ponderada posible: se cae a la
+  // aritmética de ese periodo en vez de devolver NaN.
   const pmd: Partial<Record<Periodo, number>> = {}
-  for (const [periodo, vals] of Object.entries(porPeriodo) as [Periodo, number[]][]) {
-    pmd[periodo] = Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 100) / 100
+  for (const [periodo, vals] of Object.entries(porPeriodo) as [Periodo, { precio: number; peso: number }[]][]) {
+    const pesoTotal = vals.reduce((s, v) => s + v.peso, 0)
+    const media = pesoTotal > 0
+      ? vals.reduce((s, v) => s + v.precio * v.peso, 0) / pesoTotal
+      : vals.reduce((s, v) => s + v.precio, 0) / vals.length
+    pmd[periodo] = Math.round(media * 100) / 100
   }
 
   // Rellenar periodos sin datos con el valor del periodo valle disponible más cercano
@@ -160,6 +217,11 @@ export async function GET(req: NextRequest) {
     media_mwh: media,
     dias_encontrados: diasOk,
     dias_total: fechas.length,
+    // Con qué base se ha calculado. 'curva_real' es el método que usan de verdad las
+    // comercializadoras; 'media_aritmetica' es la estimación de siempre, y hay que
+    // marcarla como tal igual que ya se hace con el origen del PERD.
+    metodo: ponderado ? 'curva_real' : 'media_aritmetica',
+    cobertura_curva: Math.round(cobertura * 1000) / 1000,
     _source: 'omie_marginalpdbc',
     _zona: zona,
     _rango: { start, end },

@@ -82,3 +82,5 @@ Ver [backlog.md](backlog.md) — ideas de patrón común identificadas pero deli
 - [0006 — mercado_perd desde ESIOS (archivo 70, rango de fechas)](adr/0006-mercado-perd-desde-esios.md)
 - [0007 — tarifas_fijas se queda en Excel local (por ahora)](adr/0007-tarifas-fijas-se-queda-en-excel.md)
 - [0008 — Bug real: SC/CAP calculados sin filtro de geo (península)](adr/0008-bug-sc-cap-geo-peninsula.md)
+- [0009 — Criterio del extractor: ahorro vs detalle](adr/0009-criterio-extractor-ahorro-vs-detalle.md)
+- [0010 — El PMD es cuarto-horario, no la media del periodo](adr/0010-pmd-por-cuarto-de-hora-no-media-de-periodo.md)

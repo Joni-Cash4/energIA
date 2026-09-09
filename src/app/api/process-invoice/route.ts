@@ -141,22 +141,29 @@ function potenciaPorPeriodo(data: InvoiceData, tarifa: Tarifa): Periodos {
 
 // Histórico PMD real para el periodo exacto de la factura — NO el precio de hoy
 async function fetchHistoricalPmd(
-  start: string, end: string, tarifa: Tarifa, zona: string
-): Promise<{ pmd: Periodos; media: number; ok: boolean }> {
+  start: string, end: string, tarifa: Tarifa, zona: string, cups?: string | null
+): Promise<{ pmd: Periodos; media: number; ok: boolean; metodo: string }> {
   try {
     const base = process.env.NEXT_PUBLIC_SITE_URL?.startsWith('http')
       ? process.env.NEXT_PUBLIC_SITE_URL
       : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
+    // El CUPS va en la query para que market-historical pueda ponderar el PMD por la
+    // curva horaria real del cliente cuando la tenga (ADR-0010). Sin curva devuelve la
+    // media aritmética de siempre y lo marca en `metodo`.
+    const qCups = cups ? `&cups=${encodeURIComponent(cups)}` : ''
     const res = await fetch(
-      `${base}/api/market-historical?start=${start}&end=${end}&tarifa=${tarifa}&zona=${zona}`,
+      `${base}/api/market-historical?start=${start}&end=${end}&tarifa=${tarifa}&zona=${zona}${qCups}`,
       { next: { revalidate: 3600 } }
     )
-    if (!res.ok) return { pmd: {}, media: 0, ok: false }
+    if (!res.ok) return { pmd: {}, media: 0, ok: false, metodo: 'media_aritmetica' }
     const json = await res.json()
-    if (json._fallback || !json.pmd_por_periodo_mwh) return { pmd: {}, media: 0, ok: false }
-    return { pmd: json.pmd_por_periodo_mwh, media: json.media_mwh ?? 0, ok: true }
+    if (json._fallback || !json.pmd_por_periodo_mwh) return { pmd: {}, media: 0, ok: false, metodo: 'media_aritmetica' }
+    return {
+      pmd: json.pmd_por_periodo_mwh, media: json.media_mwh ?? 0, ok: true,
+      metodo: json.metodo ?? 'media_aritmetica',
+    }
   } catch {
-    return { pmd: {}, media: 0, ok: false }
+    return { pmd: {}, media: 0, ok: false, metodo: 'media_aritmetica' }
   }
 }
 
@@ -376,8 +383,8 @@ export async function POST(req: NextRequest) {
     const zona = getZonaFromCups(parsed.cups)
 
     // Histórico PMD del periodo exacto de la factura (no precio de hoy)
-    const { pmd: pmdHistorico, media: pmdMedia, ok: histOk } = await fetchHistoricalPmd(
-      parsed.fecha_inicio, parsed.fecha_fin, tarifa, zona
+    const { pmd: pmdHistorico, media: pmdMedia, ok: histOk, metodo: pmdMetodo } = await fetchHistoricalPmd(
+      parsed.fecha_inicio, parsed.fecha_fin, tarifa, zona, parsed.cups
     )
     const mes = mesKey(parsed.fecha_inicio)
     // sc/cap/perd: Supabase (real, sync mensual desde sistema Python) > hardcoded > fallback
@@ -480,6 +487,10 @@ export async function POST(req: NextRequest) {
       // validador para aplicar la formula de una tarifa indexada, que se calcula
       // sobre el OMIE desnudo (sin PERD/SC/CAP, que ya van dentro de sus Di/CMFi).
       pmd_periodos: pmdHistorico,
+      // 'curva_real' si el PMD se ha ponderado con la curva horaria del CUPS (Datadis),
+      // 'media_aritmetica' si es la estimación. Ver ADR-0010: las dos comercializadoras
+      // facturan hora a hora, así que la aritmética se desvía 7-14 €/MWh.
+      pmd_metodo: pmdMetodo,
       mercado_real_fuente: mercadoReal.fuente,
       potencias_desglosadas: potenciasDesglosadas,
       potencia_total: r2(parsed.potencia_total ?? 0),

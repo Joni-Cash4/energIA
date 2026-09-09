@@ -78,7 +78,13 @@ const LLANO_PERIODO:  Periodo[] = ['P2', 'P3', 'P4', 'P5']
  */
 export function getPeriodo(fecha: Date, hora: number, tarifa: string, zona: Zona = 'PENINSULA'): Periodo {
   const diaSemana = fecha.getDay() // 0=domingo … 6=sábado
-  const fechaStr  = fecha.toISOString().slice(0, 10)
+  // Componentes LOCALES, no toISOString(): el resto de la función ya lee la fecha en
+  // local (getDay/getMonth), y toISOString() convierte a UTC. Con el proceso en
+  // Europe/Madrid, un Date de medianoche local retrocede al día anterior y la
+  // comprobación de festivo mira el día equivocado (2026-08-15 → "2026-08-14"): el
+  // festivo real deja de ser P6 y la víspera pasa a serlo. En Vercel no se veía
+  // porque corre en UTC, donde ambas formas coinciden.
+  const fechaStr  = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`
   const esFestivo = FESTIVOS_NACIONALES.has(fechaStr)
   const mes       = fecha.getMonth() + 1 // 1-12
 
