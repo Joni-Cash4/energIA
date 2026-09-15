@@ -89,10 +89,13 @@ export function getPeriodo(fecha: Date, hora: number, tarifa: string, zona: Zona
   const mes       = fecha.getMonth() + 1 // 1-12
 
   if (tarifa === '2.0TD') {
-    // 2.0TD: sin distinción de zona ni temporada, solo laborable vs finde/festivo
+    // 2.0TD: sin distinción de zona ni temporada, solo laborable vs finde/festivo.
+    // Circular CNMC 3/2020, art. 7.3: punta 10-14h y 18-22h; llano 8-10h, 14-18h y
+    // 22-24h; valle 0-8h y todo el fin de semana y festivos. Ojo: la punta de 2.0TD
+    // empieza a las 10h, no a las 9h como en 3.0TD (hasta 2026-09-15 se usaba 9h).
     if (diaSemana === 0 || diaSemana === 6 || esFestivo) return 'P3'
     if (hora < 8) return 'P3'
-    if ((hora >= 9 && hora < 14) || (hora >= 18 && hora < 22)) return 'P1'
+    if ((hora >= 10 && hora < 14) || (hora >= 18 && hora < 22)) return 'P1'
     return 'P2'
   }
 
