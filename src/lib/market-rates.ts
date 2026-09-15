@@ -47,38 +47,82 @@ export const CARGOS_POTENCIA_2026: Record<Tarifa, Partial<Record<Periodo, number
   '6.1TD': {},
 }
 
-// ─── CAP — pagos por capacidad (€/kWh) — BOE 2026, fallback si ESIOS no disponible
-export const CAP_2026 = 0.00112
+// ─── CAP — pagos por capacidad (€/kWh) ───────────────────────────────────────
+// Mismo criterio que el SC: dato real de ESIOS PVPCDATA (PCAPPCB, media del mes), copia
+// de mercado_sc_cap (ADR-0008). Supabase manda (market-real.ts): esto solo se usa si no
+// responde o si el mes no tiene dato. Hasta el 2026-09-15 el fallback era 0,00112 (BOE)
+// y marzo de 2026 tenía 0,00101 de los indicadores sin geo: unas cuatro veces el real.
+// Mes sin dato: media de los 12 últimos meses reales (sep-2025 a ago-2026).
+export const CAP_2026 = 0.000258
 
-// CAP real mensual confirmado (ESIOS, vía informes generados con C:\MonitorizacionEnergetica).
-// Vercel no tiene acceso a ESIOS — estos valores se actualizan a mano cuando Jonathan
-// comparte un informe real. Si el mes no está aquí, se usa CAP_2026 (BOE) como fallback.
 export const CAP_REAL_MENSUAL: Record<string, number> = {
-  '2026-03': 0.00101, // confirmado: comparativa_ES0021000020343459NW_20260616_cliente.pdf
+  '2025-01': 0.000264,
+  '2025-02': 0.000277,
+  '2025-03': 0.000262,
+  '2025-04': 0.000282,
+  '2025-05': 0.000257,
+  '2025-06': 0.000263,
+  '2025-07': 0.000279,
+  '2025-08': 0.000243,
+  '2025-09': 0.000275,
+  '2025-10': 0.000281,
+  '2025-11': 0.000254,
+  '2025-12': 0.000261,
+  '2026-01': 0.000238,
+  '2026-02': 0.000262,
+  '2026-03': 0.000261,
+  '2026-04': 0.000267,
+  '2026-05': 0.000232,
+  '2026-06': 0.000261,
+  '2026-07': 0.000264,
+  '2026-08': 0.000242,
 }
 
-// ─── PERD — coeficiente de pérdidas por periodo (valor por defecto regulatorio) ─
-// Esto es solo un FALLBACK. El valor real (COF2TD vía ESIOS PVPCDATA) varía mes a mes
-// y puede diferir significativamente (~10%+) de este valor por defecto — validado contra
-// factura real marzo 2026: con PERD por defecto el error en la simulación indexada fue
-// del 8.6%, fuera del objetivo del 3%. Sin acceso a ESIOS desde Vercel, no podemos
-// calcularlo en vivo — solo se puede mejorar pegando aquí valores reales que Jonathan
-// obtenga de su sistema Python (ya los imprime: "PERD real PVPCDATA: COF2TD=...→PERD=...").
-export const PERD_DEFECTO: Record<Tarifa, Partial<Record<Periodo, number>>> = {
-  '2.0TD': { P1: 1.062, P2: 1.058, P3: 1.052 },
-  '3.0TD': { P1: 1.062, P2: 1.058, P3: 1.055, P4: 1.055, P5: 1.055, P6: 1.052 },
-  '6.1TD': { P1: 1.045, P2: 1.042, P3: 1.040, P4: 1.040, P5: 1.040, P6: 1.038 },
+// ─── PERD — coeficiente de pérdidas (tanto por uno) ──────────────────────────
+// Dato real de ESIOS PVPCDATA: PERD = (1 + media del mes de COF2TD) × 1,04, el mismo
+// para las 3 tarifas y los 6 periodos (ADR-0006). Es copia de mercado_perd; Supabase
+// manda (market-real.ts). OJO: no son los Ki de la factura de cada comercializadora.
+// Hasta el 2026-09-15 el fallback era un valor por defecto regulatorio (1,038 a 1,062
+// según tarifa y periodo), no un dato real: con él, la simulación indexada de marzo de
+// 2026 se desviaba un 8,6 % de la factura real.
+const TARIFAS_PERIODOS: Record<Tarifa, Periodo[]> = {
+  '2.0TD': ['P1', 'P2', 'P3'],
+  '3.0TD': ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'],
+  '6.1TD': ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'],
+}
+function perdIgual(v: number): Record<Tarifa, Partial<Record<Periodo, number>>> {
+  return Object.fromEntries(
+    Object.entries(TARIFAS_PERIODOS).map(([t, ps]) => [t, Object.fromEntries(ps.map((p) => [p, v]))]),
+  ) as Record<Tarifa, Partial<Record<Periodo, number>>>
 }
 
-// PERD real mensual confirmado — rellenar solo con valores que vengan directamente
-// de la salida del sistema Python (ESIOS PVPCDATA), nunca estimados a mano.
-export const PERD_REAL_MENSUAL: Record<string, Partial<Record<Tarifa, Partial<Record<Periodo, number>>>>> = {
-  // PERD real ESIOS PVPCDATA — del sistema Python local (C:\MonitorizacionEnergetica).
-  // IMPORTANTE: NO son los Ki de la factura de Acciona (esos son propios de Acciona).
-  // El PERD de ESIOS es el que usa Próxima para calcular su indexada.
-  // Actualizar mensualmente cuando Jonathan comparte informes Python o sincroniza Supabase.
-  '2026-03': { '3.0TD': { P1: 1.040, P2: 1.040, P3: 1.040, P4: 1.040, P5: 1.040, P6: 1.040 } }, // confirmado Python: comparativa MIMIPAU 20260616
+// Mes sin dato: media de los 12 últimos meses reales (sep-2025 a ago-2026).
+export const PERD_DEFECTO: Record<Tarifa, Partial<Record<Periodo, number>>> = perdIgual(1.040123)
+
+const PERD_MES: Record<string, number> = {
+  '2025-01': 1.040148,
+  '2025-02': 1.040137,
+  '2025-03': 1.040123,
+  '2025-04': 1.040107,
+  '2025-05': 1.040098,
+  '2025-06': 1.040105,
+  '2025-07': 1.040127,
+  '2025-08': 1.040125,
+  '2025-09': 1.040107,
+  '2025-10': 1.040103,
+  '2025-11': 1.040121,
+  '2025-12': 1.040141,
+  '2026-01': 1.040151,
+  '2026-02': 1.040141,
+  '2026-03': 1.040126,
+  '2026-04': 1.040108,
+  '2026-05': 1.040101,
+  '2026-06': 1.040112,
+  '2026-07': 1.040131,
+  '2026-08': 1.040130,
 }
+export const PERD_REAL_MENSUAL: Record<string, Partial<Record<Tarifa, Partial<Record<Periodo, number>>>>> =
+  Object.fromEntries(Object.entries(PERD_MES).map(([mes, v]) => [mes, perdIgual(v)]))
 
 // ─── SC — servicios de ajuste (€/kWh) — histórico mensual ────────────────────
 // Copia de mercado_sc_cap en Supabase: ESIOS PVPCDATA (archivo 70), media del mes de
