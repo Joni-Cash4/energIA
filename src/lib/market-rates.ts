@@ -81,17 +81,37 @@ export const PERD_REAL_MENSUAL: Record<string, Partial<Record<Tarifa, Partial<Re
 }
 
 // ─── SC — servicios de ajuste (€/kWh) — histórico mensual ────────────────────
-// Valores marcados "confirmado" vienen de salidas reales de ESIOS (vía informes
-// compartidos). El resto son estimaciones — sustituir en cuanto haya dato real.
+// Copia de mercado_sc_cap en Supabase: ESIOS PVPCDATA (archivo 70), media del mes de
+// SAHPCB + FOMPCB + FOSPCB + INTPCB + EDSRPCB (ver ADR-0008 y el cron
+// mercado-perd-sync). Supabase manda (market-real.ts): esto solo se usa si no responde.
+// Hasta el 2026-09-15 aquí había estimaciones o valores de los indicadores 1739-1746
+// sin filtro de geo (sistemas insulares, ADR-0008), de 7 a 15 €/MWh: estaban mal.
 export const SC_ESTIMADO_MENSUAL: Record<string, number> = {
-  '2026-01': 0.01500,
-  '2026-02': 0.00743, // confirmado ESIOS real feb 2026
-  '2026-03': 0.00743, // confirmado: comparativa_ES0021000020343459NW_20260616_cliente.pdf
-  '2026-04': 0.01000,
-  '2026-05': 0.00900,
-  '2026-06': 0.01000,
+  '2025-01': 0.016990,
+  '2025-02': 0.016656,
+  '2025-03': 0.018601,
+  '2025-04': 0.024908,
+  '2025-05': 0.036204,
+  '2025-06': 0.020606,
+  '2025-07': 0.018676,
+  '2025-08': 0.019560,
+  '2025-09': 0.022229,
+  '2025-10': 0.023765,
+  '2025-11': 0.025651,
+  '2025-12': 0.023218,
+  '2026-01': 0.023801,
+  '2026-02': 0.036096,
+  '2026-03': 0.038976,
+  '2026-04': 0.029955,
+  '2026-05': 0.027105,
+  '2026-06': 0.021803,
+  '2026-07': 0.021474,
+  '2026-08': 0.021739,
 }
-export const SC_FALLBACK = 0.010
+// Mes sin dato (ej. el mes en curso, antes de que corra el cron): media de los 12
+// últimos meses reales, sep-2025 a ago-2026 (26,3 €/MWh). Antes era 0,010, de la
+// misma fuente errónea. También lo usa el simulador del dashboard.
+export const SC_FALLBACK = 0.0263
 
 // ─── Horas por periodo tarifario (España peninsular) ─────────────────────────
 export const HORAS_PERIODO: Record<Tarifa, Partial<Record<Periodo, number[]>>> = {
