@@ -15,7 +15,7 @@ import {
   type Periodo,
   type Tarifa,
 } from '@/lib/market-rates'
-import { getMercadoReal } from '@/lib/market-real'
+import { getMercadoRealRango } from '@/lib/market-real'
 import { getProductosFijos } from '@/lib/tarifas-fijas'
 import { getZonaFromCups } from '@/lib/periodos'
 import type { SimTarifa } from '@/types'
@@ -167,13 +167,9 @@ async function fetchHistoricalPmd(
   }
 }
 
-function mesKey(fecha: string): string {
-  return fecha.slice(0, 7) // YYYY-MM
-}
-
 // ── Simulación Próxima Cristalina (indexada) ──────────────────────────────────
 // precio_proxima_kwh = PEAJ_BOE + CARG_BOE + PERD×(PMD_histórico + SC + CAP) + fee
-// sc, cap y perd vienen de getMercadoReal(): Supabase (real, sync mensual) > hardcoded > fallback
+// sc, cap y perd vienen de getMercadoRealRango(): días exactos de la factura (Supabase)
 function simIndexada(
   data: InvoiceData, tarifa: Tarifa, pmdHistorico: Periodos, sc: number, cap: number,
   perd: Periodos, tipoIee: number, tipoIva: number, feeKwh: number, potenciaKw: Periodos
@@ -386,9 +382,9 @@ export async function POST(req: NextRequest) {
     const { pmd: pmdHistorico, media: pmdMedia, ok: histOk, metodo: pmdMetodo } = await fetchHistoricalPmd(
       parsed.fecha_inicio, parsed.fecha_fin, tarifa, zona, parsed.cups
     )
-    const mes = mesKey(parsed.fecha_inicio)
-    // sc/cap/perd: Supabase (real, sync mensual desde sistema Python) > hardcoded > fallback
-    const mercadoReal = await getMercadoReal(mes, tarifa)
+    // sc/cap/perd con los días exactos de la factura (tabla diaria), no con el mes de
+    // fecha_inicio; los días que falten, con su mes: Supabase (real) > hardcoded > fallback
+    const mercadoReal = await getMercadoRealRango(parsed.fecha_inicio, parsed.fecha_fin, tarifa)
     const { sc, cap, perd } = mercadoReal
 
     // Impuestos derivados de la PROPIA factura — no hardcodeados.
