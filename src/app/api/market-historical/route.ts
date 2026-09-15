@@ -15,7 +15,9 @@ import { getSupabaseServerClient } from '@/lib/supabase-server'
 // de que corra la sincronización diaria).
 //
 // Fichero OMIE por día: https://www.omie.es/es/file-download?parents=marginalpdbc&filename=marginalpdbc_YYYYMMDD.1
-// CSV formato: Año;Mes;Dia;Hora(1-24);Precio(€/MWh);PrecioUnidad
+// CSV formato: Año;Mes;Día;Periodo;Precio Portugal;Precio España;  (€/MWh)
+// Se lee la columna 5 (España). La 4 es Portugal: coinciden casi siempre (MIBEL
+// acoplado) pero se separan cuando se congestiona la interconexión. Ver ADR-0012.
 //
 // GET /api/market-historical?start=2026-03-01&end=2026-03-31&tarifa=3.0TD[&zona=CANARIAS]
 
@@ -49,9 +51,9 @@ async function fetchOmieDia(fecha: Date): Promise<{ hora: number; precio: number
     const filas: { indice: number; precio: number }[] = []
     for (const linea of text.split('\n')) {
       const partes = linea.replace(/,/g, '.').split(';')
-      if (partes.length >= 5) {
+      if (partes.length >= 6) {
         const indice = parseInt(partes[3])
-        const precio = parseFloat(partes[4])  // €/MWh — puede ser negativo (excedente solar)
+        const precio = parseFloat(partes[5])  // España, €/MWh — puede ser negativo (excedente solar)
         if (!isNaN(indice) && !isNaN(precio) && indice >= 1 && precio >= -500 && precio <= 3000) {
           filas.push({ indice, precio })
         }
