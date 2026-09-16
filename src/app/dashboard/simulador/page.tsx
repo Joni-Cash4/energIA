@@ -150,10 +150,11 @@ function vv(obj: Partial<Record<string, number>>): number[] {
 const avg = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length
 const sumV = (a: number[]) => a.reduce((s, v) => s + v, 0)
 
-function getIvaRate(tarifa: Tarifa) { return tarifa === '2.0TD' ? 0.10 : 0.21 }
+// IVA 21 % para todas las tarifas, también 2.0TD (confirmado por Jonathan, 2026-09-16)
+function getIvaRate(_tarifa: Tarifa) { return 0.21 }
 
 function withImpuestos(sub: number, iv: number) {
-  const iee = sub * 0.0064
+  const iee = sub * 0.05113
   const baseIva = sub + iee
   const ivaAmt = baseIva * iv
   return { iee, ivaAmt, total: baseIva + ivaAmt }
@@ -609,7 +610,7 @@ export default function SimuladorPage() {
           <div className="bg-[#0F0F0F] border border-[#1F1F1F] rounded-xl px-4 py-3 text-xs text-[#6B7280] space-y-0.5">
             <p>· Próxima: {periodo === 'custom' ? `estimación OMIE ${omieCustom} €/MWh` : `precios reales ${periodoEntry.label}`}</p>
             <p>· Atulado: tarifas fijas vigentes incluyen peajes + cargos + margen Atulado</p>
-            <p>· IEE 0,64% (RDL 7/2026). IVA {tarifa === '2.0TD' ? '10%' : '21%'}. Promedio periodos, sin distribución horaria real.</p>
+            <p>· IEE 5,113%. IVA 21%. Promedio periodos, sin distribución horaria real.</p>
           </div>
 
           <TablaPreciosPeriodo

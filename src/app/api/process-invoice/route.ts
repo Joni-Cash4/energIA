@@ -223,8 +223,7 @@ function simIndexada(
   const potencia = r2(Object.values(potencia_periodos_idx).reduce<number>((s, v) => s + (v ?? 0), 0))
 
   // IEE: tipo efectivo derivado de la factura real × base monetaria de esta simulación.
-  // Si la factura usa 1.0€/MWh (RDL 7/2026), el tipo efectivo (~0.64%) aplicado a bases
-  // similares da un resultado muy próximo. Si vuelve al 5.1127%, se aplica automáticamente.
+  // Hoy el IEE es del 5,113 %; si cambia el régimen, el tipo efectivo de la factura lo recoge solo.
   const subtotalBase = r2(energiaTotal + potencia + reactiva + otrosCostes)
   const iee = r2((subtotalBase - gestionProxima) * tipoIee)
   const subtotal = r2(subtotalBase + alquiler)
@@ -398,10 +397,10 @@ export async function POST(req: NextRequest) {
     const baseImponible = parsed.base_imponible ?? 0
     const importeIva = parsed.importe_iva ?? 0
     // tipoIee: tipo efectivo de la factura real — auto-adaptativo a cualquier régimen regulatorio.
-    // Con RDL 7/2026 (1.0€/MWh mínimo): ~0.64%. Si vuelve al 5.1127%: ~5.1127%. Sin hardcodear.
+    // Hoy ≈ 5,113 %. Sin hardcodear: el 0.05113 solo se usa si la factura no trae el IEE.
     const alquilerParaIee = parsed.alquiler_equipos ?? 0
     const subtotalReal = baseImponible - importeIee - alquilerParaIee
-    const tipoIee = subtotalReal > 0 ? importeIee / subtotalReal : 0.005
+    const tipoIee = subtotalReal > 0 ? importeIee / subtotalReal : 0.05113
     const tipoIva = baseImponible > 0 ? importeIva / baseImponible : 0.21
 
     const potenciaKw = potenciaPorPeriodo(parsed, tarifa)

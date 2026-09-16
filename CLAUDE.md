@@ -197,8 +197,10 @@ Verificado contra Excel simulador de tarifas de Jonathan — todos los periodos 
 ## IEE — auto-adaptativo a cualquier régimen regulatorio
 - Se deriva el **tipo efectivo** de la factura real: `tipoIee = importe_iee / (base_imponible - iee - alquiler)`.
 - Ese mismo tipo se aplica sobre la base monetaria de cada simulación → replica la mecánica de la factura.
-- RDL 7/2026 (1.0€/MWh mínimo): tipoIee ≈ 0.64% → error ~2€ en sims (aceptable).
-- Si vuelve al 5.1127%: tipoIee ≈ 5.1127% → se aplica correctamente sin tocar código.
+- **Vigente (confirmado por Jonathan, 2026-09-16): IEE 5,113 % e IVA 21 % en todas las tarifas, también 2.0TD.**
+  Son los valores fijos de la web pública (`/mercado`), del simulador del dashboard y de reserva de
+  `process-invoice` cuando la factura no trae el importe.
+- Si cambia el régimen (p. ej. un mínimo en €/MWh), el tipo efectivo derivado de la factura lo recoge sin tocar código.
 - `applyFee` también recalcula IEE con el nuevo tipo sobre la base ampliada por el fee.
 - **No hardcodear** ningún tipo de IEE ni asumir si es €/MWh o % — siempre derivar de la factura.
 
