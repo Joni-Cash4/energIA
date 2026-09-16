@@ -107,11 +107,23 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: `ESIOS respondió ${res.status}`, desde: desdeStr, hasta: hastaStr }, { status: 502 })
   }
 
-  const zip = await JSZip.loadAsync(Buffer.from(await res.arrayBuffer()))
+  // Con un rango de varios días ESIOS devuelve un ZIP con un JSON por día; con un
+  // solo día (lo normal cuando el cron va al día) devuelve el JSON suelto.
+  const buffer = Buffer.from(await res.arrayBuffer())
+  const ficheros: { nombre: string; texto: string }[] = []
+  if (buffer.subarray(0, 2).toString('latin1') === 'PK') {
+    const zip = await JSZip.loadAsync(buffer)
+    for (const [nombre, entry] of Object.entries(zip.files)) {
+      if (entry.dir || !nombre.endsWith('.json')) continue
+      ficheros.push({ nombre, texto: await entry.async('string') })
+    }
+  } else {
+    ficheros.push({ nombre: `${desdeStr}.json`, texto: buffer.toString('utf8') })
+  }
+
   const porDia = new Map<string, { cof: number[]; sc: number[]; cap: number[] }>()
-  for (const [nombre, entry] of Object.entries(zip.files)) {
-    if (entry.dir || !nombre.endsWith('.json')) continue
-    const registros: Record<string, string>[] = JSON.parse(await entry.async('string'))?.PVPC ?? []
+  for (const { nombre, texto } of ficheros) {
+    const registros: Record<string, string>[] = JSON.parse(texto)?.PVPC ?? []
     for (const r of registros) {
       const dia = diaDe(r, nombre)
       if (!dia) continue
