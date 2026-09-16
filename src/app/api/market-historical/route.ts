@@ -14,8 +14,11 @@ import { getSupabaseServerClient } from '@/lib/supabase-server'
 // seguridad para días que aún no estén en Supabase (ej. factura de ayer mismo, antes
 // de que corra la sincronización diaria).
 //
-// Fichero OMIE por día: https://www.omie.es/es/file-download?parents=marginalpdbc&filename=marginalpdbc_YYYYMMDD.1
-// CSV formato: Año;Mes;Dia;Hora(1-24);Precio(€/MWh);PrecioUnidad
+// Fichero OMIE por día: https://www.omie.es/es/file-download?parents=marginalpdbc&filename=marginalpdbc_YYYYMMDD.N
+// (N = 1, 2 o 3: se prueba en ese orden, OMIE deja solo la última versión publicada)
+// CSV formato: Año;Mes;Día;Periodo;Precio Portugal;Precio España;  (€/MWh)
+// Se lee la columna 5 (España). La 4 es Portugal: coinciden casi siempre (MIBEL
+// acoplado) pero se separan cuando se congestiona la interconexión. Ver ADR-0012.
 //
 // GET /api/market-historical?start=2026-03-01&end=2026-03-31&tarifa=3.0TD[&zona=CANARIAS]
 
@@ -31,16 +34,23 @@ async function fetchOmieDia(fecha: Date): Promise<{ hora: number; precio: number
   const y = fecha.getFullYear()
   const m = String(fecha.getMonth() + 1).padStart(2, '0')
   const d = String(fecha.getDate()).padStart(2, '0')
-  const filename = `marginalpdbc_${y}${m}${d}.1`
-  const url = `https://www.omie.es/es/file-download?parents=marginalpdbc&filename=${filename}`
 
   try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      next: { revalidate: 86400 }, // cachear 24h — datos históricos no cambian
-    })
-    if (!res.ok || res.headers.get('content-type')?.includes('html')) return []
-    const text = await res.text()
+    // Cuando OMIE republica un día retira la versión .1 y deja la .2 (o .3):
+    // 2025-11-27 da 404 en .1 y existe en .2. Ver ADR-0012.
+    let text: string | null = null
+    for (const version of [1, 2, 3]) {
+      const filename = `marginalpdbc_${y}${m}${d}.${version}`
+      const res = await fetch(`https://www.omie.es/es/file-download?parents=marginalpdbc&filename=${filename}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        next: { revalidate: 86400 }, // cachear 24h — datos históricos no cambian
+      })
+      if (res.ok && !res.headers.get('content-type')?.includes('html')) {
+        text = await res.text()
+        break
+      }
+    }
+    if (!text) return []
 
     // La columna 4 es el INDICE de periodo dentro del dia, no la hora directamente:
     // 1-24/25 en el formato horario legado, o 1-92/96/100 en el formato de cuarto de
@@ -49,9 +59,9 @@ async function fetchOmieDia(fecha: Date): Promise<{ hora: number; precio: number
     const filas: { indice: number; precio: number }[] = []
     for (const linea of text.split('\n')) {
       const partes = linea.replace(/,/g, '.').split(';')
-      if (partes.length >= 5) {
+      if (partes.length >= 6) {
         const indice = parseInt(partes[3])
-        const precio = parseFloat(partes[4])  // €/MWh — puede ser negativo (excedente solar)
+        const precio = parseFloat(partes[5])  // España, €/MWh — puede ser negativo (excedente solar)
         if (!isNaN(indice) && !isNaN(precio) && indice >= 1 && precio >= -500 && precio <= 3000) {
           filas.push({ indice, precio })
         }

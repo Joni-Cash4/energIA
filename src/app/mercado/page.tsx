@@ -13,6 +13,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { Button } from '@/components/ui/button'
 import { ElMercadoHoy } from '@/components/mercado/ElMercadoHoy'
 import { formatNumber } from '@/lib/utils'
+import { getPeriodo, type Zona as ZonaTarifa } from '@/lib/periodos'
 import type { MarketHourlyResponse, HourlyPrice } from '@/types'
 
 interface WeeklyDay { fecha: string; label: string; media: number }
@@ -132,42 +133,6 @@ const REG_30TD = { P1: 34.0, P2: 20.5, P3: 13.0, P4: 8.0, P5: 3.0, P6: 1.0 }
 const IEE = 0.0511268
 const IVA = 0.21
 
-function periodo20TD(hour: number, dow: number): 'P1' | 'P2' | 'P3' {
-  if (dow === 0 || dow === 6) return 'P3'
-  if (hour < 8) return 'P3'
-  if ((hour >= 10 && hour < 14) || (hour >= 18 && hour < 22)) return 'P1'
-  return 'P2'
-}
-
-// 3.0TD season calendar by zone (month 1-12)
-const TEMPORADA_30TD: Record<string, string[]> = {
-  peninsula: ['alta','alta','media-alta','baja','baja','media','alta','media','media','baja','media-alta','alta'],
-  baleares:  ['media','media','baja','baja','media-alta','alta','alta','alta','alta','media-alta','baja','media'],
-  canarias:  ['media','media','media','baja','baja','baja','alta','alta','alta','alta','media-alta','media-alta'],
-}
-
-// Within each season, map hour+dow to the active period set
-// Season → [punta, llano, valle] = which P-number each role gets
-const SEASON_PERIODS: Record<string, ['P1'|'P2'|'P3'|'P4'|'P5'|'P6','P1'|'P2'|'P3'|'P4'|'P5'|'P6','P1'|'P2'|'P3'|'P4'|'P5'|'P6']> = {
-  'alta':       ['P1', 'P2', 'P6'],
-  'media-alta': ['P2', 'P3', 'P6'],
-  'media':      ['P3', 'P4', 'P6'],
-  'baja':       ['P4', 'P5', 'P6'],
-}
-
-function periodo30TD(hour: number, dow: number, month: number, zona: string): 'P1'|'P2'|'P3'|'P4'|'P5'|'P6' {
-  const temporada = (TEMPORADA_30TD[zona] ?? TEMPORADA_30TD.peninsula)[month - 1]
-  const [punta, llano, valle] = SEASON_PERIODS[temporada]
-  // Weekend / holiday → valle
-  if (dow === 0 || dow === 6) return valle
-  // Nighttime 0-8h → valle
-  if (hour < 8) return valle
-  // Punta: 10-14h and 18-22h
-  if ((hour >= 10 && hour < 14) || (hour >= 18 && hour < 22)) return punta
-  // Llano: rest of weekday daytime
-  return llano
-}
-
 function precioFinal(spotMwh: number, regulated: number): number {
   const base = spotMwh + regulated
   return Math.round(base * (1 + IEE) * (1 + IVA) * 10) / 10
@@ -197,12 +162,15 @@ type SubTarifa = '2.0TD' | '3.0TD'
 function TarifaFinalChart({ precios, ahora, zona }: { precios: HourlyPrice[]; ahora: number; zona: string }) {
   const [tarifa, setTarifa] = useState<SubTarifa>('2.0TD')
 
+  // Mismo calendario que el resto de la web (src/lib/periodos.ts): temporadas por
+  // zona, punta de 3.0TD 9-14h en península (10-15h en islas), punta de 2.0TD
+  // 10-14h y festivos nacionales. Esta página llevaba su propia copia, con la punta
+  // de 3.0TD a las 10h y sin festivos.
   const now = new Date()
-  const dow = now.getDay()
-  const month = now.getMonth() + 1
+  const zonaTarifa: ZonaTarifa = zona === 'canarias' ? 'CANARIAS' : zona === 'baleares' ? 'BALEARES' : 'PENINSULA'
 
   const data = precios.map((p) => {
-    const periodo = tarifa === '2.0TD' ? periodo20TD(p.hora, dow) : periodo30TD(p.hora, dow, month, zona)
+    const periodo = getPeriodo(now, p.hora, tarifa, zonaTarifa)
     const reg = tarifa === '2.0TD' ? REG_20TD[periodo as keyof typeof REG_20TD] : REG_30TD[periodo as keyof typeof REG_30TD]
     return {
       hora: p.hora,
