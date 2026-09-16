@@ -138,6 +138,14 @@ Motor portado desde el sistema Python local
 (`C:\MonitorizacionEnergetica\sistema\core\motor_calculo.py` + `fuentes_mercado.py`).
 Tablas BOE 2026 completas para 2.0TD/3.0TD/6.1TD: peajes/cargos de energía y potencia.
 
+**La factura que entra NO se corrige: se compara tal cual.** Cada factura es un mundo (hay
+comercializadoras que no cobran la potencia a precio BOE y meten su margen en ella, o dan
+precios todo incluido). El coste actual es siempre el que pone la factura; los peajes y
+cargos del BOE solo se usan para calcular **nuestros** precios (indexada y fijas). El
+validador del dashboard compara las líneas de peajes/cargos con el BOE solo para avisar,
+sin modificar nada. Si un parser separa componentes con el BOE, el total de cada periodo
+debe seguir siendo el de la factura.
+
 - **Fórmula de la indexada (Próxima Cristalina):**
   `precio_kWh = PEAJ_BOE + CARG_BOE + PERD × (PMD + SC + CAP) + fee`
   - **PMD:** precio de mercado **de los días exactos de la factura** (nunca el de hoy) vía

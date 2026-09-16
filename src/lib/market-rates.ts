@@ -161,26 +161,6 @@ export const SC_ESTIMADO_MENSUAL: Record<string, number> = {
 // misma fuente errónea. También lo usa el simulador del dashboard.
 export const SC_FALLBACK = 0.0263
 
-// ─── Horas por periodo tarifario (España peninsular) ─────────────────────────
-export const HORAS_PERIODO: Record<Tarifa, Partial<Record<Periodo, number[]>>> = {
-  '3.0TD': {
-    P1: [9, 10, 11, 12, 13, 18, 19, 20, 21],
-    P2: [8, 14, 15, 16, 17, 22, 23],
-    P3: [0, 1, 2, 3, 4, 5, 6, 7],
-    P6: [0, 1, 2, 3, 4, 5, 6, 7], // fines de semana/festivos — simplificado igual que sistema fuente
-  },
-  '2.0TD': {
-    P1: [9, 10, 11, 12, 13, 18, 19, 20, 21],
-    P2: [8, 14, 15, 16, 17, 22, 23],
-    P3: [0, 1, 2, 3, 4, 5, 6, 7],
-  },
-  '6.1TD': {
-    P1: [9, 10, 11, 12, 13, 18, 19, 20, 21],
-    P2: [8, 14, 15, 16, 17, 22, 23],
-    P3: [0, 1, 2, 3, 4, 5, 6, 7],
-  },
-}
-
 // ─── Fee del asesor para el comparador PÚBLICO (clientes desde casa) ─────────
 // Criterio Jonathan 2026-07-14: energía 10 €/MWh, potencia 0. El dashboard
 // interno NO usa esto — allí el fee sale del campo ajustable de cada página.
