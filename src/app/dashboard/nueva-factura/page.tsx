@@ -249,7 +249,7 @@ async function generatePdf(
   // Otros costes regulados — fila visible con el importe real de la factura actual
   const otrosMostrar = (otrosCostesActualPdf ?? 0) > 0.1 || simIdx.otros_costes > 0
   if (otrosMostrar) {
-    row('Otros costes (FNEE, bono social, GO, tasas)',
+    row('Otros costes (FNEE, GO, bono, tasas, gestión)',
       [
         (otrosCostesActualPdf ?? 0) > 0.1 ? otrosCostesActualPdf : null,
         simIdx.otros_costes > 0 ? simIdx.otros_costes : null,
@@ -1066,7 +1066,7 @@ export default function NuevaFacturaPage() {
                       if (!mostrar) return null
                       return (
                         <TableRow
-                          label="Otros costes (FNEE, bono social, GO, tasas)"
+                          label="Otros costes (FNEE, GO, bono, tasas, gestión)"
                           actual={(otrosActual ?? 0) > 0.1 ? otrosActual : null}
                           idx={simIdx.otros_costes > 0 ? simIdx.otros_costes : null}
                           boe={simBoe.otros_costes > 0 ? simBoe.otros_costes : null}

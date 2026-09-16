@@ -153,10 +153,14 @@ Tablas BOE 2026 completas para 2.0TD/3.0TD/6.1TD: peajes/cargos de energía y po
     (un SC de 7-10 €/MWh fue la causa principal de ahorros inflados, ADR-0012).
   - **fee:** 0 en la API para el dashboard (Jonathan lo aplica en cliente con el deslizador,
     10 €/MWh por defecto); el comparador público manda `fee_mwh` = `FEE_PUBLICO_ENERGIA_MWH` (10).
-- **Otros costes de la indexada:** FNEE + GO por kWh, bono social por día y tasas del 1,5 %
-  sobre mercado + fee (`PROXIMA_CRISTALINA` en `market-rates.ts`).
-- **Peajes+cargos**: tablas oficiales BOE 2026 por tarifa y periodo (no se reutilizan los
-  de la factura del cliente — son los mismos para cualquier comercializadora).
+- **Otros costes de la indexada** (`PROXIMA_CRISTALINA`, contrastado con facturas reales de
+  Próxima, ADR-0013): FNEE + GO por kWh, bono social por día, tasas del 1,5 % sobre
+  (mercado + fee + FNEE + GO + bono) y la **gestión de Próxima (7 €/MWh), aparte del fee del
+  asesor y fuera de la base del IEE**. En la factura de Próxima el fee del asesor va dentro
+  del precio de «Energía. Mercado».
+- **Peajes+cargos de energía**: peajes de la Resolución CNMC 18/12/2025 y cargos de la Orden
+  TED/1524/2025 (segmento 1 = 2.0TD, 2 = 3.0TD, 3 = 6.1TD). No se reutilizan los de la
+  factura del cliente — son los mismos para cualquier comercializadora.
 - **Tarifas fijas:** `getProductosFijos()` lee las tarifas vigentes del maestro (Supabase) y
   se comparan por total; se muestran las 2 más baratas (la 1.ª es la recomendada). A los
   productos con comisión integrada (`fee_incluido`) no se les suma el fee.
@@ -193,9 +197,11 @@ Verificado contra Excel simulador de tarifas de Jonathan — todos los periodos 
 ## PERD — ESIOS PVPCDATA (NO el Ki de la factura del cliente)
 - El **Ki** que aparece en facturas de comercializadoras (ej. Acciona Ki=1.23) es propio de esa
   comercializadora y NO es el PERD que usa Próxima para calcular su indexada.
-- El PERD correcto es el de **ESIOS PVPCDATA** (COF2TD): `(1 + media COF2TD) × 1,04`, ~1,040
-  en todos los periodos. Lo guardan los crons (diario y mensual); `PERD_DEFECTO` en
-  `market-rates.ts` es solo la reserva (media real 2025-2026).
+- Los crons guardan `PERD = (1 + media COF2TD) × 1,04`, ~1,040. **Ojo: `COF2TD` no es un
+  coeficiente de pérdidas** (es el perfil de consumo, ≈0,0001/hora), así que en la práctica es
+  un 1,04 fijo. Se mantiene como calibración: contra 5 facturas de Próxima, con el fee, da
+  −1,3 % en total (ADR-0013). La desviación de cada factura la marca el perfil de consumo del
+  cliente; para afinar hace falta su curva. `PERD_DEFECTO` en `market-rates.ts` es la reserva.
 
 ## Bugs corregidos (no reintroducir)
 - Step2Results.tsx: cuando `ahorro_estimado_anual` es negativo (indexada más cara que la
