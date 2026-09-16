@@ -50,6 +50,61 @@ Comprobaciones:
   - Sin curva, cada factura suelta se desvía entre −28 % y +30 %; en las facturas largas, entre −11 % y +7 %.
   - Ninguno de estos CUPS tiene curva Datadis cargada.
 
+### Pérdidas reales de REE (probado el 2026-09-16)
+
+**Dónde están.** Los ficheros `perdXXTD` (horario) y `perdqhXXTD` (cuartohorario) que nombra el contrato de Próxima van dentro de la liquidación de REE (`liquicomun`) de ESIOS:
+- `archives/2` (A1): el mes en curso, en previsión;
+- `archives/8` (C2): el cierre del mes anterior.
+
+Se descargan con `download?date_type=publicacion&start_date=…&end_date=…`; si se pide por fecha de datos, responde «No values». Son un coeficiente en %.
+
+**Resultados:**
+- El 3.0TD peninsular sale entre el 13 % y el 18 % según la hora (media del 15 %, más alto de noche). Es el orden de `PMHPCB` (≈ ×1,15), no el de un 1,04.
+- `prpcap30TD` (pago por capacidad del 3.0TD) da de media 0,23 €/MWh, frente a los 0,25 del `PCAPPCB` que guardamos. La diferencia es despreciable.
+
+**Contraste con las 5 facturas.** Se compara el mercado que cobra Próxima sin el fee (1.149,68 €), con PMD y SC diarios de Supabase y media simple por periodo:
+
+| Variante | Total | Desviación |
+|---|---:|---:|
+| 1,04 fijo (la actual) | 1.126,55 € | −2,0 % |
+| Pérdidas de REE hora a hora × (PMD + SC + CAP) | 1.254,19 € | +9,1 % |
+| La anterior con el CAP del 3.0TD | 1.254,87 € | +9,1 % |
+| Pérdidas de REE × PMD, sin SC ni CAP | 1.046,30 € | −9,0 % |
+
+**Fórmula del contrato (condiciones particulares de Cristalina):**
+- `PERD = (1 + perdqh o perd de REE, en tanto por uno) × 1,04`. El 1,04 estima la diferencia entre los costes definitivos y los precios provisionales.
+- `PMD`: precio de OMIE del cuarto de hora.
+- `SC = PMAS1 + PMAS2 + CDSV + INT + EDSR` (PVPCDATA) `+ CCOM + CCOS` (BOE) `+ SGCE` (0).
+- `CAP`: según el BOE.
+- Se usa la última publicación disponible al emitir la factura.
+
+**Qué hay en PVPCDATA:**
+- Columnas del fichero completo de `liquicomun`, según el documento `modelcom` de REE: 26 SA (= PMAS1 + PMAS2 + CDSV), 27 CAP, 28 CCOS, 29 CCOM, 30 INT, 31 EDSR, 37 PMD, 41 PMAS1, 42 PMAS2 y 43 CDSV. Todas en barras de central, **sin pérdidas**.
+- **El `SAHPCB` que guardamos ya lleva las pérdidas del 2.0TD.** Ejemplo del 12/08/2026 a la hora 1: SA 9,57 → SAHPCB 11,16 (× 1,166). Pasa lo mismo con FOM y FOS.
+- Nuestro SC es, por tanto, «SC × pérdidas del 2.0TD», y encima se multiplica por el PERD.
+- SC del contrato sin pérdidas, del 16/07 al 31/08: media de 19,01 €/MWh. El que guardamos: 22,24 (julio) y 21,74 (agosto).
+
+**Contraste con la fórmula del contrato.** Pérdidas `perd30TD` hora a hora, SC de las columnas anteriores y CAP `prpcap30TD`, con media simple por periodo:
+
+| Variante | Total | Desviación |
+|---|---:|---:|
+| Contrato completo (× 1,04) | 1.282,60 € | +11,6 % |
+| Contrato sin el 1,04 | 1.233,27 € | +7,3 % |
+
+**Limitaciones de este contraste:**
+- Las facturas se emitieron el 05/08 (julio) y el 04/09 (agosto), antes de que se publicara el C2 de esos meses (11/08 y 09/09). Próxima usó, por tanto, el A1. ESIOS solo sirve el A1 del mes en curso, así que el de julio y agosto ya no se puede descargar; se ha usado el C2.
+- Sin curva de consumo, la media por periodo es simple. Hay que ponderarla por la curva cuartohoraria de cada cliente.
+
+**Respuestas de Jonathan (2026-09-16):**
+- El fee del asesor se suma tal cual al precio de «Mercado»; no se multiplica por las pérdidas.
+- En sus contratos no aplica fee de potencia.
+- CAP: el que fija el BOE. El fichero `prpcap30TD` de REE es ese valor por tarifa y hora.
+- Si el A1 de julio y agosto está publicado en algún sitio, lo revisa él.
+- …6282FK y …6279FH son almacenes. Intentará conseguir su curva por Datadis.
+- En cuanto haya un cliente de Próxima con curva Datadis, lo pasa para cerrar la fórmula.
+
+**Estado.** No se cambia nada en el código hasta contrastarlo con una curva real.
+
 ## Decisión
 
 1. **Peajes y cargos 2026, de energía y de potencia,** de las dos normas del BOE en `src/lib/market-rates.ts` y en `core/fuentes_mercado.py` del Python.
