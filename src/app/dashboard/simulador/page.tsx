@@ -212,8 +212,8 @@ function calcProxima(kwh: number, kwByPeriod: Record<string, number>, kwSum: num
     const peajeEAvg = avg(vv(PEAJES_ENERGIA_2026[tarifa]))
     const cargoEAvg = avg(vv(CARGOS_ENERGIA_2026[tarifa]))
     const mercado = perdAvg * (omieCustom / 1000 + SC_FALLBACK + CAP_2026)
-    const feeTot = pc.fee_kwh + pc.fnee_kwh + pc.go_kwh
-    eRate = mercado * (1 + pc.tasas_pct) + feeTot + peajeEAvg + cargoEAvg
+    // Tasas del 1,5 % sobre mercado + FNEE + GO (como en las facturas de Próxima); la gestión, aparte.
+    eRate = (mercado + pc.fnee_kwh + pc.go_kwh) * (1 + pc.tasas_pct) + pc.fee_kwh + peajeEAvg + cargoEAvg
   } else {
     const precios = vv(PRECIOS_HIST[periodoKey][tarifa])
     eRate = precios.length > 0 ? avg(precios) : avg(vv(PERD_DEFECTO[tarifa])) * (90 / 1000 + SC_FALLBACK + CAP_2026)

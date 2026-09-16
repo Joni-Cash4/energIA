@@ -17,34 +17,38 @@ export const PERIODOS_TARIFA: Record<Tarifa, Periodo[]> = {
   '6.1TD': P3_6,
 }
 
-// ─── Peajes + cargos de ENERGÍA (€/kWh) — BOE / Resolución CNMC dic. 2025 ────
+// ─── Peajes + cargos de ENERGÍA (€/kWh) 2026 ────────────────────────────────
+// Peajes: Resolución CNMC de 18/12/2025 (BOE-A-2025-26348), anexo I.
+// Cargos: Orden TED/1524/2025 (BOE-A-2025-26705), segmentos 1 (2.0TD), 2 (3.0TD) y 3 (6.1TD).
+// Comprobado (2026-09-16): peaje+cargo 3.0TD = facturas reales de Próxima (P1-P4 y P6);
+// 2.0TD = TEUPCB de ESIOS PVPCDATA (97,55 / 29,27 / 3,29 €/MWh).
 export const PEAJES_ENERGIA_2026: Record<Tarifa, Partial<Record<Periodo, number>>> = {
-  '2.0TD': { P1: 0.027511, P2: 0.012378, P3: 0.000031 },
-  '3.0TD': { P1: 0.027511, P2: 0.012378, P3: 0.006800, P4: 0.001900, P5: 0.000600, P6: 0.000031 },
-  '6.1TD': { P1: 0.014800, P2: 0.009100, P3: 0.003200, P4: 0.001400, P5: 0.000500, P6: 0.000030 },
+  '2.0TD': { P1: 0.033261, P2: 0.016409, P3: 0.000077 },
+  '3.0TD': { P1: 0.027511, P2: 0.012376, P3: 0.004943, P4: 0.002627, P5: 0.000111, P6: 0.000031 },
+  '6.1TD': { P1: 0.026785, P2: 0.012281, P3: 0.005133, P4: 0.002780, P5: 0.000120, P6: 0.000029 },
 }
 
 export const CARGOS_ENERGIA_2026: Record<Tarifa, Partial<Record<Periodo, number>>> = {
-  '2.0TD': { P1: 0.035841, P2: 0.026538, P3: 0.002867 },
-  '3.0TD': { P1: 0.035841, P2: 0.026538, P3: 0.019700, P4: 0.010400, P5: 0.002867, P6: 0.002867 },
-  '6.1TD': { P1: 0.022000, P2: 0.015000, P3: 0.008000, P4: 0.004000, P5: 0.001500, P6: 0.000800 },
+  '2.0TD': { P1: 0.064292, P2: 0.012858, P3: 0.003215 },
+  '3.0TD': { P1: 0.035841, P2: 0.026538, P3: 0.014336, P4: 0.007168, P5: 0.004595, P6: 0.002867 },
+  '6.1TD': { P1: 0.019489, P2: 0.014436, P3: 0.007795, P4: 0.003898, P5: 0.002499, P6: 0.001559 },
 }
 
 // ─── Peajes + cargos de POTENCIA (€/kW·año) — dividir /365 para €/kW·día ────
-// 2.0TD y 6.1TD: total combinado (peaje+cargo) sin desglosar, tomado de la tabla
-// BOE €/kW·día de Jonathan (confirmada 2026-07-21, ×365) — todo bajo PEAJES,
-// CARGOS a 0 hasta tener el reparto oficial exacto. 2.0TD solo factura potencia
-// en P1/P2 (P3 no aplica). 3.0TD sí tiene el reparto real (BOE-A-2025-26348).
+// Peajes: Resolución CNMC 18/12/2025 (BOE-A-2025-26348). Cargos: Orden TED/1524/2025
+// (BOE-A-2025-26705), segmentos 1-3. 2.0TD solo factura potencia en P1/P2.
+// Los totales ya eran estos (antes redondeados, y en 2.0TD/6.1TD todo como peaje);
+// 3.0TD cuadra con las facturas de Próxima: 0,055827 / 0,029089 / … / 0,003952 €/kW·día.
 export const PEAJES_POTENCIA_2026: Record<Tarifa, Partial<Record<Periodo, number>>> = {
-  '2.0TD': { P1: 27.7046, P2: 0.7253 },
-  '3.0TD': { P1: 14.9351, P2: 7.8943, P3: 2.5030, P4: 1.9078, P5: 0.5353, P6: 0.5353 }, // BOE-A-2025-26348 (Resolución CNMC dic. 2025)
-  '6.1TD': { P1: 29.5953, P2: 15.5147, P3: 6.8018, P4: 5.3940, P5: 2.1250, P6: 1.0041 },
+  '2.0TD': { P1: 23.324952, P2: 0.443770 },
+  '3.0TD': { P1: 14.935084, P2: 7.894323, P3: 2.502996, P4: 1.907795, P5: 0.535313, P6: 0.535313 },
+  '6.1TD': { P1: 23.946498, P2: 12.687713, P3: 4.747747, P4: 3.339695, P5: 0.070979, P6: 0.062703 },
 }
 
 export const CARGOS_POTENCIA_2026: Record<Tarifa, Partial<Record<Periodo, number>>> = {
-  '2.0TD': {},
-  '3.0TD': { P1: 5.4418, P2: 2.7232, P3: 1.9785, P4: 1.9784, P5: 1.9784, P6: 0.9068 }, // cargos ajustados a Row1 exacto; P6 corregido
-  '6.1TD': {},
+  '2.0TD': { P1: 4.379461, P2: 0.281653 },
+  '3.0TD': { P1: 5.441843, P2: 2.723298, P3: 1.978538, P4: 1.978538, P5: 1.978538, P6: 0.906974 },
+  '6.1TD': { P1: 5.648870, P2: 2.826996, P3: 2.054134, P4: 2.054134, P5: 2.054134, P6: 0.941478 },
 }
 
 // ─── CAP — pagos por capacidad (€/kWh) ───────────────────────────────────────
@@ -183,12 +187,16 @@ export const HORAS_PERIODO: Record<Tarifa, Partial<Record<Periodo, number[]>>> =
 export const FEE_PUBLICO_ENERGIA_MWH = 10
 
 // ─── PRÓXIMA CRISTALINA — fee + otros costes pass-through ────────────────────
+// Valores de las facturas reales de Próxima de agosto de 2026 (FNEE y bono social se
+// actualizan cuando cambian las órdenes; en julio eran 0,002437 y 0,019121).
+// En la factura, el fee del asesor va DENTRO del precio de "Energía. Mercado"; la
+// gestión de Próxima (fee_kwh) es una línea aparte que NO entra en la base del IEE.
 export const PROXIMA_CRISTALINA = {
-  fee_kwh: 0.007,       // €/kWh — cargo por gestión, confirmado factura real
-  fnee_kwh: 0.001521,   // Fondo nacional eficiencia energética
+  fee_kwh: 0.007,       // €/kWh — "Gestión de consumo" de Próxima, aparte del fee del asesor
+  fnee_kwh: 0.002658,   // Fondo nacional eficiencia energética
   go_kwh: 0.000770,     // Garantía de origen 100% renovable
-  bono_dia: 0.019121,   // Financiación bono social €/día
-  tasas_pct: 0.015,     // 1.5% sobre componente mercado + fee
+  bono_dia: 0.024661,   // Financiación bono social €/día
+  tasas_pct: 0.015,     // 1,5 % sobre mercado (con fee del asesor) + FNEE + GO + bono social
 }
 
 // ─── ATULADO — tarifas fijas vigentes ─────────────────────────────────────────

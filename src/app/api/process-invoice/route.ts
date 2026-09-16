@@ -199,13 +199,16 @@ function simIndexada(
   }
   energiaTotal = r2(energiaTotal)
 
-  // Otros costes Próxima: FNEE + GO + bono social + tasas 1.5% sobre mercado+fee
+  // Otros costes Próxima, como en sus facturas reales: FNEE + GO + bono social + tasas
+  // del 1,5 % sobre (mercado con el fee del asesor + FNEE + GO + bono), más su gestión
+  // de consumo (7 €/MWh), que va aparte del fee del asesor y fuera de la base del IEE.
   const fnee = kwhTotal * PROXIMA_CRISTALINA.fnee_kwh
   const go = kwhTotal * PROXIMA_CRISTALINA.go_kwh
   const bono = dias * PROXIMA_CRISTALINA.bono_dia
   const feeTotal = kwhTotal * feeKwh
-  const tasas = (mercadoPuroTotal + feeTotal) * PROXIMA_CRISTALINA.tasas_pct
-  const otrosCostes = r2(fnee + go + bono + tasas)
+  const tasas = (mercadoPuroTotal + feeTotal + fnee + go + bono) * PROXIMA_CRISTALINA.tasas_pct
+  const gestionProxima = r2(kwhTotal * PROXIMA_CRISTALINA.fee_kwh)
+  const otrosCostes = r2(fnee + go + bono + tasas + gestionProxima)
   const cargoGestion = r2(feeTotal)
 
   // Potencia: solo peajes+cargos BOE, sin margen propio (igual que factura real Próxima)
@@ -223,7 +226,7 @@ function simIndexada(
   // Si la factura usa 1.0€/MWh (RDL 7/2026), el tipo efectivo (~0.64%) aplicado a bases
   // similares da un resultado muy próximo. Si vuelve al 5.1127%, se aplica automáticamente.
   const subtotalBase = r2(energiaTotal + potencia + reactiva + otrosCostes)
-  const iee = r2(subtotalBase * tipoIee)
+  const iee = r2((subtotalBase - gestionProxima) * tipoIee)
   const subtotal = r2(subtotalBase + alquiler)
   const base_iva = r2(subtotal + iee)
   const iva = r2(base_iva * tipoIva)
