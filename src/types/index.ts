@@ -117,6 +117,51 @@ export interface MarketHourlyResponse {
   _zona?: string
 }
 
+// ─── Informe diario (repo privado GitHub Joni-Cash4/iaenergia-informes-boe) ───
+
+export interface InformeMercadoHoy {
+  avgPriceEurMwh: number
+  avgPriceChangePct: number
+  cheapestHour: string
+  cheapestPriceEurMwh: number
+  mostExpensiveHour: string
+  mostExpensivePriceEurMwh: number
+  gasPriceEurMwh: number
+  gasTrend: 'up' | 'down' | 'flat'
+}
+
+export interface InformeTrendDia {
+  date: string
+  label: string
+  avgPriceEurMwh: number
+}
+
+export interface InformePlazoUrgente {
+  severity: 'crit' | 'warn'
+  badge: string
+  scope: string
+  title: string
+  description: string
+  sourceLabel: string
+  sourceUrl: string
+}
+
+export interface InformeAyudaEuskadi {
+  status: 'crit' | 'warn' | 'good'
+  name: string
+  scope: string
+  deadline: string
+  description: string
+}
+
+export interface InformeHoy {
+  date: string
+  market: InformeMercadoHoy
+  trend3d: InformeTrendDia[]
+  urgentDeadlines: InformePlazoUrgente[]
+  openAidsEuskadi: InformeAyudaEuskadi[]
+}
+
 export interface NewsItem {
   id: string
   titulo: string

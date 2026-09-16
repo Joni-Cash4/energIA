@@ -11,6 +11,7 @@ import { Navbar } from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
 import { Toaster } from '@/components/ui/toaster'
 import { Button } from '@/components/ui/button'
+import { ElMercadoHoy } from '@/components/mercado/ElMercadoHoy'
 import { formatNumber } from '@/lib/utils'
 import type { MarketHourlyResponse, HourlyPrice } from '@/types'
 
@@ -310,7 +311,7 @@ function TarifaFinalChart({ precios, ahora, zona }: { precios: HourlyPrice[]; ah
   )
 }
 
-type Tab = 'hoy' | 'semana'
+type Tab = 'hoy' | 'semana' | 'informe'
 
 type Zona = 'peninsula' | 'baleares' | 'canarias'
 const ZONAS: { id: Zona; label: string }[] = [
@@ -436,7 +437,7 @@ export default function MercadoPage() {
 
           {/* Tabs */}
           <div className="flex gap-1 p-1 bg-[#141414] border border-[#1F1F1F] rounded-xl mb-6 w-fit">
-            {([['hoy', 'Precio horario hoy'], ['semana', 'Comparativa semanal']] as [Tab, string][]).map(([t, label]) => (
+            {([['hoy', 'Precio horario hoy'], ['semana', 'Comparativa semanal'], ['informe', 'El mercado, hoy']] as [Tab, string][]).map(([t, label]) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -650,6 +651,13 @@ export default function MercadoPage() {
               ) : (
                 <div className="text-center py-20 text-[#6B7280]">No se pudieron cargar los datos semanales.</div>
               )}
+            </motion.div>
+          )}
+
+          {/* TAB: Informe diario */}
+          {tab === 'informe' && (
+            <motion.div key="informe" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <ElMercadoHoy />
             </motion.div>
           )}
         </div>

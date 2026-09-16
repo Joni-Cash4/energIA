@@ -35,6 +35,7 @@ src/
 │       ├── market-prices/route.ts
 │       ├── market-weekly/route.ts
 │       ├── process-invoice/route.ts # POST: extrae factura + calcula sim_indexada + sim_fija
+│       ├── informe-hoy/route.ts     # GET: resumen diario BOE + ayudas Euskadi (repo privado GitHub)
 │       └── contacto/route.ts
 ├── components/
 │   ├── landing/
@@ -65,7 +66,19 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 NEXT_PUBLIC_SITE_URL=https://iaenergia.es
 ANTHROPIC_API_KEY=...
 # NO hace falta ESIOS_TOKEN — usamos apidatos.ree.es (pública)
+GITHUB_INFORMES_TOKEN=...  # PAT fine-grained, solo lectura, repo Joni-Cash4/iaenergia-informes-boe
 ```
+
+## Sección "El mercado, hoy" (`/mercado`, tab "informe")
+Bloque diario con datos del repo privado `Joni-Cash4/iaenergia-informes-boe`
+(`informes/hoy.json`, se regenera cada día laborable ~9:00 hora Madrid).
+- `src/app/api/informe-hoy/route.ts`: fetch server-side a la Contents API de
+  GitHub con `GITHUB_INFORMES_TOKEN` (nunca llega al cliente). Cualquier fallo
+  (token ausente, repo sin datos, rate limit) responde `null` con status 200.
+- `src/components/mercado/ElMercadoHoy.tsx`: cliente, hace fetch a
+  `/api/informe-hoy`. Si `data` es `null`, muestra estado vacío discreto —
+  nunca rompe la página.
+- Tipos del contrato de datos en `src/types/index.ts` (`InformeHoy` y afines).
 
 ## API de mercado — REE pública
 ```
