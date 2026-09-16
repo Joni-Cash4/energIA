@@ -1,6 +1,6 @@
 # ADR-0012 — Bug real: se lee el precio de Portugal en vez del de España
 
-**Estado:** Corregido en la web (columna y versiones `.2`/`.3`), en la base y en el sistema Python local (columna y calendario de periodos) (2026-09-15). Pendiente: cuantificar el impacto en €.
+**Estado:** Corregido en la web (columna y versiones `.2`/`.3`), en la base y en el sistema Python local (columna y calendario de periodos) (2026-09-15). Impacto en € cuantificado sobre los informes ya entregados (2026-09-15, ver el final): la columna de Portugal pesó poco; lo que infló los ahorros fue el SC.
 
 ## Contexto
 
@@ -42,7 +42,7 @@ Media diaria: 23/07 de 144,10 a 136,73; 24/07 de 112,43 a 110,87. Los demás dí
 ## Alcance
 
 - `mercado_pmd_diario` empieza el 19-jul-2026. **Toda factura con fechas anteriores** cae en el fallback `fetchOmieDia` y, hasta este cambio, usaba Portugal en las horas desacopladas. Eso es la ruta principal del comparador y del validador para casi todo el histórico.
-- El error solo aparece en horas desacopladas, pero no son raras (ver arriba) y la diferencia llega a decenas de €/MWh en esas horas. Impacto en € por factura: **sin cuantificar todavía**.
+- El error solo aparece en horas desacopladas, pero no son raras (ver arriba) y la diferencia llega a decenas de €/MWh en esas horas. Impacto en € por factura: cuantificado al final de este ADR (2026-09-15).
 - Hallazgo secundario, mismo fallback: `fetchOmieDia` solo pide la versión `.1` del fichero. Cuando OMIE republica un día retira la `.1` y deja la `.2`: 2025-11-27 da 404 en `.1` y existe en `.2`. Esos días caen hoy a "estimación" sin necesidad. Hay que probar `.1`, `.2` y `.3` (ya lo hace `scripts/proyeccion-comunidad.mjs`). **Corregido** en un commit aparte del de la columna (ver Decisión 4).
 - Sistema Python local (`C:\MonitorizacionEnergetica`, origen de las filas 19-24 jul): **mismo error confirmado y corregido** — ver Decisión 3.
 - Hallazgo de la revisión (2026-09-15): el cron `mercado-pmd-sync` va **dos días por detrás de forma permanente**. Carga un único día por ejecución (el último guardado + 1) y, desde que se retrasó una vez, nunca recupera: 51 de los 56 días desde el 20-jul se escribieron con 2 días de desfase (ej. el 13/09 se escribió el 15/09 a las 08:04). Las facturas que terminan ayer o anteayer caen por eso al fallback `fetchOmieDia`, que tras este ADR ya lee España. **Corregido el 2026-09-15** (decisión de Jonathan): el cron pide en su única petición todos los días que falten hasta ayer, y se cargó el histórico desde el 2025-01-01. Detalle en el [ADR-0005](0005-datos-mercado-desde-esios.md).
@@ -74,3 +74,36 @@ Media diaria: 23/07 de 144,10 a 136,73; 24/07 de 112,43 a 110,87. Los demás dí
 
 - Las comparativas y validaciones ya generadas para periodos anteriores al 19-jul-2026, y las comparativas/PDFs del Python local generados antes del 2026-09-15, pueden llevar un PMD desviado en horas desacopladas. Los del Python, además, repartían el PMD por periodos con un calendario sin temporadas. Principio 1 (transparencia sobre certeza): antes de reclamar nada a una comercializadora apoyándose en esos cálculos, recalcular.
 - Los residuos del [ADR-0010](0010-pmd-por-cuarto-de-hora-no-media-de-periodo.md) (agosto 2026) salen de la tabla, desde el 25-jul ya con España: no les afecta.
+
+## Impacto en los informes ya entregados (2026-09-15)
+
+**Método:**
+- **Web:** 12 facturas con PDF de informe, generados entre el 14/07 y el 07/08.
+  - El mercado que usó cada informe se reconstruyó con el código de su fecha: OMIE `.1` columna 4, calendario 2.0TD anterior y el SC/CAP/PERD que había entonces en Supabase o en `market-rates.ts`.
+  - Se contrastó con el precio por periodo del propio PDF. El resto (peajes, cargos y fee) sale igual en todos los periodos, con una dispersión ≤ 0,09 €/MWh. La reconstrucción es, por tanto, exacta, y deja ver el fee aplicado (de 10 a 30 €/MWh).
+  - La fórmula de `simIndexada` no ha cambiado, así que la diferencia es Σ kWh × Δ[PERD×(PMD+SC+CAP)] × 1,015 × (1+IEE) × (1+IVA).
+- **Comparador público:** 1 lead, del 27/07. Se pasó la factura original por el `process-invoice` actual, con el fee público.
+- **Python:** informes de junio. Se pasaron las facturas originales por el motor actual.
+
+**Resultado:**
+- **Web:** 11 de 12 sobrestimaban el ahorro.
+  - Anualizado (×365/días), de 22.456 a 18.341 €/año (−18 %).
+  - La mayor diferencia, 537 → 342 €/factura.
+  - Uno se queda sin ahorro (4,14 → 0,02 €/factura) y uno lo infravaloraba (146 → 168 €/factura).
+- **Lead:** de 2.951,64 a 705 €/año. Se le envió por email automáticamente.
+- **Python:** de 2.439 a 1.082 €/mes en los 7 recalculables.
+  - La mayor diferencia, 947 → 193 €/mes.
+  - Dos infravaloraban, entre ellos el de mayo, que decía que no había ahorro y hoy da +77 €/mes.
+  - Tres no se pueden recalcular porque no hay factura legible.
+- **Detalle por cliente:** en un fichero local no versionado (`_local/revision-informes-2026-09-15.md`), porque lleva nombres.
+
+**Causa:**
+- **La columna de Portugal pesó poco y en los dos sentidos:** ΔPMD entre −17,6 y +39 € por factura, y en junio de −0,2 a −2,7 €.
+- **Lo que infló los ahorros fue el SC**, frente a los 21-39 €/MWh reales:
+  - 7,43 €/MWh fijado a mano para febrero y marzo (reales, 36,1 y 39,0);
+  - 10 €/MWh en `market-rates.ts` para junio, u 8,76 en Supabase con el fallo del [ADR-0008](0008-bug-sc-cap-geo-peninsula.md) (real, 21,8).
+- **También contó el PERD por defecto** (1,052-1,062) en los meses sin dato.
+- **En el Python de junio, además,** el calendario sin temporadas y fallos corregidos después.
+- Todo esto ya está corregido: SC, CAP y PERD reales por día ([ADR-0006](0006-mercado-perd-desde-esios.md)).
+
+**Consecuencia (principio 1):** ninguna de esas cifras de ahorro se debe reutilizar. A quien vaya a decidir con el ahorro que se le dio, hay que enviarle el recalculado.
