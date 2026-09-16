@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { ElMercadoHoy } from '@/components/mercado/ElMercadoHoy'
 import { formatNumber } from '@/lib/utils'
 import { getPeriodo, type Zona as ZonaTarifa } from '@/lib/periodos'
+import { PEAJES_ENERGIA_2026, CARGOS_ENERGIA_2026, type Periodo } from '@/lib/market-rates'
 import type { MarketHourlyResponse, HourlyPrice } from '@/types'
 
 interface WeeklyDay { fecha: string; label: string; media: number }
@@ -127,9 +128,12 @@ function DynamicTip({ hourly }: { hourly: MarketHourlyResponse }) {
   )
 }
 
-// ── Regulated costs (peajes + cargos, CNMC 2025, €/MWh) ─────────────────────
-const REG_20TD = { P1: 59.0, P2: 16.7, P3: 2.2 }
-const REG_30TD = { P1: 34.0, P2: 20.5, P3: 13.0, P4: 8.0, P5: 3.0, P6: 1.0 }
+// Peajes + cargos de energía (€/MWh) de las tablas BOE 2026 de market-rates.ts.
+// Antes eran valores a mano de 2025 (2.0TD P1 59 frente a 97,55 reales).
+function peajeCargoMwh(tarifa: SubTarifa, periodo: string): number {
+  const p = periodo as Periodo
+  return ((PEAJES_ENERGIA_2026[tarifa][p] ?? 0) + (CARGOS_ENERGIA_2026[tarifa][p] ?? 0)) * 1000
+}
 const IEE = 0.0511268
 const IVA = 0.21
 
@@ -157,6 +161,15 @@ function TarifaTooltip({ active, payload }: any) {
   )
 }
 
+// Eje X numérico de 0 a 24: con el eje de categorías (0-23) las bandas que terminan
+// a las 24h no existen en el dominio y Recharts las descarta.
+const EJE_HORAS = {
+  type: 'number' as const,
+  domain: [0, 24],
+  ticks: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24],
+  allowDecimals: false,
+}
+
 type SubTarifa = '2.0TD' | '3.0TD'
 
 function TarifaFinalChart({ precios, ahora, zona }: { precios: HourlyPrice[]; ahora: number; zona: string }) {
@@ -171,7 +184,7 @@ function TarifaFinalChart({ precios, ahora, zona }: { precios: HourlyPrice[]; ah
 
   const data = precios.map((p) => {
     const periodo = getPeriodo(now, p.hora, tarifa, zonaTarifa)
-    const reg = tarifa === '2.0TD' ? REG_20TD[periodo as keyof typeof REG_20TD] : REG_30TD[periodo as keyof typeof REG_30TD]
+    const reg = peajeCargoMwh(tarifa, periodo)
     return {
       hora: p.hora,
       spot: p.precio_mwh,
@@ -254,7 +267,7 @@ function TarifaFinalChart({ precios, ahora, zona }: { precios: HourlyPrice[]; ah
       <ResponsiveContainer width="100%" height={280}>
         <LineChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1F1F1F" />
-          <XAxis dataKey="hora" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(h) => `${h}h`} />
+          <XAxis dataKey="hora" {...EJE_HORAS} tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(h) => `${h}h`} />
           <YAxis
             tick={{ fill: '#9CA3AF', fontSize: 11 }}
             axisLine={false}
@@ -273,7 +286,7 @@ function TarifaFinalChart({ precios, ahora, zona }: { precios: HourlyPrice[]; ah
       </ResponsiveContainer>
 
       <p className="text-[#4B5563] text-xs mt-4">
-        * Estimación orientativa para tarifa {tarifa} residencial/empresarial. Peajes y cargos según CNMC 2025. No incluye término de potencia ni bono social.
+        * Estimación orientativa para tarifa {tarifa} residencial/empresarial. Peajes y cargos según BOE 2026. No incluye término de potencia ni bono social.
       </p>
     </div>
   )
@@ -447,6 +460,7 @@ export default function MercadoPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#1F1F1F" />
                       <XAxis
                         dataKey="hora"
+                        {...EJE_HORAS}
                         tick={{ fill: '#9CA3AF', fontSize: 11 }}
                         axisLine={false}
                         tickLine={false}
