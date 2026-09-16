@@ -33,6 +33,10 @@
       "schedule": "15 6 * * *"
     },
     {
+      "path": "/api/cron/mercado-vigilancia",
+      "schedule": "30 7 * * *"
+    },
+    {
       "path": "/api/cron/prefactura-alert",
       "schedule": "0 9 5 * *"
     },
